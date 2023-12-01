@@ -23,7 +23,17 @@ pip install -r bayesian_dro/bdro_requirements.txt
 
 ### Bayesian DRO
 
+To run Bayesian DRO experiments with *continuous* support from Section 4 of Shapiro et al (2023):
 
+```
+python bayesian_dro/Bayesian_DRO_continuous.py
+```
+
+To run Bayesian DRO experiments with *finite* support from Appendix A of Shapiro et al (2023):
+
+```
+python bayesian_dro/Bayesian_DRO_finite.py
+```
 
 ## References
 
