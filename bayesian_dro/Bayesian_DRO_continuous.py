@@ -205,13 +205,13 @@ def main_empirical_DRO_Wasserstein(epsilon, p):
         return temp + Delta * p ** (1 / (p - 1)) * epsilon * (1 / Lambda) ** (1 / p)
 
 
-def Bayesian_DRO_1_epsilon1(lam, x, theta_index, epsilon_1):
+def Bayesian_DRO_1_epsilon1(lam, x, theta_index, epsilon_1, xi):
     return lam * epsilon_1 + lam * np.log(
         np.mean(np.exp(cost(x, xi[theta_index, :]) / lam))
     )
 
 
-def Bayesian_DRO_2_epsilon1(x, theta_index, epsilon_1):
+def Bayesian_DRO_2_epsilon1(x, theta_index, epsilon_1, xi):
     bnds = [(0.01, None)]
     if epsilon_1 <= 0:
         initial_point = 2000
@@ -227,26 +227,26 @@ def Bayesian_DRO_2_epsilon1(x, theta_index, epsilon_1):
         Bayesian_DRO_1_epsilon1,
         initial_point,
         bounds=bnds,
-        args=(x, theta_index, epsilon_1),
+        args=(x, theta_index, epsilon_1, xi),
     )
     optimal_lambda = res.x
     optimal_obj = res.fun
     if np.isnan(optimal_obj):
         optimal_obj = Bayesian_DRO_1_epsilon1(
-            np.array([optimal_lambda, x, theta_index, epsilon_1])
+            np.array([optimal_lambda, x, theta_index, epsilon_1, xi])
         )
     return optimal_obj
 
 
-def Bayesian_DRO_3_epsilon1(x, epsilon_1):
+def Bayesian_DRO_3_epsilon1(x, epsilon_1, xi):
     temp_value = np.zeros(NUMBER_ITERATION_THETA)
     for i in range(NUMBER_ITERATION_THETA):
-        temp_value[i] = Bayesian_DRO_2_epsilon1(x, i, epsilon_1[i])
+        temp_value[i] = Bayesian_DRO_2_epsilon1(x, i, epsilon_1[i], xi)
     value = np.mean(temp_value)
     return value
 
 
-def main_Bayesian_DRO_epsilon1():
+def main_Bayesian_DRO_epsilon1(data, theta, xi):
     epsilon_1 = np.zeros(NUMBER_ITERATION_THETA)
     for i in range(NUMBER_ITERATION_THETA):
         reference_pdf = expon.pdf(data, scale=1 / theta[i])
@@ -256,7 +256,7 @@ def main_Bayesian_DRO_epsilon1():
     support = np.arange(5, M + 1, 1)
     value_support = np.zeros(len(support))
     for i in range(len(support)):
-        value_support[i] = Bayesian_DRO_3_epsilon1(support[i], epsilon_1)
+        value_support[i] = Bayesian_DRO_3_epsilon1(support[i], epsilon_1, xi)
     smallest_index = np.argmin(value_support)
     support_smallest = np.arange(
         support[smallest_index] - 1, support[smallest_index] + 1, 0.01
@@ -264,7 +264,7 @@ def main_Bayesian_DRO_epsilon1():
     value_support_smallest = np.zeros(len(support_smallest))
     for i in range(len(support_smallest)):
         value_support_smallest[i] = Bayesian_DRO_3_epsilon1(
-            support_smallest[i], epsilon_1
+            support_smallest[i], epsilon_1, xi
         )
     temp = support_smallest[np.argmin(value_support_smallest)]
     if temp <= M:
@@ -274,7 +274,7 @@ def main_Bayesian_DRO_epsilon1():
     return optimal_x, epsilon_1
 
 
-def Bayesian_DRO_1_epsilon2(lam, x, theta_index, epsilon_2):
+def Bayesian_DRO_1_epsilon2(lam, x, theta_index, epsilon_2, xi):
     return lam * epsilon_2 + lam * np.log(
         np.mean(np.exp(cost(x, xi[theta_index, :]) / lam))
     )
