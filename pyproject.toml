@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mis_dro"
+authors = [
+    {name = "Patrick O'Hara", email = "patrick.h.o-hara@warwick.ac.uk"},
+    {name = "Harita Dellaporta", email = "C.Dellaporta@warwick.ac.uk"},
+]
+description = "Misspecified DRO"
+readme = "README.md"
+requires-python = ">=3.8"
+keywords = ["Distributionally Robust Optimisation", "Bayesian"]
+license = {text = "BSD-3-Clause"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "numpy>=1.26.2",
+    "scipy>=1.11.4",
+    "matplotlib>=3.8.2",
+    "gurobipy>=11.0.0",
+    "typer>=0.9.0",
+]
+dynamic = ["version"]
+
+[tool.setuptools]
+packages = ["bayesian_dro", "mis_dro"]
+
+[project.scripts]
+misdro = "mis_dro.main:app"
