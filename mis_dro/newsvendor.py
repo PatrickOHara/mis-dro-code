@@ -3,7 +3,8 @@
 import numpy as np
 
 BACKORDER_COST = 4  # denoted b
-HOLDING_COST = 3    # denoted h
+HOLDING_COST = 3  # denoted h
+
 
 def newsvendor_cost(x, xi):
     """Evaluate Newsvendor cost function

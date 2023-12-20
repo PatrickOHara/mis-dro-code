@@ -6,6 +6,7 @@ from scipy.stats import truncnorm
 from scipy.stats import gamma
 from scipy.stats import expon
 from scipy.stats import rv_discrete
+from scipy.special import logsumexp
 import time
 import gurobipy as gp
 from gurobipy import GRB
@@ -108,6 +109,22 @@ def Bayesian_DRO_1(lam, xi, x, theta_index, epsilon):
     )
 
 
+def Bayesian_DRO_1_lse(lam, xi, x, theta_index, epsilon):
+    """Calculates Bayesian_DRO_1 with Log-Sum-Exp
+
+    Notes:
+        This avoids "RuntimeWarning: overflow encountered in exp" warning:
+        $$
+        \log \\frac{1}{N}\sum_{i=1}^N \exp\left( \\frac{c_i}{\lambda} \\right) =
+        \log \left(\\frac{1}{N}\\right) + \log \sum_{i=1}^N \exp\left( \\frac{c_i}{\lambda} \\right)
+        $$
+    """
+    cost_over_lam = cost(x, xi[theta_index, :]) / lam
+    return lam * epsilon + lam * (
+        np.log(1 / cost_over_lam.shape[0]) + logsumexp(cost_over_lam)
+    )
+
+
 def Bayesian_DRO_2(xi, x, theta_index, epsilon):
     bnds = [(0.01, None)]
     if epsilon <= 0:
@@ -121,12 +138,15 @@ def Bayesian_DRO_2(xi, x, theta_index, epsilon):
     else:
         initial_point = 10
     res = optimize.minimize(
-        Bayesian_DRO_1, initial_point, bounds=bnds, args=(xi, x, theta_index, epsilon)
+        Bayesian_DRO_1_lse,
+        initial_point,
+        bounds=bnds,
+        args=(xi, x, theta_index, epsilon),
     )
     optimal_lambda = res.x
     optimal_obj = res.fun
     if np.isnan(optimal_obj):
-        optimal_obj = Bayesian_DRO_1(
+        optimal_obj = Bayesian_DRO_1_lse(
             np.array([optimal_lambda, xi, x, theta_index, epsilon])
         )
     return optimal_obj
