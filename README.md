@@ -32,6 +32,12 @@ To run just one algorithm, you can use the CLI `misdro` with the `run` command:
 misdro run --num-posterior-samples 100 --posterior bayes --num-observations 10
 ```
 
+To setup an experiment, including a custom SLURM file, you can use the `misdro setup` commmand. For example:
+```
+misdro setup $EXPERIMENT_DIR
+```
+where `$EXPERIMENT_DIR` is the filepath to a directory you want to store the experiment inside.
+
 ### Bayesian DRO
 
 To run Bayesian DRO experiments with *continuous* support from Section 4 of Shapiro et al (2023):
@@ -44,6 +50,24 @@ To run Bayesian DRO experiments with *finite* support from Appendix A of Shapiro
 
 ```
 python bayesian_dro/Bayesian_DRO_finite.py
+```
+
+## Testing
+
+You can run the tests with `pytest`. To install the test dependencies:
+```
+pip install -r requirements.txt
+```
+To run the tests:
+```
+pytest tests
+```
+
+### Formatting and Linting
+
+You might also like to make your code look pretty with the `black` formatter:
+```
+black */
 ```
 
 ## References

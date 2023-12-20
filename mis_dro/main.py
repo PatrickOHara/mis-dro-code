@@ -27,11 +27,11 @@ NUM_TEST_OBSERVATIONS = 10000
 @app.command(name="setup")
 def setup(
     experiment_dir: Path,
-    cpus_per_task: int = 4,
+    cpus_per_task: int = 2,
     mem_per_cpu: int = 4000,  # in MB
     overwrite: bool = False,
     partition: str = "cpu-batch",  # name of SLURM partition
-    time_limit: int = 4,  # hours
+    time_limit: int = 8,  # hours
 ):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
@@ -49,8 +49,8 @@ def setup(
                     "num_posterior_samples": NUM_POSTERIOR_SAMPLES,
                     "num_test_observations": NUM_TEST_OBSERVATIONS,
                     "posterior": posterior,
+                    "uuid": str(uuid4()),  # uniquely identify a run
                 }
-                params["uuid"] = str(uuid4())  # uniquely identify a run
                 experiment.append(params)
     filepath = experiment_dir / "experiment.json"
     with open(filepath, "w", encoding="utf-8") as json_file:
@@ -97,12 +97,12 @@ def run(
     num_posterior_samples: int = NUM_POSTERIOR_SAMPLES,
     num_test_observations: int = NUM_TEST_OBSERVATIONS,
     posterior: str = "npl",
-    **kwargs,
+    uuid: str = "",
 ):
     """Run Newsvendor Misspecified Bayesian DRO"""
-    if "uuid" in kwargs:
-        print("Running", kwargs["uuid"])
-    K = 2  # FIXME number of experiment runs
+    if uuid:
+        print("Running", uuid)
+    K = 200  # number of experiment runs
     p = 1  # numbers of unknown parameters
     cost = np.zeros((K, 2))  # init costs for each run
 

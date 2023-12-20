@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 from scipy import optimize
 from scipy.stats import dirichlet
 from scipy.stats import truncnorm
