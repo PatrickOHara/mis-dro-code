@@ -10,8 +10,9 @@ conda create --name mis-dro -c conda-forge python=3.11
 ```
 
 Next, install the mis_dro and bayesian_dro packages with pip.
-This can be done with one command:
+This can be done with one pip command:
 ```
+cd mis-dro-code
 pip install -e .
 ```
 

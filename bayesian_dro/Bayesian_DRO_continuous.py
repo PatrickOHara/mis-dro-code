@@ -37,8 +37,8 @@ h = 3
 M = 50
 L = 100
 
-my_mean = 20
-my_std = 4
+DGP_MEAN_TRUNCATED_NORMAL = 20
+DGP_STD_TRUNCATED_NORMAL = 4
 
 NUM_OBSERVATIONS = 5  # Number of observations from true DGP
 
@@ -53,8 +53,8 @@ def data_generation(num_observations):
     """True DGP"""
     myclip_a, myclip_b = 0, np.inf
 
-    a, b = (myclip_a - my_mean) / my_std, (myclip_b - my_mean) / my_std
-    data = truncnorm.rvs(a, b, loc=my_mean, scale=my_std, size=num_observations)
+    a, b = (myclip_a - DGP_MEAN_TRUNCATED_NORMAL) / DGP_STD_TRUNCATED_NORMAL, (myclip_b - DGP_MEAN_TRUNCATED_NORMAL) / DGP_STD_TRUNCATED_NORMAL
+    data = truncnorm.rvs(a, b, loc=DGP_MEAN_TRUNCATED_NORMAL, scale=DGP_STD_TRUNCATED_NORMAL, size=num_observations)
     return data
 
 
@@ -538,7 +538,6 @@ def main():
 
     for k in range(replication):
         data = data_generation(NUM_OBSERVATIONS)
-        # TODO instead of theta_generation, create an NPL theta
         theta = theta_generation(data, NUMBER_ITERATION_THETA)
         xi = np.zeros([NUMBER_ITERATION_THETA, NUMBER_ITERATION_XI])
         for i in range(NUMBER_ITERATION_THETA):

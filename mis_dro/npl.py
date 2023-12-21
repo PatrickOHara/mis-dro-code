@@ -22,7 +22,7 @@ class Npl:
         self.loss_fn = loss_fn
         self.n, self.d = self.X.shape
 
-    def draw_samples(self):
+    def draw_samples(self, n_jobs: int = -1):
         """Draws B samples in parallel from the nonparametric posterior"""
 
         weights = dirichlet.rvs(np.ones(self.n), size=self.B, random_state=13)
@@ -31,7 +31,7 @@ class Npl:
         if self.loss_fn == "wll":
             # FIXME n_jobs > 1
             temp = Parallel(
-                n_jobs=-1, backend="multiprocessing", max_nbytes=None, batch_size="auto"
+                n_jobs=n_jobs, backend="multiprocessing", max_nbytes=None, batch_size="auto"
             )(delayed(self.WLL)(self.X, weights[i, :]) for i in range(self.B))
 
             for i in range(self.B):
