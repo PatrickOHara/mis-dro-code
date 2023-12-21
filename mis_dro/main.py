@@ -1,7 +1,8 @@
 """Entrypoint app functions"""
 
-from pathlib import Path
+from datetime import datetime
 import json
+from pathlib import Path
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
@@ -84,12 +85,12 @@ def run_index(experiment_dir: Path, index: int):
     with open(filepath, "r", encoding="utf-8") as json_file:
         experiment = json.load(json_file)
     params = experiment[index]
-    mean_cost, var_cost = run(**params)
+    cost, solutions, times = run(**params)
     uuid = params["uuid"]
     results_filepath = experiment_dir / f"{uuid}.json"
     with open(results_filepath, "w", encoding="utf-8") as json_file:
         json.dump(
-            {"uuid": uuid, "mean_cost": mean_cost, "var_cost": var_cost},
+            {"uuid": uuid, "cost": cost.tolist(), "solutions": solutions.tolist(), "times": times},
             json_file,
             indent=4,
         )
@@ -114,9 +115,17 @@ def run(
         print("Running", uuid)
     p = 1  # numbers of unknown parameters
     cost = np.zeros((num_replications, 2))  # init costs for each run
+    solutions = np.zeros(num_replications)
+    times = {
+        "dgp_time": [],
+        "posterior_time": [],
+        "likelihood_time": [],
+        "solve_time": [],
+    }
 
     for j in tqdm(range(num_replications)):
         # generate dataset
+        dgp_start = datetime.now()
         np.random.seed(j)  # set seed for reproducibility
         if dgp == "truncated_normal":
             data = data_generation(num_observations)  # generate new observations
@@ -128,8 +137,10 @@ def run(
             data_eval = data_generation_outliers(num_test_observations, 0.0)
         else:
             raise ValueError(f"The data-generating process specified is not supported: {dgp}")
+        times["dgp_time"].append((datetime.now() - dgp_start).total_seconds())
 
         # sample from the posterior
+        posterior_start = datetime.now()
         theta_sample = np.zeros((num_posterior_samples, 1))
         if posterior == "npl":
             # NPL posterior sample for theta
@@ -144,30 +155,40 @@ def run(
         elif posterior == "bayes":
             # standard Bayesian posterior sample for theta
             theta_sample = theta_generation(data, num_posterior_samples)
+        times["posterior_time"].append((datetime.now() - posterior_start).total_seconds())
 
         # sample from the likelihood
+        likelihood_start = datetime.now()
         xi = np.zeros([num_posterior_samples, num_likelihood_samples])  # init the xi's
         for i in range(num_posterior_samples):
             xi[i] = xi_generation(theta_sample[i], num_likelihood_samples)
+        times["likelihood_time"].append((datetime.now() - likelihood_start).total_seconds())
 
         # run the chosen DRO algorithm
+        solve_start = datetime.now()
         if algorithm == "bayesian_dro":
-            solution = main_Bayesian_DRO(xi, epsilon)
+            solutions[j] = main_Bayesian_DRO(xi, epsilon)
         # TODO put in other algorithms here, e.g. main_Bayesian_DRO_epsilon1!
         else:
-            solution = 0
+            solutions[j] = 0
             raise ValueError("Please choose a valid algorithm")
+        times["solve_time"].append((datetime.now() - solve_start).total_seconds())
+
         # evaluate the cost
-        cost_j = newsvendor_cost(solution, data_eval)
+        cost_j = newsvendor_cost(solutions[j], data_eval)
         cost[j, :] = cost_j.mean(), cost_j.std() ** 2
 
     # Calculate out-of-sample mean and variance
     mean_cost = cost[:, 0].mean()
     var_cost = cost[:, 1].mean() + (1 / (num_replications - 1)) * np.sum((cost[:, 0] - mean_cost) ** 2)
-    print(
-        f"{algorithm} has out-of-sample mean: {mean_cost} and out-of-sample variance: {var_cost}"
-    )
-    return mean_cost, var_cost
+    print(f"Finished running {algorithm} with posterior {posterior} and DGP {dgp}.")
+    print(f"Out-of-sample mean: {mean_cost}. Out-of-sample variance: {var_cost}.")
+    print("Total DGP time:", sum(times["dgp_time"]))
+    print("Total posterior time:", sum(times["posterior_time"]))
+    print("Total likelihood time:", sum(times["likelihood_time"]))
+    print("Total solve time:", sum(times["solve_time"]))
+    print("cost", cost.tolist(), "solutions", solutions.tolist())
+    return cost, solutions, times
 
 
 if __name__ == "__main__":
