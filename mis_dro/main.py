@@ -54,6 +54,29 @@ srun --ntasks=1 --nodes=1 misdro run-index {experiment_dir} $SLURM_ARRAY_TASK_ID
 """
     (experiment_dir / "misdro.slurm").write_text(slurm_string)
 
+@app.command(name="csv")
+def generate_csv(experiment_dir: Path):
+    """Write a CSV file with all the results"""
+    experiment_filepath = experiment_dir / "experiment.json"
+    with open(experiment_filepath, "r", encoding="utf-8") as json_file:
+        experiment = json.load(json_file)
+    df = pd.DataFrame(experiment)
+    df.set_index("uuid", inplace=True)
+    result_list = []
+    for uuid in df.index:
+        result_filepath = experiment_dir / f"{uuid}.json"
+        if result_filepath.exists():
+            with open(result_filepath, "r", encoding="utf-8") as json_file:
+                result = json.load(json_file)
+        else:
+            result = {"uuid": uuid, "mean_cost": np.nan, "var_cost": np.nan}
+        result_list.append(result)
+    result_df = pd.DataFrame(result_list)
+    result_df.set_index("uuid", inplace=True)
+    df = df.join(result_df)
+    print(df)
+    df.to_csv(experiment_dir / "results.csv", index=True)
+
 
 @app.command(name="csv")
 def generate_csv(experiment_dir: Path):

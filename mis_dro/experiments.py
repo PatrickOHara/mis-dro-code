@@ -6,7 +6,6 @@ import numpy as np
 from bayesian_dro.Bayesian_DRO_continuous import EPSILON_SET
 from .constants import *
 
-
 def epsilon_experiment():
     """Vary epsilon and compare Bayesian DRO with Bayes/NPL posterior"""
     # iterate over each of the parameters
