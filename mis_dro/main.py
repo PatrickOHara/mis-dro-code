@@ -54,6 +54,7 @@ srun --ntasks=1 --nodes=1 misdro run-index {experiment_dir} $SLURM_ARRAY_TASK_ID
 """
     (experiment_dir / "misdro.slurm").write_text(slurm_string)
 
+
 @app.command(name="csv")
 def generate_csv(experiment_dir: Path):
     """Write a CSV file with all the results"""
@@ -90,7 +91,12 @@ def run_index(experiment_dir: Path, index: int):
     results_filepath = experiment_dir / f"{uuid}.json"
     with open(results_filepath, "w", encoding="utf-8") as json_file:
         json.dump(
-            {"uuid": uuid, "cost": cost.tolist(), "solutions": solutions.tolist(), "times": times},
+            {
+                "uuid": uuid,
+                "cost": cost.tolist(),
+                "solutions": solutions.tolist(),
+                "times": times,
+            },
             json_file,
             indent=4,
         )
@@ -136,7 +142,9 @@ def run(
             # but DO NOT specify any contamination for test data!
             data_eval = data_generation_outliers(num_test_observations, 0.0)
         else:
-            raise ValueError(f"The data-generating process specified is not supported: {dgp}")
+            raise ValueError(
+                f"The data-generating process specified is not supported: {dgp}"
+            )
         times["dgp_time"].append((datetime.now() - dgp_start).total_seconds())
 
         # sample from the posterior
@@ -155,14 +163,18 @@ def run(
         elif posterior == "bayes":
             # standard Bayesian posterior sample for theta
             theta_sample = theta_generation(data, num_posterior_samples)
-        times["posterior_time"].append((datetime.now() - posterior_start).total_seconds())
+        times["posterior_time"].append(
+            (datetime.now() - posterior_start).total_seconds()
+        )
 
         # sample from the likelihood
         likelihood_start = datetime.now()
         xi = np.zeros([num_posterior_samples, num_likelihood_samples])  # init the xi's
         for i in range(num_posterior_samples):
             xi[i] = xi_generation(theta_sample[i], num_likelihood_samples)
-        times["likelihood_time"].append((datetime.now() - likelihood_start).total_seconds())
+        times["likelihood_time"].append(
+            (datetime.now() - likelihood_start).total_seconds()
+        )
 
         # run the chosen DRO algorithm
         solve_start = datetime.now()
@@ -180,14 +192,15 @@ def run(
 
     # Calculate out-of-sample mean and variance
     mean_cost = cost[:, 0].mean()
-    var_cost = cost[:, 1].mean() + (1 / (num_replications - 1)) * np.sum((cost[:, 0] - mean_cost) ** 2)
+    var_cost = cost[:, 1].mean() + (1 / (num_replications - 1)) * np.sum(
+        (cost[:, 0] - mean_cost) ** 2
+    )
     print(f"Finished running {algorithm} with posterior {posterior} and DGP {dgp}.")
     print(f"Out-of-sample mean: {mean_cost}. Out-of-sample variance: {var_cost}.")
     print("Total DGP time:", sum(times["dgp_time"]))
     print("Total posterior time:", sum(times["posterior_time"]))
     print("Total likelihood time:", sum(times["likelihood_time"]))
     print("Total solve time:", sum(times["solve_time"]))
-    print("cost", cost.tolist(), "solutions", solutions.tolist())
     return cost, solutions, times
 
 

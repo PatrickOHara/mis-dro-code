@@ -31,7 +31,10 @@ class Npl:
         if self.loss_fn == "wll":
             # FIXME n_jobs > 1
             temp = Parallel(
-                n_jobs=n_jobs, backend="multiprocessing", max_nbytes=None, batch_size="auto"
+                n_jobs=n_jobs,
+                backend="multiprocessing",
+                max_nbytes=None,
+                batch_size="auto",
             )(delayed(self.WLL)(self.X, weights[i, :]) for i in range(self.B))
 
             for i in range(self.B):

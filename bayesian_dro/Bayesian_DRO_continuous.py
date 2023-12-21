@@ -53,8 +53,16 @@ def data_generation(num_observations):
     """True DGP"""
     myclip_a, myclip_b = 0, np.inf
 
-    a, b = (myclip_a - DGP_MEAN_TRUNCATED_NORMAL) / DGP_STD_TRUNCATED_NORMAL, (myclip_b - DGP_MEAN_TRUNCATED_NORMAL) / DGP_STD_TRUNCATED_NORMAL
-    data = truncnorm.rvs(a, b, loc=DGP_MEAN_TRUNCATED_NORMAL, scale=DGP_STD_TRUNCATED_NORMAL, size=num_observations)
+    a, b = (myclip_a - DGP_MEAN_TRUNCATED_NORMAL) / DGP_STD_TRUNCATED_NORMAL, (
+        myclip_b - DGP_MEAN_TRUNCATED_NORMAL
+    ) / DGP_STD_TRUNCATED_NORMAL
+    data = truncnorm.rvs(
+        a,
+        b,
+        loc=DGP_MEAN_TRUNCATED_NORMAL,
+        scale=DGP_STD_TRUNCATED_NORMAL,
+        size=num_observations,
+    )
     return data
 
 
