@@ -23,6 +23,9 @@ dependencies = [
     "scipy>=1.11.4",
     "tqdm>=4.66.1",
     "typer>=0.9.0",
+    "jax>=0.4.23",
+    "jaxlib>=0.4.23",
+    "pot>=0.9.1"
 ]
 dynamic = ["version"]
 
