@@ -69,13 +69,16 @@ def generate_csv(experiment_dir: Path):
         if result_filepath.exists():
             with open(result_filepath, "r", encoding="utf-8") as json_file:
                 result = json.load(json_file)
+            cost = np.array(result["cost"])
+            result["mean_cost"] = cost[:, 0].mean()
+            result["var_cost"] = cost[:, 1].mean() + (1 / (cost.shape[0] - 1)) * np.sum((cost[:, 0] - result["mean_cost"]) ** 2)
         else:
             result = {"uuid": uuid, "mean_cost": np.nan, "var_cost": np.nan}
         result_list.append(result)
     result_df = pd.DataFrame(result_list)
     result_df.set_index("uuid", inplace=True)
     df = df.join(result_df)
-    print(df)
+    print(df[["mean_cost", "var_cost"]])
     df.to_csv(experiment_dir / "results.csv", index=True)
 
 
