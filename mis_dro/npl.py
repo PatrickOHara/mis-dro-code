@@ -36,7 +36,6 @@ class Npl:
         self.p = p
         self.loss_fn = loss_fn
         self.n, self.d = self.X.shape
-        self.m = self.n  # number of points sampled from the model to approximate the MMD 
         self.l = l
         if self.l == -1: # median heuristic
             self.l = np.sqrt((1/2)*np.median(distance.cdist(self.X,self.X,'sqeuclidean')))
