@@ -3,7 +3,7 @@
 import jax
 import jax.numpy as jnp
 
-class exponential_model():
+class ExponentialModel():
 
     def __init__(self, m):
         self.m = m  # number of points sampled from the model at each approximation of the MMD

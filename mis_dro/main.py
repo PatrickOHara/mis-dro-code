@@ -19,6 +19,7 @@ from .dataset import data_generation_outliers
 from .experiments import epsilon_experiment
 from .npl import Npl
 from .newsvendor import newsvendor_cost
+from .models import ExponentialModel
 
 app = typer.Typer(name="misdro")
 
@@ -136,12 +137,13 @@ def run(
     contamination: float = CONTAMINATION_LEVEL,
     dgp: str = "truncated_normal",
     epsilon: float = 1.0,
+    lengthscale: float = -1.0,
     num_likelihood_samples: int = NUM_LIKELIHOOD_SAMPLES,
     num_observations: int = NUM_OBSERVATIONS,
     num_posterior_samples: int = NUM_POSTERIOR_SAMPLES,
     num_replications: int = NUM_REPLICATIONS,
     num_test_observations: int = NUM_TEST_OBSERVATIONS,
-    posterior: str = "npl",
+    posterior: str = "mmd",
     uuid: str = "",
 ):
     """Run Newsvendor Misspecified Bayesian DRO"""
@@ -178,14 +180,19 @@ def run(
         # sample from the posterior
         posterior_start = datetime.now()
         theta_sample = np.zeros((num_posterior_samples, 1))
-        if posterior == "npl":
+        if posterior in ("wll", "mmd"):
             # NPL posterior sample for theta
+            m = NUM_OBSERVATIONS
+            model = ExponentialModel(m)
             npl_toy = Npl(
                 data.reshape((num_observations, 1)),
                 num_posterior_samples,
                 p,
-                loss_fn="wll",
-            )  # can change loss_fn to wll or mmd
+                m,
+                model,
+                l=lengthscale,
+                loss_fn=posterior,
+            )
             npl_toy.draw_samples()
             theta_sample = npl_toy.sample
         elif posterior == "bayes":

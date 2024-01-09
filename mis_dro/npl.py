@@ -1,4 +1,4 @@
-"""NPL"""
+"""NPL posterior"""
 
 import numpy as np
 from joblib import Parallel, delayed
@@ -15,7 +15,7 @@ import jax
 from jax import numpy as jnp
 from jax import vmap, value_and_grad, jit, config
 from jax.example_libraries import optimizers
-from gaussian_kernel import k, k_jax, k_comp
+from .gaussian_kernel import k, k_jax, k_comp
 
 
 class Npl:

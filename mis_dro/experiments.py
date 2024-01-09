@@ -2,7 +2,6 @@
 
 import itertools
 from uuid import uuid4
-import numpy as np
 from bayesian_dro.Bayesian_DRO_continuous import EPSILON_SET
 from .constants import *
 
@@ -14,7 +13,7 @@ def epsilon_experiment():
         ["bayesian_dro"],
         ["truncated_normal", "contaminated_exp"],
         EPSILON_SET,
-        ["bayes", "npl"],
+        ["bayes", "wll", "mmd"],
     ):
         contamination = 0.0
         if dgp == "contaminated_exp":
@@ -24,6 +23,7 @@ def epsilon_experiment():
             "contamination": contamination,
             "dgp": dgp,
             "epsilon": epsilon,
+            "lengthscale": -1.0,
             "num_likelihood_samples": NUM_LIKELIHOOD_SAMPLES,
             "num_observations": NUM_OBSERVATIONS,
             "num_posterior_samples": NUM_POSTERIOR_SAMPLES,
