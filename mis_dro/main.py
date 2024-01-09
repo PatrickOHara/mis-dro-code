@@ -71,7 +71,9 @@ def generate_csv(experiment_dir: Path):
                 result = json.load(json_file)
             cost = np.array(result["cost"])
             result["mean_cost"] = cost[:, 0].mean()
-            result["var_cost"] = cost[:, 1].mean() + (1 / (cost.shape[0] - 1)) * np.sum((cost[:, 0] - result["mean_cost"]) ** 2)
+            result["var_cost"] = cost[:, 1].mean() + (1 / (cost.shape[0] - 1)) * np.sum(
+                (cost[:, 0] - result["mean_cost"]) ** 2
+            )
         else:
             result = {"uuid": uuid, "mean_cost": np.nan, "var_cost": np.nan}
         result_list.append(result)

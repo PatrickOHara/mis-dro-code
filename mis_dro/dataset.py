@@ -6,7 +6,7 @@ from sklearn.utils import shuffle
 from scipy.stats import expon
 
 
-def data_generation_outliers(num_observations, contamination):
+def data_generation_outliers(num_observations: int, contamination: float):
     """A contaminated exponential data-generating process (DGP)
 
     Args:
