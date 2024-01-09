@@ -21,12 +21,13 @@ from gaussian_kernel import k, k_jax, k_comp
 class Npl:
     """This class contains functions to perform NPL inference (for alpha = 0 in the DP prior) for the Exponential distribution model."""
 
-    def __init__(self, X, B, p, model, l=-1, loss_fn="wll"):
+    def __init__(self, X, B, p, m, model, l=-1, loss_fn="wll"):
         """
         Args:
             X: Data set
             B: number of bootstrap iterations
             p: number of unknown parameters
+            m: number of points sampled from the model at each approximation of the MMD (compatible with value of m within model class)
             l: lengthscale of gaussian kernel; set l = -1 to use median heuristic
             model: model class from models.py
             loss_fn : string set to 'wll' or 'mmd' to specify either the negative log-lkh or mmd-based loss function
@@ -36,6 +37,7 @@ class Npl:
         self.p = p
         self.loss_fn = loss_fn
         self.n, self.d = self.X.shape
+        self.m = m 
         self.l = l
         if self.l == -1: # median heuristic
             self.l = np.sqrt((1/2)*np.median(distance.cdist(self.X,self.X,'sqeuclidean')))
