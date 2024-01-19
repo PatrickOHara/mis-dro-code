@@ -1,14 +1,15 @@
+import json
 import numpy as np
+import pandas as pd
+from pathlib import Path
 from scipy import optimize
-from scipy.stats import dirichlet
 from scipy.stats import truncnorm
 from scipy.stats import gamma
 from scipy.stats import expon
-from scipy.stats import rv_discrete
 from scipy.special import logsumexp
-import time
 import gurobipy as gp
 from gurobipy import GRB
+from joblib import Parallel, delayed
 
 NUMBER_ITERATION_THETA = 100
 NUMBER_ITERATION_XI = 100
@@ -40,7 +41,7 @@ L = 100
 DGP_MEAN_TRUNCATED_NORMAL = 20
 DGP_STD_TRUNCATED_NORMAL = 4
 
-NUM_OBSERVATIONS = 5  # Number of observations from true DGP
+NUM_OBSERVATIONS = 20  # Number of observations from true DGP
 
 
 def xi_generation(theta, D_xi):
@@ -132,7 +133,7 @@ def Bayesian_DRO_1_lse(lam, xi, x, theta_index, epsilon):
     )
 
 
-def Bayesian_DRO_2(xi, x, theta_index, epsilon):
+def Bayesian_DRO_2(xi, x, theta_index, epsilon, lse = True):
     bnds = [(0.01, None)]
     if epsilon <= 0:
         initial_point = 2000
@@ -144,34 +145,47 @@ def Bayesian_DRO_2(xi, x, theta_index, epsilon):
         initial_point = 40
     else:
         initial_point = 10
-    res = optimize.minimize(
-        Bayesian_DRO_1_lse,
-        initial_point,
-        bounds=bnds,
-        args=(xi, x, theta_index, epsilon),
-    )
+    if lse:
+        res = optimize.minimize(
+            Bayesian_DRO_1_lse,
+            initial_point,
+            bounds=bnds,
+            args=(xi, x, theta_index, epsilon),
+        )
+    else:
+        res = optimize.minimize(
+            Bayesian_DRO_1,
+            initial_point,
+            bounds=bnds,
+            args=(xi, x, theta_index, epsilon),
+        )
     optimal_lambda = res.x
     optimal_obj = res.fun
     if np.isnan(optimal_obj):
-        optimal_obj = Bayesian_DRO_1_lse(
-            np.array([optimal_lambda, xi, x, theta_index, epsilon])
-        )
+        if lse:
+            optimal_obj = Bayesian_DRO_1_lse(
+                np.array([optimal_lambda, xi, x, theta_index, epsilon])
+            )
+        else:
+            optimal_obj = Bayesian_DRO_1(
+                np.array([optimal_lambda, xi, x, theta_index, epsilon])
+            )
     return optimal_obj
 
 
-def Bayesian_DRO_3(xi, x, epsilon):
+def Bayesian_DRO_3(xi, x, epsilon, lse=True):
     temp_value = np.zeros(NUMBER_ITERATION_THETA)
     for i in range(NUMBER_ITERATION_THETA):
-        temp_value[i] = Bayesian_DRO_2(xi, x, i, epsilon)
+        temp_value[i] = Bayesian_DRO_2(xi, x, i, epsilon, lse=lse)
     value = np.mean(temp_value)
     return value
 
 
-def main_Bayesian_DRO(xi, epsilon):
+def main_Bayesian_DRO(xi, epsilon, lse: bool = True):
     support = np.arange(5, M + 1, 1)
     value_support = np.zeros(len(support))
     for i in range(len(support)):
-        value_support[i] = Bayesian_DRO_3(xi, support[i], epsilon)
+        value_support[i] = Bayesian_DRO_3(xi, support[i], epsilon, lse=lse)
     smallest_index = np.argmin(value_support)
     support_smallest = np.arange(
         support[smallest_index] - 1, support[smallest_index] + 1, 0.01
@@ -187,19 +201,19 @@ def main_Bayesian_DRO(xi, epsilon):
     return optimal_x
 
 
-def BRO(x):
+def BRO(x, xi):
     return np.mean([np.mean(cost(x, xi[i, :])) for i in range(NUMBER_ITERATION_THETA)])
 
 
-def main_BRO():
+def main_BRO(sol_true, xi):
     bnds = [(0, M)]
     initial_point = sol_true
-    res = optimize.minimize(BRO, initial_point, bounds=bnds)
+    res = optimize.minimize(BRO, initial_point, bounds=bnds, args=(xi))
     optimal_x = res.x
     return optimal_x[0]
 
 
-def main_empirical():
+def main_empirical(data):
     ascend_data = np.sort(data)
     len_data = len(data)
     for i in range(1, len_data + 1):
@@ -207,7 +221,7 @@ def main_empirical():
             return ascend_data[i - 1]
 
 
-def main_empirical_DRO_Wasserstein(epsilon, p):
+def main_empirical_DRO_Wasserstein(data, epsilon, p):
     len_data = len(data)
     if p == 1:
         # put data in ascending order
@@ -342,7 +356,7 @@ def Bayesian_DRO_3_epsilon2(x, epsilon_2):
     return value
 
 
-def main_Bayesian_DRO_epsilon2():
+def main_Bayesian_DRO_epsilon2(data, theta):
     epsilon_2 = np.zeros(NUMBER_ITERATION_THETA)
     for i in range(NUMBER_ITERATION_THETA):
         reference_pdf = expon.pdf(data, scale=1 / theta[i])
@@ -370,7 +384,7 @@ def main_Bayesian_DRO_epsilon2():
     return optimal_x, epsilon_2
 
 
-def calculate_epsilon3(empirical_x, theta_index):
+def calculate_epsilon3(empirical_x, theta, theta_index):
     np.random.seed(0)
     sample_xi = xi_generation(theta[theta_index], L)
     temp_nabla = np.zeros(L)
@@ -439,13 +453,13 @@ def calculate_epsilon3(empirical_x, theta_index):
     return optimal_obj
 
 
-def Bayesian_DRO_1_epsilon3(lam, x, theta_index, epsilon_3):
+def Bayesian_DRO_1_epsilon3(lam, xi, x, theta_index, epsilon_3):
     return lam * epsilon_3 + lam * np.log(
         np.mean(np.exp(cost(x, xi[theta_index, :]) / lam))
     )
 
 
-def Bayesian_DRO_2_epsilon3(x, theta_index, epsilon_3):
+def Bayesian_DRO_2_epsilon3(xi, x, theta_index, epsilon_3):
     bnds = [(0.01, None)]
     if epsilon_3 <= 0:
         initial_point = 2000
@@ -467,27 +481,27 @@ def Bayesian_DRO_2_epsilon3(x, theta_index, epsilon_3):
     optimal_obj = res.fun
     if np.isnan(optimal_obj):
         optimal_obj = Bayesian_DRO_1_epsilon3(
-            np.array([optimal_lambda, x, theta_index, epsilon_3])
+            np.array([optimal_lambda, xi, x, theta_index, epsilon_3])
         )
     return optimal_obj
 
 
-def Bayesian_DRO_3_epsilon3(x, epsilon_3):
+def Bayesian_DRO_3_epsilon3(xi, x, epsilon_3):
     temp_value = np.zeros(NUMBER_ITERATION_THETA)
     for i in range(NUMBER_ITERATION_THETA):
-        temp_value[i] = Bayesian_DRO_2_epsilon3(x, i, epsilon_3[i])
+        temp_value[i] = Bayesian_DRO_2_epsilon3(xi, x, i, epsilon_3[i])
     value = np.mean(temp_value)
     return value
 
 
-def main_Bayesian_DRO_epsilon3(empirical_x):
+def main_Bayesian_DRO_epsilon3(xi, empirical_x, theta):
     epsilon_3 = np.zeros(NUMBER_ITERATION_THETA)
     for i in range(NUMBER_ITERATION_THETA):
-        epsilon_3[i] = calculate_epsilon3(empirical_x, i)
+        epsilon_3[i] = calculate_epsilon3(empirical_x, theta, i)
     support = np.arange(5, M + 1, 1)
     value_support = np.zeros(len(support))
     for i in range(len(support)):
-        value_support[i] = Bayesian_DRO_3_epsilon3(support[i], epsilon_3)
+        value_support[i] = Bayesian_DRO_3_epsilon3(xi, support[i], epsilon_3)
     smallest_index = np.argmin(value_support)
     support_smallest = np.arange(
         support[smallest_index] - 1, support[smallest_index] + 1, 0.01
@@ -495,7 +509,7 @@ def main_Bayesian_DRO_epsilon3(empirical_x):
     value_support_smallest = np.zeros(len(support_smallest))
     for i in range(len(support_smallest)):
         value_support_smallest[i] = Bayesian_DRO_3_epsilon3(
-            support_smallest[i], epsilon_3
+            xi, support_smallest[i], epsilon_3
         )
     temp = support_smallest[np.argmin(value_support_smallest)]
     if temp <= M:
@@ -506,8 +520,9 @@ def main_Bayesian_DRO_epsilon3(empirical_x):
 
 
 def main():
+    print("Hello, world!")
     sol_true = truncnorm.ppf(
-        (b - 0) / (h + b), a=-my_mean / my_std, b=np.inf, loc=my_mean, scale=my_std
+        (b - 0) / (h + b), a=-DGP_MEAN_TRUNCATED_NORMAL / DGP_STD_TRUNCATED_NORMAL, b=np.inf, loc=DGP_MEAN_TRUNCATED_NORMAL, scale=DGP_STD_TRUNCATED_NORMAL
     )
     replication = 200
 
@@ -518,6 +533,7 @@ def main():
     solution_empirical = np.zeros(replication)
 
     solution_Bayesian_DRO = np.zeros([replication, len(EPSILON_SET)])
+    solution_Bayesian_DRO_lse = np.zeros([replication, len(EPSILON_SET)])
 
     solution_epsilon_1 = np.zeros(replication)
     epsilon_1 = np.zeros([replication, NUMBER_ITERATION_THETA])
@@ -535,6 +551,7 @@ def main():
     obj_empirical = np.zeros(replication)
 
     obj_Bayesian_DRO = np.zeros([replication, len(EPSILON_SET)])
+    obj_Bayesian_DRO_lse = np.zeros([replication, len(EPSILON_SET)])
 
     obj_epsilon_1 = np.zeros(replication)
 
@@ -543,44 +560,77 @@ def main():
     obj_epsilon_3 = np.zeros(replication)
 
     obj_empirical_DRO_Wasserstein = np.zeros([replication, len(EPSILON_SET)])
+    print("Starting main loop")
 
-    for k in range(replication):
+    def main_loop(k):
+        print()
+        print()
+        print("### Running replication", k)
+        print()
         data = data_generation(NUM_OBSERVATIONS)
         theta = theta_generation(data, NUMBER_ITERATION_THETA)
         xi = np.zeros([NUMBER_ITERATION_THETA, NUMBER_ITERATION_XI])
         for i in range(NUMBER_ITERATION_THETA):
             xi[i] = xi_generation(theta[i], NUMBER_ITERATION_XI)
 
-        solution_BRO[k] = main_BRO()
-        obj_BRO[k] = cost(solution_BRO[k], data_eval[k])
+        # solution_BRO[k] = main_BRO(sol_true, xi)
+        # obj_BRO[k] = cost(solution_BRO[k], data_eval[k])
 
-        solution_empirical[k] = main_empirical()
-        obj_empirical[k] = cost(solution_empirical[k], data_eval[k])
+        # solution_empirical[k] = main_empirical(data)
+        # obj_empirical[k] = cost(solution_empirical[k], data_eval[k])
 
+        # without Log-Sum-Exp fix (original Bayesian DRO code)
         for index, epsilon in enumerate(EPSILON_SET):
-            solution_Bayesian_DRO[k, index] = main_Bayesian_DRO(xi, epsilon)
+            print("Bayesian DRO. Epsilon = ", epsilon)
+            solution_Bayesian_DRO[k, index] = main_Bayesian_DRO(xi, epsilon, lse=False)
             obj_Bayesian_DRO[k, index] = cost(
                 solution_Bayesian_DRO[k, index], data_eval[k]
             )
 
-        solution_epsilon_1[k], epsilon_1[k, :] = main_Bayesian_DRO_epsilon1()
-        obj_epsilon_1[k] = cost(solution_epsilon_1[k], data_eval[k])
-
-        solution_epsilon_2[k], epsilon_2[k, :] = main_Bayesian_DRO_epsilon2()
-        obj_epsilon_2[k] = cost(solution_epsilon_2[k], data_eval[k])
-
-        solution_epsilon_3[k], epsilon_3[k, :] = main_Bayesian_DRO_epsilon3(
-            solution_empirical[k]
-        )
-        obj_epsilon_3[k] = cost(solution_epsilon_3[k], data_eval[k])
-
+        # with Log-Sum-Exp adjustment
+        print()
         for index, epsilon in enumerate(EPSILON_SET):
+            print("Bayesian DRO LSE. Epsilon = ", epsilon)
+            solution_Bayesian_DRO_lse[k, index] = main_Bayesian_DRO(xi, epsilon, lse=True)
+            obj_Bayesian_DRO_lse[k, index] = cost(
+                solution_Bayesian_DRO[k, index], data_eval[k]
+            )
+
+
+        # solution_epsilon_1[k], epsilon_1[k, :] = main_Bayesian_DRO_epsilon1(data, theta, xi)
+        # obj_epsilon_1[k] = cost(solution_epsilon_1[k], data_eval[k])
+
+        # solution_epsilon_2[k], epsilon_2[k, :] = main_Bayesian_DRO_epsilon2(data, theta)
+        # obj_epsilon_2[k] = cost(solution_epsilon_2[k], data_eval[k])
+
+        # solution_epsilon_3[k], epsilon_3[k, :] = main_Bayesian_DRO_epsilon3(
+        #     xi, solution_empirical[k], theta
+        # )
+        # obj_epsilon_3[k] = cost(solution_epsilon_3[k], data_eval[k])
+
+        print()
+        for index, epsilon in enumerate(EPSILON_SET):
+            print("Wasserstein DRO. Epsilon = ", epsilon)
             solution_empirical_DRO_Wasserstein[
                 k, index
-            ] = main_empirical_DRO_Wasserstein(epsilon, 2)
+            ] = main_empirical_DRO_Wasserstein(data, epsilon, 2)
             obj_empirical_DRO_Wasserstein[k, index] = cost(
                 solution_empirical_DRO_Wasserstein[k, index], data_eval[k]
             )
+        df = pd.DataFrame({
+            "replication": [k]*len(EPSILON_SET),
+            "epsilon": EPSILON_SET,
+            "wasserstein_dro_sol": solution_empirical_DRO_Wasserstein[k],
+            "wasserstein_dro_cost": obj_empirical_DRO_Wasserstein[k],
+            "bayesian_dro_sol": solution_Bayesian_DRO[k],
+            "bayesian_dro_cost": obj_Bayesian_DRO[k],
+            "bayesian_dro_lse_sol": solution_Bayesian_DRO_lse[k],
+            "bayesian_dro_lse_cost": obj_Bayesian_DRO_lse[k],
+        })
+        df.to_csv(f"/dcs/large/u1508153/misdro/og/result_{k}.csv")
+
+
+    Parallel(n_jobs=-1)(delayed(main_loop)(k) for k in range(replication))
 
 
 if __name__ == "__main__":
