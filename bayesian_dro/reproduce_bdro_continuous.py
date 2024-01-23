@@ -14,13 +14,13 @@ from joblib import Parallel, delayed
 
 number_iteration_theta = 100 
 number_iteration_xi = 100
-b = 4 
+b = 8           # from Section 4.1
 h = 3 
 M = 50 
 L = 100
 
-my_mean = 20
-my_std = 4
+my_mean = 10    # from Section 4.1
+my_std = 10     # from Section 4.1: variance is 100 -> std is 10
 
 def xi_generation(theta, D_xi):
     xi = expon.rvs(scale = 1 / theta, size = D_xi)
@@ -330,7 +330,7 @@ def main_Bayesian_DRO_epsilon3(empirical_x):
     return optimal_x, epsilon_3
 
 sol_true = truncnorm.ppf((b - 0) / (h + b), a = - my_mean / my_std, b = np.inf, loc = my_mean, scale = my_std)
-D_data = 5
+D_data = 20
 replication = 200
 epsilon_set = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 1, 1.5, 2, 2.5, 3]
 
@@ -397,17 +397,17 @@ for k in range(replication):
     # solution_epsilon_3[k], epsilon_3[k,:] = main_Bayesian_DRO_epsilon3(solution_empirical[k])
     # obj_epsilon_3[k] = cost(solution_epsilon_3[k], data_eval[k])    
   
-    print("Starting Wasserstein DRO loop")
-    wasserstein_gen = Parallel(n_jobs=-1)(delayed(main_empirical_DRO_Wasserstein)(epsilon, 2) for epsilon in epsilon_set)
-    solution_empirical_DRO_Wasserstein[k] = np.array(list(wasserstein_gen))
-    for index, epsilon in enumerate(epsilon_set):
-        obj_empirical_DRO_Wasserstein[k, index] = cost(solution_empirical_DRO_Wasserstein[k, index], data_eval[k])
+    # print("Starting Wasserstein DRO loop")
+    # wasserstein_gen = Parallel(n_jobs=-1)(delayed(main_empirical_DRO_Wasserstein)(epsilon, 2) for epsilon in epsilon_set)
+    # solution_empirical_DRO_Wasserstein[k] = np.array(list(wasserstein_gen))
+    # for index, epsilon in enumerate(epsilon_set):
+    #     obj_empirical_DRO_Wasserstein[k, index] = cost(solution_empirical_DRO_Wasserstein[k, index], data_eval[k])
 
     df = pd.DataFrame({
         "replication": [k]*len(epsilon_set),
         "epsilon": epsilon_set,
-        "wasserstein_dro_sol": solution_empirical_DRO_Wasserstein[k],
-        "wasserstein_dro_cost": obj_empirical_DRO_Wasserstein[k],
+        # "wasserstein_dro_sol": solution_empirical_DRO_Wasserstein[k],
+        # "wasserstein_dro_cost": obj_empirical_DRO_Wasserstein[k],
         "bayesian_dro_sol": solution_Bayesian_DRO[k],
         "bayesian_dro_cost": obj_Bayesian_DRO[k],
     })
