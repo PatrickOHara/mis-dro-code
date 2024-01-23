@@ -593,7 +593,7 @@ def main():
             print("Bayesian DRO LSE. Epsilon = ", epsilon)
             solution_Bayesian_DRO_lse[k, index] = main_Bayesian_DRO(xi, epsilon, lse=True)
             obj_Bayesian_DRO_lse[k, index] = cost(
-                solution_Bayesian_DRO[k, index], data_eval[k]
+                solution_Bayesian_DRO_lse[k, index], data_eval[k]
             )
 
 
@@ -608,20 +608,20 @@ def main():
         # )
         # obj_epsilon_3[k] = cost(solution_epsilon_3[k], data_eval[k])
 
-        print()
-        for index, epsilon in enumerate(EPSILON_SET):
-            print("Wasserstein DRO. Epsilon = ", epsilon)
-            solution_empirical_DRO_Wasserstein[
-                k, index
-            ] = main_empirical_DRO_Wasserstein(data, epsilon, 2)
-            obj_empirical_DRO_Wasserstein[k, index] = cost(
-                solution_empirical_DRO_Wasserstein[k, index], data_eval[k]
-            )
+        # print()
+        # for index, epsilon in enumerate(EPSILON_SET):
+        #     print("Wasserstein DRO. Epsilon = ", epsilon)
+        #     solution_empirical_DRO_Wasserstein[
+        #         k, index
+        #     ] = main_empirical_DRO_Wasserstein(data, epsilon, 2)
+        #     obj_empirical_DRO_Wasserstein[k, index] = cost(
+        #         solution_empirical_DRO_Wasserstein[k, index], data_eval[k]
+        #     )
         df = pd.DataFrame({
             "replication": [k]*len(EPSILON_SET),
             "epsilon": EPSILON_SET,
-            "wasserstein_dro_sol": solution_empirical_DRO_Wasserstein[k],
-            "wasserstein_dro_cost": obj_empirical_DRO_Wasserstein[k],
+            # "wasserstein_dro_sol": solution_empirical_DRO_Wasserstein[k],
+            # "wasserstein_dro_cost": obj_empirical_DRO_Wasserstein[k],
             "bayesian_dro_sol": solution_Bayesian_DRO[k],
             "bayesian_dro_cost": obj_Bayesian_DRO[k],
             "bayesian_dro_lse_sol": solution_Bayesian_DRO_lse[k],
