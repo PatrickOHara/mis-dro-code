@@ -333,8 +333,10 @@ sol_true = truncnorm.ppf((b - 0) / (h + b), a = - my_mean / my_std, b = np.inf, 
 D_data = 20
 replication = 200
 epsilon_set = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 1, 1.5, 2, 2.5, 3]
+WASSERSTEIN_EPSILON = epsilon_set + list(range(4, 16))
 
-data_eval = data_generation(replication)
+NUM_TEST_OBSERVATIONS = 50
+data_eval = data_generation((replication, NUM_TEST_OBSERVATIONS))
 
 solution_BRO = np.zeros(replication)
 
@@ -352,13 +354,13 @@ solution_epsilon_3 = np.zeros(replication)
 epsilon_3 = np.zeros([replication, number_iteration_theta])
 
 
-solution_empirical_DRO_Wasserstein = np.zeros([replication, len(epsilon_set)])
+solution_empirical_DRO_Wasserstein = np.zeros([replication, len(WASSERSTEIN_EPSILON)])
 
 obj_BRO = np.zeros(replication)
 
 obj_empirical = np.zeros(replication)
 
-obj_Bayesian_DRO = np.zeros([replication, len(epsilon_set)])
+obj_Bayesian_DRO = np.zeros([replication, len(epsilon_set), NUM_TEST_OBSERVATIONS])
 
 obj_epsilon_1 = np.zeros(replication)
 
@@ -366,7 +368,7 @@ obj_epsilon_2 = np.zeros(replication)
 
 obj_epsilon_3 = np.zeros(replication)
 
-obj_empirical_DRO_Wasserstein = np.zeros([replication, len(epsilon_set)])
+obj_empirical_DRO_Wasserstein = np.zeros([replication, len(WASSERSTEIN_EPSILON), NUM_TEST_OBSERVATIONS])
 
 for k in range(replication):
 
@@ -397,18 +399,25 @@ for k in range(replication):
     # solution_epsilon_3[k], epsilon_3[k,:] = main_Bayesian_DRO_epsilon3(solution_empirical[k])
     # obj_epsilon_3[k] = cost(solution_epsilon_3[k], data_eval[k])    
   
-    # print("Starting Wasserstein DRO loop")
-    # wasserstein_gen = Parallel(n_jobs=-1)(delayed(main_empirical_DRO_Wasserstein)(epsilon, 2) for epsilon in epsilon_set)
-    # solution_empirical_DRO_Wasserstein[k] = np.array(list(wasserstein_gen))
-    # for index, epsilon in enumerate(epsilon_set):
-    #     obj_empirical_DRO_Wasserstein[k, index] = cost(solution_empirical_DRO_Wasserstein[k, index], data_eval[k])
+    print("Starting Wasserstein DRO loop")
+    wasserstein_gen = Parallel(n_jobs=-1)(delayed(main_empirical_DRO_Wasserstein)(epsilon, 2) for epsilon in WASSERSTEIN_EPSILON)
+    solution_empirical_DRO_Wasserstein[k] = np.array(list(wasserstein_gen))
+    for index, epsilon in enumerate(WASSERSTEIN_EPSILON):
+        obj_empirical_DRO_Wasserstein[k, index] = cost(solution_empirical_DRO_Wasserstein[k, index], data_eval[k])
 
     df = pd.DataFrame({
-        "replication": [k]*len(epsilon_set),
-        "epsilon": epsilon_set,
-        # "wasserstein_dro_sol": solution_empirical_DRO_Wasserstein[k],
-        # "wasserstein_dro_cost": obj_empirical_DRO_Wasserstein[k],
-        "bayesian_dro_sol": solution_Bayesian_DRO[k],
-        "bayesian_dro_cost": obj_Bayesian_DRO[k],
+        "replication": [k]*len(epsilon_set) * NUM_TEST_OBSERVATIONS,
+        "epsilon": np.repeat(epsilon_set, NUM_TEST_OBSERVATIONS),
+        "test_index": np.tile(np.arange(NUM_TEST_OBSERVATIONS), len(epsilon_set)),
+        "bayesian_dro_sol": np.repeat(solution_Bayesian_DRO[k], NUM_TEST_OBSERVATIONS),
+        "bayesian_dro_cost": obj_Bayesian_DRO[k].flatten(),
     })
-    df.to_csv(f"/dcs/large/u1508153/misdro/og2/result_{k}.csv")
+    df.to_csv(f"/dcs/large/u1508153/misdro/more_tests/bdro_result_{k}.csv", index=False)
+    wasserstein_df = pd.DataFrame({
+        "replication": [k]*len(WASSERSTEIN_EPSILON) * NUM_TEST_OBSERVATIONS,
+        "epsilon": np.repeat(WASSERSTEIN_EPSILON, NUM_TEST_OBSERVATIONS),
+        "test_index": np.tile(np.arange(NUM_TEST_OBSERVATIONS), len(WASSERSTEIN_EPSILON)),
+        "wasserstein_dro_sol": np.repeat(solution_empirical_DRO_Wasserstein[k], NUM_TEST_OBSERVATIONS),
+        "wasserstein_dro_cost": obj_empirical_DRO_Wasserstein[k].flatten(),
+    })
+    wasserstein_df.to_csv(f"/dcs/large/u1508153/misdro/more_tests/wasserstein_result_{k}.csv", index=False)
