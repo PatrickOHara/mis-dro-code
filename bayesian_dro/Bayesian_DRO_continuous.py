@@ -44,14 +44,16 @@ DGP_STD_TRUNCATED_NORMAL = 4
 NUM_OBSERVATIONS = 20  # Number of observations from true DGP
 
 
-def xi_generation(theta, D_xi):
+def xi_generation(theta, D_xi, i):
     """Likelihood generation"""
+    np.random.seed(i)
     xi = expon.rvs(scale=1 / theta, size=D_xi)
     return xi
 
 
-def data_generation(num_observations):
+def data_generation(num_observations, i):
     """True DGP"""
+    np.random.seed(i)
     myclip_a, myclip_b = 0, np.inf
 
     a, b = (myclip_a - DGP_MEAN_TRUNCATED_NORMAL) / DGP_STD_TRUNCATED_NORMAL, (
@@ -67,8 +69,9 @@ def data_generation(num_observations):
     return data
 
 
-def theta_generation(data, D_theta):
+def theta_generation(data, D_theta, i):
     """Posterior"""
+    np.random.seed(i)
     alpha0, beta0 = 1, 1
     alpha = alpha0 + data.shape[0]
     beta = beta0 + np.sum(data)
@@ -185,14 +188,14 @@ def main_Bayesian_DRO(xi, epsilon, lse: bool = True):
     support = np.arange(5, M + 1, 1)
     value_support = np.zeros(len(support))
     for i in range(len(support)):
-        value_support[i] = Bayesian_DRO_3(xi, support[i], epsilon, lse=lse)
+        value_support[i] = Bayesian_DRO_3(xi, support[i], epsilon, lse=lse) 
     smallest_index = np.argmin(value_support)
     support_smallest = np.arange(
         support[smallest_index] - 1, support[smallest_index] + 1, 0.01
     )
     value_support_smallest = np.zeros(len(support_smallest))
     for i in range(len(support_smallest)):
-        value_support_smallest[i] = Bayesian_DRO_3(xi, support_smallest[i], epsilon)
+        value_support_smallest[i] = Bayesian_DRO_3(xi, support_smallest[i], epsilon, lse=lse)  
     temp = support_smallest[np.argmin(value_support_smallest)]
     if temp <= M:
         optimal_x = temp
@@ -526,7 +529,7 @@ def main():
     )
     replication = 200
 
-    data_eval = data_generation(replication)
+    data_eval = data_generation(replication, 100)
 
     solution_BRO = np.zeros(replication)
 
@@ -567,11 +570,11 @@ def main():
         print()
         print("### Running replication", k)
         print()
-        data = data_generation(NUM_OBSERVATIONS)
-        theta = theta_generation(data, NUMBER_ITERATION_THETA)
+        data = data_generation(NUM_OBSERVATIONS, k)
+        theta = theta_generation(data, NUMBER_ITERATION_THETA, k)
         xi = np.zeros([NUMBER_ITERATION_THETA, NUMBER_ITERATION_XI])
         for i in range(NUMBER_ITERATION_THETA):
-            xi[i] = xi_generation(theta[i], NUMBER_ITERATION_XI)
+            xi[i] = xi_generation(theta[i], NUMBER_ITERATION_XI, k + i)
 
         # solution_BRO[k] = main_BRO(sol_true, xi)
         # obj_BRO[k] = cost(solution_BRO[k], data_eval[k])
@@ -630,7 +633,7 @@ def main():
         df.to_csv(f"/dcs/large/u1508153/misdro/og/result_{k}.csv")
 
 
-    Parallel(n_jobs=-1)(delayed(main_loop)(k) for k in range(replication))
+    Parallel(n_jobs=1)(delayed(main_loop)(k) for k in range(replication))
 
 
 if __name__ == "__main__":
