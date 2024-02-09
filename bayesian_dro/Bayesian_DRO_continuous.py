@@ -33,13 +33,13 @@ EPSILON_SET = [
     2.5,
     3,
 ]
-b = 4
+b = 8
 h = 3
 M = 50
 L = 100
 
-DGP_MEAN_TRUNCATED_NORMAL = 20
-DGP_STD_TRUNCATED_NORMAL = 4
+DGP_MEAN_TRUNCATED_NORMAL = 10
+DGP_STD_TRUNCATED_NORMAL = 10
 
 NUM_OBSERVATIONS = 20  # Number of observations from true DGP
 
@@ -529,7 +529,7 @@ def main():
     )
     replication = 200
 
-    data_eval = data_generation(replication, 100)
+    data_eval = data_generation(replication, 100) # one data point for each replication
 
     solution_BRO = np.zeros(replication)
 
@@ -630,10 +630,10 @@ def main():
             "bayesian_dro_lse_sol": solution_Bayesian_DRO_lse[k],
             "bayesian_dro_lse_cost": obj_Bayesian_DRO_lse[k],
         })
-        df.to_csv(f"/dcs/large/u1508153/misdro/og/result_{k}.csv")
+        df.to_csv(f"/dcs/pg23/u1604520/misdro/results_lse/result_{k}.csv")
 
 
-    Parallel(n_jobs=1)(delayed(main_loop)(k) for k in range(replication))
+    Parallel(n_jobs=-1)(delayed(main_loop)(k) for k in range(replication))
 
 
 if __name__ == "__main__":
