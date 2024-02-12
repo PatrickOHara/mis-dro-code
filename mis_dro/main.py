@@ -4,6 +4,8 @@ from datetime import datetime
 import json
 from pathlib import Path
 from tqdm import tqdm
+from uuid import uuid4
+from joblib import Parallel, delayed
 import numpy as np
 import pandas as pd
 import typer
@@ -16,7 +18,7 @@ from bayesian_dro.Bayesian_DRO_continuous import (
 )
 from .constants import *
 from .dataset import data_generation_outliers
-from .experiments import epsilon_experiment
+from .experiments import newsvendor_1d
 from .npl import Npl
 from .newsvendor import newsvendor_cost
 from .models import ExponentialModel
@@ -25,35 +27,22 @@ app = typer.Typer(name="misdro")
 
 
 @app.command(name="setup")
-def setup(
-    experiment_dir: Path,
-    cpus_per_task: int = 2,
-    mem_per_cpu: int = 4000,  # in MB
-    overwrite: bool = False,
-    partition: str = "cpu-batch",  # name of SLURM partition
-    time_limit: int = 8,  # hours
-):
+def setup(experiment_dir: Path, overwrite: bool = False):
     """Setup an experiment in a new directory"""
+    experiment_name = "newsvendor_1d"
     if not experiment_dir.exists() or not overwrite:
         experiment_dir.mkdir(parents=False, exist_ok=False)
-    experiment = epsilon_experiment()
+
+    # write experiment file to JSON
+    experiment = newsvendor_1d()
     filepath = experiment_dir / "experiment.json"
     with open(filepath, "w", encoding="utf-8") as json_file:
         json.dump(experiment, json_file, indent=4)
 
     # setup SLURM file
-    slurm_string = f"""#!/usr/bin/bash
-#SBATCH --job-name=misdro
-#SBATCH --partition={partition}
-#SBATCH --cpus-per-task={cpus_per_task}
-#SBATCH --mem-per-cpu={mem_per_cpu}
-#SBATCH --time={time_limit}:00:00
-#SBATCH --array=0-{len(experiment)-1}
-#SBATCH --exclude=emu-01
-
-srun --ntasks=1 --nodes=1 misdro run-index {experiment_dir} $SLURM_ARRAY_TASK_ID\n
-"""
-    (experiment_dir / "misdro.slurm").write_text(slurm_string)
+    with open(Path(__file__).parent / "template.slurm", "r") as slurm_file:
+        slurm_string = slurm_file.read().format(experiment_dir=experiment_dir)
+    (experiment_dir / f"{experiment_name}.slurm").write_text(slurm_string)
 
 @app.command(name="csv")
 def generate_csv(experiment_dir: Path):
@@ -63,76 +52,28 @@ def generate_csv(experiment_dir: Path):
         experiment = json.load(json_file)
     df = pd.DataFrame(experiment)
     df.set_index("uuid", inplace=True)
-    result_list = []
+    result_df = pd.DataFrame()
     for uuid in df.index:
-        result_filepath = experiment_dir / f"{uuid}.json"
-        if result_filepath.exists():
-            with open(result_filepath, "r", encoding="utf-8") as json_file:
-                result = json.load(json_file)
-        else:
-            result = {"uuid": uuid, "mean_cost": np.nan, "var_cost": np.nan}
-        result_list.append(result)
-    result_df = pd.DataFrame(result_list)
-    result_df.set_index("uuid", inplace=True)
-    df = df.join(result_df)
-    print(df)
-    df.to_csv(experiment_dir / "results.csv", index=True)
+        result_df.append(pd.read_csv(experiment_dir / f"{uuid}.csv", index_col=["uuid", "replication"]))
+
+    # result_df.set_index(["uuid", "replication"], inplace=True)
+    result_df = result_df.join(df, on="uuid")
+    result_df.groupby(["epsilon", "algorithm", "posterior"])
+    result_df.to_csv(experiment_dir / "results.csv", index=True)
 
 
-@app.command(name="csv")
-def generate_csv(experiment_dir: Path):
-    """Write a CSV file with all the results"""
-    experiment_filepath = experiment_dir / "experiment.json"
-    with open(experiment_filepath, "r", encoding="utf-8") as json_file:
-        experiment = json.load(json_file)
-    df = pd.DataFrame(experiment)
-    df.set_index("uuid", inplace=True)
-    result_list = []
-    for uuid in df.index:
-        result_filepath = experiment_dir / f"{uuid}.json"
-        if result_filepath.exists():
-            with open(result_filepath, "r", encoding="utf-8") as json_file:
-                result = json.load(json_file)
-            cost = np.array(result["cost"])
-            result["mean_cost"] = cost[:, 0].mean()
-            result["var_cost"] = cost[:, 1].mean() + (1 / (cost.shape[0] - 1)) * np.sum(
-                (cost[:, 0] - result["mean_cost"]) ** 2
-            )
-        else:
-            result = {"uuid": uuid, "mean_cost": np.nan, "var_cost": np.nan}
-        result_list.append(result)
-    result_df = pd.DataFrame(result_list)
-    result_df.set_index("uuid", inplace=True)
-    df = df.join(result_df)
-    print(df[["mean_cost", "var_cost"]])
-    df.to_csv(experiment_dir / "results.csv", index=True)
-
-
-@app.command(name="run-index")
-def run_index(experiment_dir: Path, index: int):
+@app.command()
+def experiment(experiment_dir: Path):
     """When using SLURM, this function is called"""
     filepath = experiment_dir / "experiment.json"
     with open(filepath, "r", encoding="utf-8") as json_file:
         experiment = json.load(json_file)
-    params = experiment[index]
-    cost, solutions, times = run(**params)
-    uuid = params["uuid"]
-    results_filepath = experiment_dir / f"{uuid}.json"
-    with open(results_filepath, "w", encoding="utf-8") as json_file:
-        json.dump(
-            {
-                "uuid": uuid,
-                "cost": cost.tolist(),
-                "solutions": solutions.tolist(),
-                "times": times,
-            },
-            json_file,
-            indent=4,
-        )
+    Parallel(n_jobs=-1)(delayed(run)(experiment_dir, **params) for params in experiment)
 
 
 @app.command(name="run")
 def run(
+    experiment_dir: Path,
     algorithm: str = "bayesian_dro",
     contamination: float = CONTAMINATION_LEVEL,
     dgp: str = "truncated_normal",
@@ -144,13 +85,13 @@ def run(
     num_replications: int = NUM_REPLICATIONS,
     num_test_observations: int = NUM_TEST_OBSERVATIONS,
     posterior: str = "mmd",
-    uuid: str = "",
+    uuid: str = str(uuid4()),
 ):
     """Run Newsvendor Misspecified Bayesian DRO"""
     if uuid:
         print("Running", uuid)
     p = 1  # numbers of unknown parameters
-    cost = np.zeros((num_replications, 2))  # init costs for each run
+    cost = np.zeros((num_replications, num_test_observations))  # init costs for each run
     solutions = np.zeros(num_replications)
     times = {
         "dgp_time": [],
@@ -162,15 +103,15 @@ def run(
     for j in tqdm(range(num_replications)):
         # generate dataset
         dgp_start = datetime.now()
-        np.random.seed(j)  # set seed for reproducibility
+        generator = np.random.default_rng(seed=j)
         if dgp == "truncated_normal":
-            data = data_generation(num_observations)  # generate new observations
-            data_eval = data_generation(num_test_observations)  # test data
+            data = data_generation(num_observations, random_state=generator)  # generate new observations
+            data_eval = data_generation(num_test_observations, random_state=generator)  # test data
         elif dgp == "contaminated_exp":
             # specify contamination level for train data
-            data = data_generation_outliers(num_observations, contamination)
+            data = data_generation_outliers(num_observations, contamination, random_state=generator)
             # but DO NOT specify any contamination for test data!
-            data_eval = data_generation_outliers(num_test_observations, 0.0)
+            data_eval = data_generation_outliers(num_test_observations, 0.0, random_state=generator)
         else:
             raise ValueError(
                 f"The data-generating process specified is not supported: {dgp}"
@@ -193,11 +134,11 @@ def run(
                 l=lengthscale,
                 loss_fn=posterior,
             )
-            npl_toy.draw_samples()
+            npl_toy.draw_samples(random_state=generator)
             theta_sample = npl_toy.sample
         elif posterior == "bayes":
             # standard Bayesian posterior sample for theta
-            theta_sample = theta_generation(data, num_posterior_samples)
+            theta_sample = theta_generation(data, num_posterior_samples, random_state=generator)
         times["posterior_time"].append(
             (datetime.now() - posterior_start).total_seconds()
         )
@@ -206,7 +147,7 @@ def run(
         likelihood_start = datetime.now()
         xi = np.zeros([num_posterior_samples, num_likelihood_samples])  # init the xi's
         for i in range(num_posterior_samples):
-            xi[i] = xi_generation(theta_sample[i], num_likelihood_samples)
+            xi[i] = xi_generation(theta_sample[i], num_likelihood_samples, random_state=generator)
         times["likelihood_time"].append(
             (datetime.now() - likelihood_start).total_seconds()
         )
@@ -222,21 +163,34 @@ def run(
         times["solve_time"].append((datetime.now() - solve_start).total_seconds())
 
         # evaluate the cost
-        cost_j = newsvendor_cost(solutions[j], data_eval)
-        cost[j, :] = cost_j.mean(), cost_j.std() ** 2
+        cost[j] = newsvendor_cost(solutions[j], data_eval)
 
     # Calculate out-of-sample mean and variance
-    mean_cost = cost[:, 0].mean()
-    var_cost = cost[:, 1].mean() + (1 / (num_replications - 1)) * np.sum(
-        (cost[:, 0] - mean_cost) ** 2
-    )
+    mean_cost = np.mean(cost, axis=1)
+    var_cost = np.var(cost, axis=1)
+    mean_of_means = np.mean(mean_cost)
+    mean_of_variances = np.mean(var_cost)
+    var_of_means = np.var(mean_cost)
+
     print(f"Finished running {algorithm} with posterior {posterior} and DGP {dgp}.")
-    print(f"Out-of-sample mean: {mean_cost}. Out-of-sample variance: {var_cost}.")
+    print(f"Out-of-sample mean: {mean_of_means}. Out-of-sample variances: {mean_of_variances + var_of_means}.")
     print("Total DGP time:", sum(times["dgp_time"]))
     print("Total posterior time:", sum(times["posterior_time"]))
     print("Total likelihood time:", sum(times["likelihood_time"]))
     print("Total solve time:", sum(times["solve_time"]))
-    return cost, solutions, times
+
+    df = pd.DataFrame({
+        "uuid": [uuid] * num_replications,
+        "replication": np.arange(num_replications),
+        "mean_cost": mean_cost,
+        "var_cost": var_cost,
+        "solution": solutions,
+        "dgp_time": times["dgp_time"],
+        "likelihood_time": times["likelihood_time"],
+        "posterior_time": times["posterior_time"],
+        "solve_time": times["solve_time"],
+    })
+    df.to_csv(experiment_dir / f"{uuid}.csv", index=False)
 
 
 if __name__ == "__main__":

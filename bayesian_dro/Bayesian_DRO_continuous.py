@@ -44,16 +44,14 @@ DGP_STD_TRUNCATED_NORMAL = 10
 NUM_OBSERVATIONS = 20  # Number of observations from true DGP
 
 
-def xi_generation(theta, D_xi, i):
+def xi_generation(theta, D_xi, random_state = None):
     """Likelihood generation"""
-    np.random.seed(i)
-    xi = expon.rvs(scale=1 / theta, size=D_xi)
+    xi = expon.rvs(scale=1 / theta, size=D_xi, random_state=random_state)
     return xi
 
 
-def data_generation(num_observations, i):
+def data_generation(num_observations, random_state = None):
     """True DGP"""
-    np.random.seed(i)
     myclip_a, myclip_b = 0, np.inf
 
     a, b = (myclip_a - DGP_MEAN_TRUNCATED_NORMAL) / DGP_STD_TRUNCATED_NORMAL, (
@@ -65,17 +63,17 @@ def data_generation(num_observations, i):
         loc=DGP_MEAN_TRUNCATED_NORMAL,
         scale=DGP_STD_TRUNCATED_NORMAL,
         size=num_observations,
+        random_state=random_state,
     )
     return data
 
 
-def theta_generation(data, D_theta, i):
+def theta_generation(data, D_theta, random_state = None):
     """Posterior"""
-    np.random.seed(i)
     alpha0, beta0 = 1, 1
     alpha = alpha0 + data.shape[0]
     beta = beta0 + np.sum(data)
-    theta = gamma.rvs(a=alpha, scale=1 / beta, size=D_theta)
+    theta = gamma.rvs(a=alpha, scale=1 / beta, size=D_theta, random_state=random_state)
     return theta
 
 

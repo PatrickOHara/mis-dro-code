@@ -5,7 +5,7 @@ from uuid import uuid4
 from bayesian_dro.Bayesian_DRO_continuous import EPSILON_SET
 from .constants import *
 
-def epsilon_experiment():
+def newsvendor_1d():
     """Vary epsilon and compare Bayesian DRO with Bayes/NPL posterior"""
     # iterate over each of the parameters
     experiment = []
