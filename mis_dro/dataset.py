@@ -23,6 +23,5 @@ def data_generation_outliers(num_observations: int, contamination: float, random
     data = expon.rvs(scale=10, size=n_real, random_state=random_state)
     outl = expon.rvs(scale=70, size=cont_size, random_state=random_state)
     data = np.concatenate((data, outl), axis=0)
-
-    data = random_state.shuffle(data)
+    random_state.shuffle(data)  # shuffles the data in-place
     return data

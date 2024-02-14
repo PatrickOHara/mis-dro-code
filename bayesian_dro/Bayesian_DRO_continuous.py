@@ -527,6 +527,7 @@ def main():
     )
     replication = 200
 
+    # TODO change seeding
     data_eval = data_generation(replication, 100) # one data point for each replication
 
     solution_BRO = np.zeros(replication)

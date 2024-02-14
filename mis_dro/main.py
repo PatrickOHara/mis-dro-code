@@ -61,12 +61,13 @@ def generate_csv(experiment_dir: Path):
 
 
 @app.command()
-def experiment(experiment_dir: Path):
+def experiment(experiment_dir: Path, only_missing: bool = False):
     """When using SLURM, this function is called"""
     filepath = experiment_dir / "experiment.json"
     with open(filepath, "r", encoding="utf-8") as json_file:
         experiment = json.load(json_file)
-    Parallel(n_jobs=-1)(delayed(run)(experiment_dir, **params) for params in experiment)
+    # NOTE if only-missing flag, then only run if the results CSV file doesn't exist
+    Parallel(n_jobs=-1)(delayed(run)(experiment_dir, **params) for params in experiment if not((experiment_dir / params["uuid"]).exists() and only_missing))
 
 
 @app.command(name="run")
