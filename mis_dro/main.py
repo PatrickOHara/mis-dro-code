@@ -52,9 +52,7 @@ def generate_csv(experiment_dir: Path):
         experiment = json.load(json_file)
     df = pd.DataFrame(experiment)
     df.set_index("uuid", inplace=True)
-    result_df = pd.DataFrame()
-    for uuid in df.index:
-        result_df.append(pd.read_csv(experiment_dir / f"{uuid}.csv", index_col=["uuid", "replication"]))
+    result_df = pd.concat(Parallel(n_jobs=-1)(delayed(pd.read_csv)(experiment_dir / f"{uuid}.csv", index_col=["uuid", "replication"]) for uuid in df.index if (experiment_dir / f"{uuid}.csv").exists()))
 
     # result_df.set_index(["uuid", "replication"], inplace=True)
     result_df = result_df.join(df, on="uuid")
