@@ -35,7 +35,8 @@ EPSILON_SET = [
 ]
 b = 8
 h = 3
-M = 50
+LARGEST_X = 50
+SMALLEST_X = 0
 L = 100
 
 DGP_MEAN_TRUNCATED_NORMAL = 10
@@ -44,16 +45,14 @@ DGP_STD_TRUNCATED_NORMAL = 10
 NUM_OBSERVATIONS = 20  # Number of observations from true DGP
 
 
-def xi_generation(theta, D_xi, i):
+def xi_generation(theta, D_xi, random_state = None):
     """Likelihood generation"""
-    np.random.seed(i)
-    xi = expon.rvs(scale=1 / theta, size=D_xi)
+    xi = expon.rvs(scale=1 / theta, size=D_xi, random_state=random_state)
     return xi
 
 
-def data_generation(num_observations, i):
+def data_generation(num_observations, random_state = None):
     """True DGP"""
-    np.random.seed(i)
     myclip_a, myclip_b = 0, np.inf
 
     a, b = (myclip_a - DGP_MEAN_TRUNCATED_NORMAL) / DGP_STD_TRUNCATED_NORMAL, (
@@ -65,17 +64,17 @@ def data_generation(num_observations, i):
         loc=DGP_MEAN_TRUNCATED_NORMAL,
         scale=DGP_STD_TRUNCATED_NORMAL,
         size=num_observations,
+        random_state=random_state,
     )
     return data
 
 
-def theta_generation(data, D_theta, i):
+def theta_generation(data, D_theta, random_state = None):
     """Posterior"""
-    np.random.seed(i)
     alpha0, beta0 = 1, 1
     alpha = alpha0 + data.shape[0]
     beta = beta0 + np.sum(data)
-    theta = gamma.rvs(a=alpha, scale=1 / beta, size=D_theta)
+    theta = gamma.rvs(a=alpha, scale=1 / beta, size=D_theta, random_state=random_state)
     return theta
 
 
@@ -185,7 +184,7 @@ def Bayesian_DRO_3(xi, x, epsilon, lse=True):
 
 
 def main_Bayesian_DRO(xi, epsilon, lse: bool = True):
-    support = np.arange(5, M + 1, 1)
+    support = np.arange(SMALLEST_X, LARGEST_X + 1, 1)
     value_support = np.zeros(len(support))
     for i in range(len(support)):
         value_support[i] = Bayesian_DRO_3(xi, support[i], epsilon, lse=lse) 
@@ -197,10 +196,10 @@ def main_Bayesian_DRO(xi, epsilon, lse: bool = True):
     for i in range(len(support_smallest)):
         value_support_smallest[i] = Bayesian_DRO_3(xi, support_smallest[i], epsilon, lse=lse)  
     temp = support_smallest[np.argmin(value_support_smallest)]
-    if temp <= M:
+    if temp <= LARGEST_X:
         optimal_x = temp
     else:
-        optimal_x = M
+        optimal_x = LARGEST_X
     return optimal_x
 
 
@@ -209,7 +208,7 @@ def BRO(x, xi):
 
 
 def main_BRO(sol_true, xi):
-    bnds = [(0, M)]
+    bnds = [(SMALLEST_X, LARGEST_X)]
     initial_point = sol_true
     res = optimize.minimize(BRO, initial_point, bounds=bnds, args=(xi))
     optimal_x = res.x
@@ -297,7 +296,7 @@ def main_Bayesian_DRO_epsilon1(data, theta, xi):
         temp = cumulative_kl(data, reference_pdf)
         epsilon_1[i] = temp
 
-    support = np.arange(5, M + 1, 1)
+    support = np.arange(SMALLEST_X, LARGEST_X + 1, 1)
     value_support = np.zeros(len(support))
     for i in range(len(support)):
         value_support[i] = Bayesian_DRO_3_epsilon1(support[i], epsilon_1, xi)
@@ -311,10 +310,10 @@ def main_Bayesian_DRO_epsilon1(data, theta, xi):
             support_smallest[i], epsilon_1, xi
         )
     temp = support_smallest[np.argmin(value_support_smallest)]
-    if temp <= M:
+    if temp <= LARGEST_X:
         optimal_x = temp
     else:
-        optimal_x = M
+        optimal_x = LARGEST_X
     return optimal_x, epsilon_1
 
 
@@ -366,7 +365,7 @@ def main_Bayesian_DRO_epsilon2(data, theta):
         temp = cumulative_kl(data, reference_pdf)
         epsilon_2[i] = temp / 2
 
-    support = np.arange(5, M + 1, 1)
+    support = np.arange(SMALLEST_X, LARGEST_X + 1, 1)
     value_support = np.zeros(len(support))
     for i in range(len(support)):
         value_support[i] = Bayesian_DRO_3_epsilon2(support[i], epsilon_2)
@@ -380,10 +379,10 @@ def main_Bayesian_DRO_epsilon2(data, theta):
             support_smallest[i], epsilon_2
         )
     temp = support_smallest[np.argmin(value_support_smallest)]
-    if temp <= M:
+    if temp <= LARGEST_X:
         optimal_x = temp
     else:
-        optimal_x = M
+        optimal_x = LARGEST_X
     return optimal_x, epsilon_2
 
 
@@ -501,7 +500,7 @@ def main_Bayesian_DRO_epsilon3(xi, empirical_x, theta):
     epsilon_3 = np.zeros(NUMBER_ITERATION_THETA)
     for i in range(NUMBER_ITERATION_THETA):
         epsilon_3[i] = calculate_epsilon3(empirical_x, theta, i)
-    support = np.arange(5, M + 1, 1)
+    support = np.arange(SMALLEST_X, LARGEST_X + 1, 1)
     value_support = np.zeros(len(support))
     for i in range(len(support)):
         value_support[i] = Bayesian_DRO_3_epsilon3(xi, support[i], epsilon_3)
@@ -515,10 +514,10 @@ def main_Bayesian_DRO_epsilon3(xi, empirical_x, theta):
             xi, support_smallest[i], epsilon_3
         )
     temp = support_smallest[np.argmin(value_support_smallest)]
-    if temp <= M:
+    if temp <= LARGEST_X:
         optimal_x = temp
     else:
-        optimal_x = M
+        optimal_x = LARGEST_X
     return optimal_x, epsilon_3
 
 
@@ -529,7 +528,8 @@ def main():
     )
     replication = 200
 
-    data_eval = data_generation(replication, 100) # one data point for each replication
+    generator = np.random.default_rng(seed=replication)
+    data_eval = data_generation(replication, random_state=generator) # one data point for each replication
 
     solution_BRO = np.zeros(replication)
 
@@ -570,11 +570,12 @@ def main():
         print()
         print("### Running replication", k)
         print()
-        data = data_generation(NUM_OBSERVATIONS, k)
-        theta = theta_generation(data, NUMBER_ITERATION_THETA, k)
+        generator = np.random.default_rng(seed=k)
+        data = data_generation(NUM_OBSERVATIONS, random_state=generator)
+        theta = theta_generation(data, NUMBER_ITERATION_THETA, random_state=generator)
         xi = np.zeros([NUMBER_ITERATION_THETA, NUMBER_ITERATION_XI])
         for i in range(NUMBER_ITERATION_THETA):
-            xi[i] = xi_generation(theta[i], NUMBER_ITERATION_XI, k + i)
+            xi[i] = xi_generation(theta[i], NUMBER_ITERATION_XI, random_state=generator)
 
         # solution_BRO[k] = main_BRO(sol_true, xi)
         # obj_BRO[k] = cost(solution_BRO[k], data_eval[k])

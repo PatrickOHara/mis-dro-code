@@ -50,10 +50,10 @@ class Npl:
 
         return self.minimise_MMD(self.X, weights, key)
 
-    def draw_samples(self, n_jobs: int = -1):
+    def draw_samples(self, n_jobs: int = -1, random_state=None):
         """Draws B samples in parallel from the nonparametric posterior"""
 
-        weights = dirichlet.rvs(np.ones(self.n), size=self.B, random_state=13)
+        weights = dirichlet.rvs(np.ones(self.n), size=self.B, random_state=random_state)
         samples = np.zeros((self.B, self.p))
 
         if self.loss_fn == "wll":

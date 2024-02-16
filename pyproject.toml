@@ -10,7 +10,7 @@ authors = [
 ]
 description = "Misspecified DRO"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 keywords = ["Distributionally Robust Optimisation", "Bayesian"]
 license = {text = "BSD-3-Clause"}
 classifiers = [

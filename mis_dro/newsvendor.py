@@ -2,7 +2,7 @@
 
 import numpy as np
 
-BACKORDER_COST = 4  # denoted b
+BACKORDER_COST = 8  # denoted b
 HOLDING_COST = 3  # denoted h
 
 
