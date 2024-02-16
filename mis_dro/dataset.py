@@ -17,7 +17,7 @@ def data_generation_outliers(num_observations: int, contamination: float, random
         Shuffles data to ensure anomalies are not grouped together
     """
     if not random_state:
-        random_state = np.random.Generator()
+        random_state = np.random.default_rng()
     cont_size = int(np.floor(contamination * num_observations))
     n_real = num_observations - cont_size
     data = expon.rvs(scale=10, size=n_real, random_state=random_state)

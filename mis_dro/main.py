@@ -7,6 +7,7 @@ from uuid import uuid4
 from joblib import Parallel, delayed
 import numpy as np
 import pandas as pd
+from scipy.stats import expon
 import typer
 
 from bayesian_dro.Bayesian_DRO_continuous import (
@@ -38,10 +39,17 @@ def setup(experiment_dir: Path, overwrite: bool = False):
     with open(filepath, "w", encoding="utf-8") as json_file:
         json.dump(experiment, json_file, indent=4)
 
+    # get unique DGPs
+    dgps = set()
+    for params in experiment:
+        dgps.add(params["dgp"])
+
     # setup SLURM file
     with open(Path(__file__).parent / "template.slurm", "r") as slurm_file:
-        slurm_string = slurm_file.read().format(experiment_dir=experiment_dir)
-    (experiment_dir / f"{experiment_name}.slurm").write_text(slurm_string)
+        slurm_string = slurm_file.read()
+    for dgp in dgps:
+        dgp_string = slurm_string.format(experiment_dir=experiment_dir, dgp=dgp)
+        (experiment_dir / f"{experiment_name}_{dgp}.slurm").write_text(dgp_string)
 
 @app.command(name="csv")
 def generate_csv(experiment_dir: Path):
@@ -56,13 +64,17 @@ def generate_csv(experiment_dir: Path):
 
 
 @app.command()
-def experiment(experiment_dir: Path, only_missing: bool = False):
+def experiment(experiment_dir: Path, dgp: str, only_missing: bool = False):
     """When using SLURM, this function is called"""
     filepath = experiment_dir / "experiment.json"
     with open(filepath, "r", encoding="utf-8") as json_file:
         experiment = json.load(json_file)
     # NOTE if only-missing flag, then only run if the results CSV file doesn't exist
-    Parallel(n_jobs=-1)(delayed(run)(experiment_dir, **params) for params in experiment if not((experiment_dir / params["uuid"]).exists() and only_missing))
+    Parallel(n_jobs=-1)(
+        delayed(run)(experiment_dir, **params)
+        for params in experiment
+        if params["dgp"] == dgp and not((experiment_dir / params["uuid"]).exists() and only_missing)
+    )
 
 
 @app.command(name="run")
@@ -106,6 +118,9 @@ def run(
             data = data_generation_outliers(num_observations, contamination, random_state=generator)
             # but DO NOT specify any contamination for test data!
             data_eval = data_generation_outliers(num_test_observations, 0.0, random_state=generator)
+        elif dgp == "exponential":
+            data = expon.rvs(scale=20.0, size=num_observations, random_state=generator)
+            data_eval = expon.rvs(scale=20.0, size=num_test_observations, random_state=generator)
         else:
             raise ValueError(
                 f"The data-generating process specified is not supported: {dgp}"
