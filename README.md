@@ -26,6 +26,8 @@ To *only* install the dependencies for the code of Bayesian DRO (Shapiro et al.,
 pip install -r bayesian_dro/bdro_requirements.txt
 ```
 
+***
+
 ## How to run
 
 To run just one algorithm, you can use the CLI `misdro` with the `run` command:
@@ -38,6 +40,20 @@ To setup an experiment, including a custom SLURM file, you can use the `misdro s
 misdro setup $EXPERIMENT_DIR
 ```
 where `$EXPERIMENT_DIR` is the filepath to a directory you want to store the experiment inside.
+The SLURM file will be put inside `$EXPERIMENT_DIR` along with a `experiment.json` file containing all of the parameters for the experiment.
+You can run the slurm file:
+
+```
+sbatch NAME.slurm
+```
+
+and the results for each parameter configuration will be saved in a CSV file with a unique UUID.
+To collect all of the CSV files together in a single `results.csv` file, you can run:
+```
+misdro csv $EXPERIMENT_DIR
+```
+then to analyse the results using the `newsvendor_experiment.ipynb` notebook.
+
 
 ### Bayesian DRO
 

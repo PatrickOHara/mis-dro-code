@@ -3,7 +3,6 @@
 from datetime import datetime
 import json
 from pathlib import Path
-from tqdm import tqdm
 from uuid import uuid4
 from joblib import Parallel, delayed
 import numpy as np
@@ -50,14 +49,10 @@ def generate_csv(experiment_dir: Path):
     experiment_filepath = experiment_dir / "experiment.json"
     with open(experiment_filepath, "r", encoding="utf-8") as json_file:
         experiment = json.load(json_file)
-    df = pd.DataFrame(experiment)
-    df.set_index("uuid", inplace=True)
+    df = pd.DataFrame(experiment).set_index("uuid", inplace=True)
     result_df = pd.concat(Parallel(n_jobs=-1)(delayed(pd.read_csv)(experiment_dir / f"{uuid}.csv", index_col=["uuid", "replication"]) for uuid in df.index if (experiment_dir / f"{uuid}.csv").exists()))
-
-    # result_df.set_index(["uuid", "replication"], inplace=True)
     result_df = result_df.join(df, on="uuid")
-    result_df.groupby(["epsilon", "algorithm", "posterior"])
-    result_df.to_csv(experiment_dir / "results.csv", index=True)
+    result_df.to_csv(experiment_dir / "results.csv", index=False)
 
 
 @app.command()
@@ -99,7 +94,7 @@ def run(
         "solve_time": [],
     }
 
-    for j in tqdm(range(num_replications)):
+    for j in range(num_replications):
         # generate dataset
         dgp_start = datetime.now()
         generator = np.random.default_rng(seed=j)
