@@ -40,8 +40,9 @@ To setup an experiment, including a custom SLURM file, you can use the `misdro s
 misdro setup $EXPERIMENT_DIR
 ```
 where `$EXPERIMENT_DIR` is the filepath to a directory you want to store the experiment inside.
-The SLURM file will be put inside `$EXPERIMENT_DIR` along with a `experiment.json` file containing all of the parameters for the experiment.
-You can run the slurm file:
+A SLURM file is generated for each dataset.
+Each SLURM file will be put inside `$EXPERIMENT_DIR` along with a `experiment.json` file containing all of the parameters for the experiment.
+You can run a slurm file:
 
 ```
 sbatch NAME.slurm
