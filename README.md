@@ -53,7 +53,7 @@ To collect all of the CSV files together in a single `results.csv` file, you can
 ```
 misdro csv $EXPERIMENT_DIR
 ```
-then to analyse the results using the `newsvendor_experiment.ipynb` notebook.
+then you can analyse the results using the `newsvendor_experiment.ipynb` notebook.
 
 
 ### Bayesian DRO

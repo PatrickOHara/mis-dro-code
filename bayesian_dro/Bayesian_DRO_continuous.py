@@ -51,18 +51,18 @@ def xi_generation(theta, D_xi, random_state = None):
     return xi
 
 
-def data_generation(num_observations, random_state = None):
+def data_generation(num_observations, mean = DGP_MEAN_TRUNCATED_NORMAL, std = DGP_STD_TRUNCATED_NORMAL, random_state = None):
     """True DGP"""
     myclip_a, myclip_b = 0, np.inf
 
-    a, b = (myclip_a - DGP_MEAN_TRUNCATED_NORMAL) / DGP_STD_TRUNCATED_NORMAL, (
-        myclip_b - DGP_MEAN_TRUNCATED_NORMAL
-    ) / DGP_STD_TRUNCATED_NORMAL
+    a, b = (myclip_a - mean) / std, (
+        myclip_b - mean
+    ) / std
     data = truncnorm.rvs(
         a,
         b,
-        loc=DGP_MEAN_TRUNCATED_NORMAL,
-        scale=DGP_STD_TRUNCATED_NORMAL,
+        loc=mean,
+        scale=std,
         size=num_observations,
         random_state=random_state,
     )
