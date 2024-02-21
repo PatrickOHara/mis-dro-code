@@ -17,7 +17,7 @@ from bayesian_dro.Bayesian_DRO_continuous import (
     theta_generation,
 )
 from .constants import *
-from .dataset import data_generation_outliers
+from .dataset import data_generation_outliers, data_generation_trunc_t
 from .experiments import newsvendor_1d
 from .npl import Npl
 from .newsvendor import newsvendor_cost
@@ -82,7 +82,7 @@ def run(
     experiment_dir: Path,
     algorithm: str = "bayesian_dro",
     contamination: float = CONTAMINATION_LEVEL,
-    dgp: str = "truncated_normal",
+    dgp: str = "truncated_t",
     epsilon: float = 1.0,
     lengthscale: float = -1.0,
     num_likelihood_samples: int = NUM_LIKELIHOOD_SAMPLES,
@@ -90,7 +90,7 @@ def run(
     num_posterior_samples: int = NUM_POSTERIOR_SAMPLES,
     num_replications: int = NUM_REPLICATIONS,
     num_test_observations: int = NUM_TEST_OBSERVATIONS,
-    posterior: str = "mmd",
+    posterior: str = "bayes",
     uuid: str = str(uuid4()),
 ):
     """Run Newsvendor Misspecified Bayesian DRO"""
@@ -121,6 +121,9 @@ def run(
         elif dgp == "exponential":
             data = expon.rvs(scale=20.0, size=num_observations, random_state=generator)
             data_eval = expon.rvs(scale=20.0, size=num_test_observations, random_state=generator)
+        elif dgp == "truncated_t":
+            data = data_generation_trunc_t(num_observations, df=4, random_state=generator)
+            data_eval = data_generation_trunc_t(num_test_observations, df=4, random_state=generator)
         else:
             raise ValueError(
                 f"The data-generating process specified is not supported: {dgp}"

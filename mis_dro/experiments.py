@@ -11,7 +11,7 @@ def newsvendor_1d():
     experiment = []
     for algorithm, dgp, epsilon, posterior in itertools.product(
         ["bayesian_dro"],
-        ["exponential", "truncated_normal", "contaminated_exp"],
+        ["exponential", "truncated_normal", "contaminated_exp", "truncated_t"],
         EPSILON_SET,
         ["bayes", "wll", "mmd"],
     ):
