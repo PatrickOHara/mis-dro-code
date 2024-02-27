@@ -523,46 +523,46 @@ def main_Bayesian_DRO_epsilon3(xi, empirical_x, theta):
 
 def main():
     print("Hello, world!")
-    sol_true = truncnorm.ppf(
-        (b - 0) / (h + b), a=-DGP_MEAN_TRUNCATED_NORMAL / DGP_STD_TRUNCATED_NORMAL, b=np.inf, loc=DGP_MEAN_TRUNCATED_NORMAL, scale=DGP_STD_TRUNCATED_NORMAL
-    )
+    # sol_true = truncnorm.ppf(
+    #     (b - 0) / (h + b), a=-DGP_MEAN_TRUNCATED_NORMAL / DGP_STD_TRUNCATED_NORMAL, b=np.inf, loc=DGP_MEAN_TRUNCATED_NORMAL, scale=DGP_STD_TRUNCATED_NORMAL
+    # )
     replication = 200
 
     generator = np.random.default_rng(seed=replication)
     data_eval = data_generation(replication, random_state=generator) # one data point for each replication
 
-    solution_BRO = np.zeros(replication)
+    # solution_BRO = np.zeros(replication)
 
-    solution_empirical = np.zeros(replication)
+    # solution_empirical = np.zeros(replication)
 
     solution_Bayesian_DRO = np.zeros([replication, len(EPSILON_SET)])
     solution_Bayesian_DRO_lse = np.zeros([replication, len(EPSILON_SET)])
 
-    solution_epsilon_1 = np.zeros(replication)
-    epsilon_1 = np.zeros([replication, NUMBER_ITERATION_THETA])
+    # solution_epsilon_1 = np.zeros(replication)
+    # epsilon_1 = np.zeros([replication, NUMBER_ITERATION_THETA])
 
-    solution_epsilon_2 = np.zeros(replication)
-    epsilon_2 = np.zeros([replication, NUMBER_ITERATION_THETA])
+    # solution_epsilon_2 = np.zeros(replication)
+    # epsilon_2 = np.zeros([replication, NUMBER_ITERATION_THETA])
 
-    solution_epsilon_3 = np.zeros(replication)
-    epsilon_3 = np.zeros([replication, NUMBER_ITERATION_THETA])
+    # solution_epsilon_3 = np.zeros(replication)
+    # epsilon_3 = np.zeros([replication, NUMBER_ITERATION_THETA])
 
-    solution_empirical_DRO_Wasserstein = np.zeros([replication, len(EPSILON_SET)])
+    # solution_empirical_DRO_Wasserstein = np.zeros([replication, len(EPSILON_SET)])
 
-    obj_BRO = np.zeros(replication)
+    # obj_BRO = np.zeros(replication)
 
-    obj_empirical = np.zeros(replication)
+    # obj_empirical = np.zeros(replication)
 
     obj_Bayesian_DRO = np.zeros([replication, len(EPSILON_SET)])
     obj_Bayesian_DRO_lse = np.zeros([replication, len(EPSILON_SET)])
 
-    obj_epsilon_1 = np.zeros(replication)
+    # obj_epsilon_1 = np.zeros(replication)
 
-    obj_epsilon_2 = np.zeros(replication)
+    # obj_epsilon_2 = np.zeros(replication)
 
-    obj_epsilon_3 = np.zeros(replication)
+    # obj_epsilon_3 = np.zeros(replication)
 
-    obj_empirical_DRO_Wasserstein = np.zeros([replication, len(EPSILON_SET)])
+    # obj_empirical_DRO_Wasserstein = np.zeros([replication, len(EPSILON_SET)])
     print("Starting main loop")
 
     def main_loop(k):
