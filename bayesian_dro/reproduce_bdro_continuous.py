@@ -18,7 +18,7 @@ b = 8           # from Section 4.1
 h = 3 
 M = 50 
 L = 100
-LARGEST_X = 50
+LARGEST_X = 50  # from Section 4.1: support is 0 <= x <= 50
 SMALLEST_X = 0
 
 my_mean = 10    # from Section 4.1
