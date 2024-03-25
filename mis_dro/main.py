@@ -37,7 +37,6 @@ app = typer.Typer(name="misdro")
 @app.command(name="setup")
 def setup(experiment_name: ExperimentName, experiment_dir: Path, overwrite: bool = False):
     """Setup an experiment in a new directory"""
-    experiment_name = "newsvendor_1d"
     if not experiment_dir.exists() or not overwrite:
         experiment_dir.mkdir(parents=False, exist_ok=False)
 

@@ -16,7 +16,7 @@ def newsvendor_cost_cvxpy(x, xi):
     """
     return HOLDING_COST * cp.maximum(0, x - xi) + BACKORDER_COST * cp.maximum(0, xi - x)
 
-def solve_bdro(xi: np.typing.ArrayLike, epsilon: float) -> Tuple[float, List[float]]:
+def solve_bdro(xi, epsilon: float) -> Tuple[float, List[float]]:
     """Bayesian DRO as a cvxpy optimisaton problem.
     
     We use an epigraph variable t to upper bound the function G(x, xi).
