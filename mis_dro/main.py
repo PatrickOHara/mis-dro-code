@@ -16,25 +16,35 @@ from bayesian_dro.Bayesian_DRO_continuous import (
     xi_generation,
     theta_generation,
 )
-from .constants import *
+from .constants import (
+    CONTAMINATION_LEVEL,
+    NUM_LIKELIHOOD_SAMPLES,
+    NUM_OBSERVATIONS,
+    NUM_POSTERIOR_SAMPLES,
+    NUM_REPLICATIONS,
+    NUM_TEST_OBSERVATIONS,
+)
 from .dataset import data_generation_outliers, data_generation_gamma
-from .experiments import newsvendor_1d
+from .experiments import ExperimentName, get_experiment
 from .npl import Npl
 from .newsvendor import newsvendor_cost
 from .models import ExponentialModel
+from .optimise import solve_bdro
 
 app = typer.Typer(name="misdro")
 
 
 @app.command(name="setup")
-def setup(experiment_dir: Path, overwrite: bool = False):
+def setup(experiment_name: ExperimentName, experiment_dir: Path, overwrite: bool = False):
     """Setup an experiment in a new directory"""
     experiment_name = "newsvendor_1d"
     if not experiment_dir.exists() or not overwrite:
         experiment_dir.mkdir(parents=False, exist_ok=False)
 
+    # get the experiment from the name
+    experiment = get_experiment(experiment_name)
+
     # write experiment file to JSON
-    experiment = newsvendor_1d()
     filepath = experiment_dir / "experiment.json"
     with open(filepath, "w", encoding="utf-8") as json_file:
         json.dump(experiment, json_file, indent=4)
@@ -45,7 +55,7 @@ def setup(experiment_dir: Path, overwrite: bool = False):
         dgps.add(params["dgp"])
 
     # setup SLURM file
-    with open(Path(__file__).parent / "template.slurm", "r") as slurm_file:
+    with open(Path(__file__).parent / "template.slurm", "r", encoding="utf-8") as slurm_file:
         slurm_string = slurm_file.read()
     for dgp in dgps:
         dgp_string = slurm_string.format(experiment_dir=experiment_dir, dgp=dgp)
@@ -65,9 +75,9 @@ def generate_csv(experiment_dir: Path):
     result_df.to_csv(experiment_dir / "results.csv", index=True)
 
 
-@app.command()
-def experiment(experiment_dir: Path, dgp: str, only_missing: bool = False):
-    """When using SLURM, this function is called"""
+@app.command(name="experiment")
+def run_experiment(experiment_dir: Path, dgp: str, only_missing: bool = False):
+    """When using SLURM, this function is called to run an experiment"""
     filepath = experiment_dir / "experiment.json"
     with open(filepath, "r", encoding="utf-8") as json_file:
         experiment = json.load(json_file)
@@ -169,6 +179,8 @@ def run(
         # run the chosen DRO algorithm
         solve_start = datetime.now()
         if algorithm == "bayesian_dro":
+            solutions[j], _ = solve_bdro(xi, epsilon)
+        elif algorithm == "bdro_grid_search":
             solutions[j] = main_Bayesian_DRO(xi, epsilon)
         # TODO put in other algorithms here, e.g. main_Bayesian_DRO_epsilon1!
         else:

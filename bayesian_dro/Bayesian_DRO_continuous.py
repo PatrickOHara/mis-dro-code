@@ -1,7 +1,6 @@
-import json
+
 import numpy as np
 import pandas as pd
-from pathlib import Path
 from scipy import optimize
 from scipy.stats import truncnorm
 from scipy.stats import gamma
@@ -176,8 +175,9 @@ def Bayesian_DRO_2(xi, x, theta_index, epsilon, lse = True):
 
 
 def Bayesian_DRO_3(xi, x, epsilon, lse=True):
-    temp_value = np.zeros(NUMBER_ITERATION_THETA)
-    for i in range(NUMBER_ITERATION_THETA):
+    num_iteration_theta = xi.shape[0]
+    temp_value = np.zeros(num_iteration_theta)
+    for i in range(num_iteration_theta):
         temp_value[i] = Bayesian_DRO_2(xi, x, i, epsilon, lse=lse)
     value = np.mean(temp_value)
     return value
