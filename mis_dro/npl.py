@@ -10,7 +10,6 @@ from numpy.random import choice
 from sklearn.utils import shuffle
 import itertools
 from tqdm import tqdm
-import ot
 import jax
 from jax import numpy as jnp
 from jax import vmap, value_and_grad, jit, config
@@ -21,7 +20,7 @@ from .gaussian_kernel import k, k_jax, k_comp
 class Npl:
     """This class contains functions to perform NPL inference (for alpha = 0 in the DP prior) for the Exponential distribution model."""
 
-    def __init__(self, X, B, p, m, model, l=-1, loss_fn="wll"):
+    def __init__(self, X, B, p, m, model, seed, l=-1, loss_fn="wll"):
         """
         Args:
             X: Data set
@@ -43,6 +42,7 @@ class Npl:
             self.l = np.sqrt((1/2)*np.median(distance.cdist(self.X,self.X,'sqeuclidean')))
         self.kxx = k(self.X,self.X,self.l) # pre calculate kernel matrix of data k(x,x)
         self.model = model
+        self.seed = seed
 
     def draw_single_mmd_sample(self, weights, key):
         """ Draws a single sample from the nonparametric posterior specified via
@@ -69,7 +69,7 @@ class Npl:
                 samples[i, :] = temp[i]
                 self.sample = np.array(samples)
         elif self.loss_fn == "mmd":
-            key = jax.random.PRNGKey(113)
+            key = jax.random.PRNGKey(self.seed)
             key, *subkeys = jax.random.split(key, num=self.B+1) # generate B random keys
 
             mmd_samples = vmap(self.draw_single_mmd_sample, in_axes=0)(weights, jnp.array(subkeys))
@@ -105,7 +105,7 @@ class Npl:
     def minimise_MMD(self, data, weights, key, Nstep=1000, eta=0.01, batch_size=10):
         """ Function to minimise the MMD using adam optimisation in JAX """
 
-        key, subkey, key1, key2 = jax.random.split(key, num=3 + 1)
+        key, key1, key2 = jax.random.split(key, num=2 + 1)
         params = jnp.log((1/np.mean(self.X[:,0])))*jnp.ones(self.p) # Initialisation of unknown parameter, here I inistialise at MLE
 
         config.update("jax_enable_x64", True)
@@ -147,17 +147,19 @@ class Npl:
 
         smallest_loss = 1000000
         best_theta = get_params(opt_state)
+        key1, *rng_inputs1 = jax.random.split(key1, num=Nstep + 1)
+        key2, *rng_inputs2 = jax.random.split(key2, num=Nstep + 1)
         for i in range(Nstep):
             batches = []
-            for _ in range(num_batches):
-              key1, subkey = jax.random.split(key1)
-              inds = jax.random.choice(subkey, a=self.n, shape=(batch_size,), p=weights) #default is with replacement
+            _, *rng_inputs = jax.random.split(rng_inputs2[i], num=num_batches + 1)
+            for j in range(num_batches):
+              inds = jax.random.choice(rng_inputs[j], a=self.n, shape=(batch_size,), p=weights) #default is with replacement
               batch_x = jnp.take(a=data, indices=inds, axis=0)
               batches.append(batch_x)
 
             batches = jnp.array(batches)
             # Update loss and gradient
-            value, opt_state = step(next(itercount), opt_state, batches, key2)
+            value, opt_state = step(next(itercount), opt_state, batches, rng_inputs1[i])
             # Update smallest loss and best theta value if loss has decreased
             pred =  value < smallest_loss # Prediction that loss (value) has decreased 
             def true_func(args):

@@ -145,6 +145,7 @@ def run(
                 p,
                 m,
                 model,
+                seed=j,
                 l=lengthscale,
                 loss_fn=posterior,
             )
