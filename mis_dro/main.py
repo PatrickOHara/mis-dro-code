@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from uuid import uuid4
 from joblib import Parallel, delayed
+import cvxpy as cp
 import numpy as np
 import pandas as pd
 from scipy.stats import expon
@@ -162,6 +163,22 @@ def run(
         elif posterior == "bayes":
             # standard Bayesian posterior sample for theta
             theta_sample = theta_generation(data, num_posterior_samples, random_state=generator)
+        elif posterior == "normal_gamma":
+            # We place a Normal-Gamma distribution on the mean and precision parameters.
+            # The likelihood distribution is a Gaussian distribution
+            alpha_prior = 1
+            beta_prior = 1.0
+            mu_prior = 1.0
+            kappa_prior = 1.0
+            data_mean = np.mean(data)
+
+            mu_posterior = (kappa_prior * mu_prior + num_observations * data_mean) / (num_observations * kappa_prior)
+            kappa_posterior = kappa_prior + num_observations
+            alpha_posterior = alpha_prior + 0.5 * num_observations
+            beta_posterior = beta_prior + 0.5 * np.sum(np.square(data - data_mean)) + (0.5 * num_observations * kappa_prior * np.square(data_mean - mu_prior)) / (kappa_prior * num_observations)
+
+            # TODO compare against BDRO by generating theta samples of the mean and variance
+
         times["posterior_time"].append(
             (datetime.now() - posterior_start).total_seconds()
         )
@@ -181,6 +198,19 @@ def run(
             solutions[j], _ = solve_bdro(xi, epsilon)
         elif algorithm == "bdro_grid_search":
             solutions[j] = main_Bayesian_DRO(xi, epsilon)
+        elif algorithm == "normal_gamma_dro":
+            problem = get_kl_bdro_problem(num_posterior_samples, num_likelihood_samples)
+            posterior_constant = get_normal_gamma_constant(alpha_posterior, kappa_posterior)
+            if posterior_constant < 0:
+                raise ValueError(f"posterior_constant must be non-negative. Value is: {posterior_constant}")
+            epsilon_param = problem.param_dict["epsilon"]
+            x_var = problem.var_dict["x"]
+            lam_var = problem.var_dict["lam"]
+            epsilon_list = get_epsilon_list(epsilon)
+            for epsilon_value in epsilon_list:
+                epsilon_param.value = epsilon_value
+                problem.solve(solver=cp.MOSEK)
+            solutions[j] = x_var.value[0], np.array([lam_var[i].value for i in range(num_posterior_samples)])
         # TODO put in other algorithms here, e.g. main_Bayesian_DRO_epsilon1!
         else:
             solutions[j] = 0
