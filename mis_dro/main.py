@@ -17,7 +17,7 @@ from bayesian_dro.Bayesian_DRO_continuous import (
     xi_generation,
     theta_generation,
 )
-from .bayesian_conjugates import normal_gamma_posterior
+from .bayesian_conjugates import normal_gamma_posterior, normal_gamma_rvs
 from .constants import (
     CONTAMINATION_LEVEL,
     NUM_LIKELIHOOD_SAMPLES,
@@ -170,10 +170,7 @@ def run(
             # We place a Normal-Gamma distribution on the mean and precision parameters.
             # The likelihood distribution is a Gaussian distribution
             # TODO pick suitible parameters for the prior
-            alpha_prior = 1
-            beta_prior = 1.0
-            mu_prior = 0.0
-            kappa_prior = 1.0
+            mu_prior, kappa_prior, alpha_prior, beta_prior  = 0.0, 1.0, 1.0, 1.0
             mu_posterior, kappa_posterior, alpha_posterior, beta_posterior = normal_gamma_posterior(data, mu_prior, kappa_prior, alpha_prior, beta_prior)
             theta_sample = np.zeros((num_posterior_samples, 2))
             if algorithm == "normal_gamma_dro":
@@ -181,8 +178,8 @@ def run(
                 theta_sample[0] = np.array([mu_posterior, beta_posterior / alpha_posterior])
                 posterior_constant = get_normal_gamma_constant(alpha_posterior, kappa_posterior)
             else:
-                # TODO sample from normal-gamma posterior
-                raise NotImplementedError()
+                theta_sample = normal_gamma_rvs(num_posterior_samples, mu_posterior, kappa_posterior, alpha_posterior, beta_posterior, generator=generator)
+
         if posterior_constant < 0:
             raise ValueError(f"posterior_constant must be non-negative. Value is: {posterior_constant}")
         times["posterior_time"].append(
@@ -195,9 +192,12 @@ def run(
         if likelihood == "exponential":
             for i in range(num_posterior_samples):
                 xi[i] = xi_generation(theta_sample[i], num_likelihood_samples, random_state=generator)
-        elif likelihood == "gaussian":
+        elif likelihood == "gaussian" and posterior == "normal_gamma":
             for i in range(num_posterior_samples):
-                xi[i] = generator.normal(theta_sample[i,0], theta_sample[i,1], size=num_likelihood_samples)
+                # NOTE numpy normal takes standard deviation as scale parameter - not variance or precision!
+                xi[i] = generator.normal(theta_sample[i,0], np.sqrt(1.0 / theta_sample[i,1]), size=num_likelihood_samples)
+        else:
+            raise NotImplementedError(f"Likelihood {likelihood} with posterior {posterior} not implemented.")
         times["likelihood_time"].append(
             (datetime.now() - likelihood_start).total_seconds()
         )
@@ -206,10 +206,14 @@ def run(
         solve_start = datetime.now()
         if algorithm in ["bayesian_dro", "normal_gamma_dro"]:
             # set parameters then solve
+            # TODO fix bug with posterior constant: ***why does lambda go to zero?***
+            print("Epsilon:", epsilon)
+            print("Negative Log times constant:", np.log(1.0 / num_likelihood_samples) * posterior_constant)
+            print("Solving with posterior constant =", posterior_constant)
             problem.param_dict["posterior_constant"].value = np.array([posterior_constant])
             problem.param_dict["xi"].value = xi
             problem.param_dict["epsilon"].value = np.array([epsilon])
-            problem.solve(solver=cp.MOSEK)
+            problem.solve(solver=cp.MOSEK, verbose=False)
             solutions[j] = problem.var_dict["x"].value[0]
             # [problem.var_dict[f"lam_{i}"].value for i in range(num_posterior_samples)]
         elif algorithm == "bdro_grid_search":
