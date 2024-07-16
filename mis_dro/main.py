@@ -17,6 +17,7 @@ from bayesian_dro.Bayesian_DRO_continuous import (
     xi_generation,
     theta_generation,
 )
+from .bayesian_conjugates import normal_gamma_posterior
 from .constants import (
     CONTAMINATION_LEVEL,
     NUM_LIKELIHOOD_SAMPLES,
@@ -30,7 +31,7 @@ from .experiments import ExperimentName, get_experiment
 from .npl import Npl
 from .newsvendor import newsvendor_cost
 from .models import ExponentialModel
-from .optimise import solve_bdro
+from .optimise import get_kl_bdro_problem, get_normal_gamma_constant, newsvendor_cost_cvxpy
 
 app = typer.Typer(name="misdro")
 
@@ -97,6 +98,7 @@ def run(
     dgp: str = "gamma",
     epsilon: float = 1.0,
     lengthscale: float = -1.0,
+    likelihood: str = "exponential",
     num_likelihood_samples: int = NUM_LIKELIHOOD_SAMPLES,
     num_observations: int = NUM_OBSERVATIONS,
     num_posterior_samples: int = NUM_POSTERIOR_SAMPLES,
@@ -117,6 +119,7 @@ def run(
         "likelihood_time": [],
         "solve_time": [],
     }
+    problem = get_kl_bdro_problem(newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples)
 
     for j in range(num_replications):
         # generate dataset
@@ -144,7 +147,7 @@ def run(
 
         # sample from the posterior
         posterior_start = datetime.now()
-        theta_sample = np.zeros((num_posterior_samples, 1))
+        posterior_constant = 1.0
         if posterior in ("wll", "mmd"):
             # NPL posterior sample for theta
             m = NUM_OBSERVATIONS
@@ -166,19 +169,22 @@ def run(
         elif posterior == "normal_gamma":
             # We place a Normal-Gamma distribution on the mean and precision parameters.
             # The likelihood distribution is a Gaussian distribution
+            # TODO pick suitible parameters for the prior
             alpha_prior = 1
             beta_prior = 1.0
-            mu_prior = 1.0
+            mu_prior = 0.0
             kappa_prior = 1.0
-            data_mean = np.mean(data)
-
-            mu_posterior = (kappa_prior * mu_prior + num_observations * data_mean) / (num_observations * kappa_prior)
-            kappa_posterior = kappa_prior + num_observations
-            alpha_posterior = alpha_prior + 0.5 * num_observations
-            beta_posterior = beta_prior + 0.5 * np.sum(np.square(data - data_mean)) + (0.5 * num_observations * kappa_prior * np.square(data_mean - mu_prior)) / (kappa_prior * num_observations)
-
-            # TODO compare against BDRO by generating theta samples of the mean and variance
-
+            mu_posterior, kappa_posterior, alpha_posterior, beta_posterior = normal_gamma_posterior(data, mu_prior, kappa_prior, alpha_prior, beta_prior)
+            theta_sample = np.zeros((num_posterior_samples, 2))
+            if algorithm == "normal_gamma_dro":
+                assert num_posterior_samples == 1
+                theta_sample[0] = np.array([mu_posterior, beta_posterior / alpha_posterior])
+                posterior_constant = get_normal_gamma_constant(alpha_posterior, kappa_posterior)
+            else:
+                # TODO sample from normal-gamma posterior
+                raise NotImplementedError()
+        if posterior_constant < 0:
+            raise ValueError(f"posterior_constant must be non-negative. Value is: {posterior_constant}")
         times["posterior_time"].append(
             (datetime.now() - posterior_start).total_seconds()
         )
@@ -186,31 +192,28 @@ def run(
         # sample from the likelihood
         likelihood_start = datetime.now()
         xi = np.zeros([num_posterior_samples, num_likelihood_samples])  # init the xi's
-        for i in range(num_posterior_samples):
-            xi[i] = xi_generation(theta_sample[i], num_likelihood_samples, random_state=generator)
+        if likelihood == "exponential":
+            for i in range(num_posterior_samples):
+                xi[i] = xi_generation(theta_sample[i], num_likelihood_samples, random_state=generator)
+        elif likelihood == "gaussian":
+            for i in range(num_posterior_samples):
+                xi[i] = generator.normal(theta_sample[i,0], theta_sample[i,1], size=num_likelihood_samples)
         times["likelihood_time"].append(
             (datetime.now() - likelihood_start).total_seconds()
         )
 
         # run the chosen DRO algorithm
         solve_start = datetime.now()
-        if algorithm == "bayesian_dro":
-            solutions[j], _ = solve_bdro(xi, epsilon)
+        if algorithm in ["bayesian_dro", "normal_gamma_dro"]:
+            # set parameters then solve
+            problem.param_dict["posterior_constant"].value = np.array([posterior_constant])
+            problem.param_dict["xi"].value = xi
+            problem.param_dict["epsilon"].value = np.array([epsilon])
+            problem.solve(solver=cp.MOSEK)
+            solutions[j] = problem.var_dict["x"].value[0]
+            # [problem.var_dict[f"lam_{i}"].value for i in range(num_posterior_samples)]
         elif algorithm == "bdro_grid_search":
             solutions[j] = main_Bayesian_DRO(xi, epsilon)
-        elif algorithm == "normal_gamma_dro":
-            problem = get_kl_bdro_problem(num_posterior_samples, num_likelihood_samples)
-            posterior_constant = get_normal_gamma_constant(alpha_posterior, kappa_posterior)
-            if posterior_constant < 0:
-                raise ValueError(f"posterior_constant must be non-negative. Value is: {posterior_constant}")
-            epsilon_param = problem.param_dict["epsilon"]
-            x_var = problem.var_dict["x"]
-            lam_var = problem.var_dict["lam"]
-            epsilon_list = get_epsilon_list(epsilon)
-            for epsilon_value in epsilon_list:
-                epsilon_param.value = epsilon_value
-                problem.solve(solver=cp.MOSEK)
-            solutions[j] = x_var.value[0], np.array([lam_var[i].value for i in range(num_posterior_samples)])
         # TODO put in other algorithms here, e.g. main_Bayesian_DRO_epsilon1!
         else:
             solutions[j] = 0
@@ -245,7 +248,9 @@ def run(
         "posterior_time": times["posterior_time"],
         "solve_time": times["solve_time"],
     })
-    df.to_csv(experiment_dir / f"{uuid}.csv", index=False)
+    csv_filepath = experiment_dir / f"{uuid}.csv"
+    print(f"Writing CSV to {csv_filepath}")
+    df.to_csv(csv_filepath, index=False)
 
 
 if __name__ == "__main__":
