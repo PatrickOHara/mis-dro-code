@@ -95,7 +95,7 @@ def run(
     experiment_dir: Path,
     algorithm: str = "bayesian_dro",
     contamination: float = CONTAMINATION_LEVEL,
-    dgp: str = "gamma",
+    dgp: str = "truncated_normal",
     epsilon: float = 1.0,
     lengthscale: float = -1.0,
     likelihood: str = "exponential",
@@ -104,7 +104,8 @@ def run(
     num_posterior_samples: int = NUM_POSTERIOR_SAMPLES,
     num_replications: int = NUM_REPLICATIONS,
     num_test_observations: int = NUM_TEST_OBSERVATIONS,
-    posterior: str = "bayes",
+    posterior: str = "gamma",
+    prior: str = "gamma",
     uuid: str = str(uuid4()),
 ):
     """Run Newsvendor Misspecified Bayesian DRO"""
@@ -163,10 +164,10 @@ def run(
             )
             npl_toy.draw_samples(random_state=generator)
             theta_sample = npl_toy.sample
-        elif posterior == "bayes":
+        elif posterior == "gamma" and prior == "gamma":
             # standard Bayesian posterior sample for theta
             theta_sample = theta_generation(data, num_posterior_samples, random_state=generator)
-        elif posterior == "normal_gamma":
+        elif posterior == "normal_gamma" and prior == "normal_gamma":
             # We place a Normal-Gamma distribution on the mean and precision parameters.
             # The likelihood distribution is a Gaussian distribution
             # TODO pick suitible parameters for the prior
@@ -192,7 +193,7 @@ def run(
         if likelihood == "exponential":
             for i in range(num_posterior_samples):
                 xi[i] = xi_generation(theta_sample[i], num_likelihood_samples, random_state=generator)
-        elif likelihood == "gaussian" and posterior == "normal_gamma":
+        elif likelihood == "normal" and posterior == "normal_gamma":
             for i in range(num_posterior_samples):
                 # NOTE numpy normal takes standard deviation as scale parameter - not variance or precision!
                 xi[i] = generator.normal(theta_sample[i,0], np.sqrt(1.0 / theta_sample[i,1]), size=num_likelihood_samples)
@@ -206,10 +207,6 @@ def run(
         solve_start = datetime.now()
         if algorithm in ["bayesian_dro", "normal_gamma_dro"]:
             # set parameters then solve
-            # TODO fix bug with posterior constant: ***why does lambda go to zero?***
-            print("Epsilon:", epsilon)
-            print("Negative Log times constant:", np.log(1.0 / num_likelihood_samples) * posterior_constant)
-            print("Solving with posterior constant =", posterior_constant)
             problem.param_dict["posterior_constant"].value = np.array([posterior_constant])
             problem.param_dict["xi"].value = xi
             problem.param_dict["epsilon"].value = np.array([epsilon])

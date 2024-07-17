@@ -71,24 +71,32 @@ def newsvendor_1d() -> List[Dict]:
 def compare_solve() -> List[Dict]:
     """Compares the original grid-search algorithm and cvxpy algorithm"""
     experiment = []
-    for algorithm, dgp, epsilon, posterior in itertools.product(
-        ["bayesian_dro", "bdro_grid_search"],
+    for algorithm, dgp, epsilon, (posterior, likelihood, prior) in itertools.product(
+        ["bayesian_dro", "bdro_grid_search", "normal_gamma_dro"],
         ["truncated_normal"],
         [0.001, 0.01, 0.1, 1.0, 10.0, 100.0],
-        ["bayes"],
+        [("gamma", "exponential", "gamma"), ("normal_gamma", "normal", "normal_gamma")],
     ):
+        num_posterior_samples = NUM_POSTERIOR_SAMPLES
+        if algorithm == "normal_gamma_dro" and posterior != "normal_gamma":
+            continue    # skip if the posterior doesn't match our algorithm
+        elif algorithm == "normal_gamma_dro":
+            # we calculate the posterior exactly in closed form!
+            num_posterior_samples = 1
         params = {
             "algorithm": algorithm,
             "contamination": 0.0,
             "dgp": dgp,
             "epsilon": epsilon,
             "lengthscale": -1.0,
+            "likelihood": likelihood,
             "num_likelihood_samples": NUM_LIKELIHOOD_SAMPLES,
             "num_observations": NUM_OBSERVATIONS,
-            "num_posterior_samples": NUM_POSTERIOR_SAMPLES,
+            "num_posterior_samples": num_posterior_samples,
             "num_replications": NUM_REPLICATIONS,
             "num_test_observations": NUM_TEST_OBSERVATIONS,
             "posterior": posterior,
+            "prior": prior,
             "uuid": str(uuid4()),  # uniquely identify a run
         }
         experiment.append(params)
