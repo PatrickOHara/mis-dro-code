@@ -3,7 +3,7 @@
 from datetime import datetime
 import json
 from pathlib import Path
-from uuid import uuid4
+from uuid import uuid4, UUID
 from joblib import Parallel, delayed
 import cvxpy as cp
 import numpy as np
@@ -51,16 +51,16 @@ def setup(experiment_name: ExperimentName, experiment_dir: Path, overwrite: bool
         json.dump(experiment, json_file, indent=4)
 
     # get unique DGPs
-    dgps = set()
+    dgp_algorithm_pairs = set()
     for params in experiment:
-        dgps.add(params["dgp"])
+        dgp_algorithm_pairs.add((params["dgp"], params["algorithm"]))
 
     # setup SLURM file
     with open(Path(__file__).parent / "template.slurm", "r", encoding="utf-8") as slurm_file:
         slurm_string = slurm_file.read()
-    for dgp in dgps:
-        dgp_string = slurm_string.format(experiment_dir=experiment_dir, dgp=dgp)
-        (experiment_dir / f"{experiment_name}_{dgp}.slurm").write_text(dgp_string)
+    for (dgp, algorithm) in dgp_algorithm_pairs:
+        dgp_string = slurm_string.format(experiment_dir=experiment_dir, dgp=dgp, algorithm=algorithm)
+        (experiment_dir / f"{experiment_name}_{dgp}_{algorithm}.slurm").write_text(dgp_string)
 
 @app.command(name="csv")
 def generate_csv(experiment_dir: Path):
@@ -77,7 +77,7 @@ def generate_csv(experiment_dir: Path):
 
 
 @app.command(name="experiment")
-def run_experiment(experiment_dir: Path, dgp: str, only_missing: bool = False):
+def run_experiment(experiment_dir: Path, dgp: str, algorithm: str, only_missing: bool = False):
     """When using SLURM, this function is called to run an experiment"""
     filepath = experiment_dir / "experiment.json"
     with open(filepath, "r", encoding="utf-8") as json_file:
@@ -86,9 +86,22 @@ def run_experiment(experiment_dir: Path, dgp: str, only_missing: bool = False):
     Parallel(n_jobs=-1)(
         delayed(run)(experiment_dir, **params)
         for params in experiment
-        if params["dgp"] == dgp and not((experiment_dir / params["uuid"]).exists() and only_missing)
+        if params["dgp"] == dgp and params["algorithm"] == algorithm and not((experiment_dir / params["uuid"]).exists() and only_missing)
     )
 
+@app.command(name="uuid")
+def run_uuid(experiment_dir: Path, uuid: UUID, verbose: bool = False) -> None:
+    """Run DRO for only one specified uuid parameters"""
+    filepath = experiment_dir / "experiment.json"
+    with open(filepath, "r", encoding="utf-8") as json_file:
+        experiment = json.load(json_file)
+    found = False
+    for params in experiment:
+        if params["uuid"] == str(uuid):
+            found = True
+            run(experiment_dir, verbose=verbose, **params)
+    if not found:
+        raise ValueError(f"UUID {uuid} not found in {filepath}")
 
 @app.command(name="run")
 def run(
@@ -107,6 +120,7 @@ def run(
     posterior: str = "gamma",
     prior: str = "gamma",
     uuid: str = str(uuid4()),
+    verbose: bool = False,
 ):
     """Run Newsvendor Misspecified Bayesian DRO"""
     if uuid:
@@ -119,8 +133,17 @@ def run(
         "posterior_time": [],
         "likelihood_time": [],
         "solve_time": [],
+        "setup_time": [],
     }
     problem = get_kl_bdro_problem(newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples)
+
+    # If the number of parameters is small enough, then use Disciplined Parametrized Programming (DPP)
+    # to reduce the compilation time in each replication.
+    # However, a large number of parameters uses an enormous amout of RAM in the current cvxpy implementation.
+    ignore_dpp = False
+    n_parameters = np.sum(np.prod(param.shape) for param in problem.parameters())
+    if n_parameters >= cp.settings.PARAM_THRESHOLD:
+        ignore_dpp = True
 
     for j in range(num_replications):
         # generate dataset
@@ -176,7 +199,8 @@ def run(
             theta_sample = np.zeros((num_posterior_samples, 2))
             if algorithm == "normal_gamma_dro":
                 assert num_posterior_samples == 1
-                theta_sample[0] = np.array([mu_posterior, beta_posterior / alpha_posterior])
+                # we want an analytical form for the precision, which is alpha over beta
+                theta_sample[0] = np.array([mu_posterior, alpha_posterior / beta_posterior])
                 posterior_constant = get_normal_gamma_constant(alpha_posterior, kappa_posterior)
             else:
                 theta_sample = normal_gamma_rvs(num_posterior_samples, mu_posterior, kappa_posterior, alpha_posterior, beta_posterior, generator=generator)
@@ -210,16 +234,22 @@ def run(
             problem.param_dict["posterior_constant"].value = np.array([posterior_constant])
             problem.param_dict["xi"].value = xi
             problem.param_dict["epsilon"].value = np.array([epsilon])
-            problem.solve(solver=cp.MOSEK, verbose=False)
+            problem.solve(solver=cp.MOSEK, verbose=verbose, ignore_dpp=ignore_dpp)
             solutions[j] = problem.var_dict["x"].value[0]
+
+            # get lambda value list if you need it
             # [problem.var_dict[f"lam_{i}"].value for i in range(num_posterior_samples)]
+
+            times["solve_time"].append(problem.solver_stats.solve_time)
+            times["setup_time"].append(problem.solver_stats.setup_time)
         elif algorithm == "bdro_grid_search":
             solutions[j] = main_Bayesian_DRO(xi, epsilon)
+            times["solve_time"].append((datetime.now() - solve_start).total_seconds())
+            times["setup_time"].append(0.0) # can't really measure this easily
         # TODO put in other algorithms here, e.g. main_Bayesian_DRO_epsilon1!
         else:
             solutions[j] = 0
             raise ValueError("Please choose a valid algorithm")
-        times["solve_time"].append((datetime.now() - solve_start).total_seconds())
 
         # evaluate the cost
         cost[j] = newsvendor_cost(solutions[j], data_eval)
@@ -248,6 +278,7 @@ def run(
         "likelihood_time": times["likelihood_time"],
         "posterior_time": times["posterior_time"],
         "solve_time": times["solve_time"],
+        "setup_time": times["setup_time"],
     })
     csv_filepath = experiment_dir / f"{uuid}.csv"
     print(f"Writing CSV to {csv_filepath}")
