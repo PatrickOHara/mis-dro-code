@@ -1,5 +1,6 @@
 """NPL posterior"""
 
+from typing import Optional
 import numpy as np
 from joblib import Parallel, delayed
 from scipy.stats import dirichlet

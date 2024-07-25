@@ -8,7 +8,6 @@ from joblib import Parallel, delayed
 import cvxpy as cp
 import numpy as np
 import pandas as pd
-from scipy.stats import expon
 import typer
 
 from bayesian_dro.Bayesian_DRO_continuous import main_Bayesian_DRO
