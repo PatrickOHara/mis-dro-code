@@ -4,12 +4,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+
 class AlgorithmLineStyle(StrEnum):
     """Consistent algorithm line styles"""
 
     bdro_grid_search = "solid"
     bayesian_dro = "dashed"
     normal_gamma_dro = "dotted"
+
 
 class AlgorithmMarkerStyle(StrEnum):
     """Consistent algorithm marker styles"""
@@ -18,6 +20,7 @@ class AlgorithmMarkerStyle(StrEnum):
     bayesian_dro = "x"
     normal_gamma_dro = "*"
 
+
 class AlgorithmName(StrEnum):
     """Consistent algorithm line styles"""
 
@@ -25,29 +28,36 @@ class AlgorithmName(StrEnum):
     bayesian_dro = "BDRO optimised"
     normal_gamma_dro = "BDRO normal-gamma"
 
+
 class PosteriorLineStyle(StrEnum):
     """Consistent line styles"""
+
     bayes = "solid"
     gamma = "solid"
     normal_gamma = "dashdot"
     wll = "dashed"
     mmd = "dotted"
 
+
 class PosteriorMarker(StrEnum):
     """Consistent marker styles"""
+
     bayes = "o"
     gamma = "o"
     normal_gamma = "^"
     wll = "x"
     mmd = "v"
 
+
 class PosteriorName(StrEnum):
     """Nice looking names for posteriors"""
+
     bayes = "Bayes"
     gamma = "Bayes: Gamma"
     normal_gamma = "Bayes: Normal-gamma"
     wll = "WLL-NPL"
     mmd = "MMD-NPL"
+
 
 class PosteriorColor(StrEnum):
     bayes = "blue"
@@ -55,6 +65,7 @@ class PosteriorColor(StrEnum):
     normal_gamma = "blue"
     wll = "orange"
     mmd = "green"
+
 
 def posterior_style(posterior: str) -> dict[str, str]:
     """Get matplotlib style for a posterior"""
@@ -65,6 +76,7 @@ def posterior_style(posterior: str) -> dict[str, str]:
         "color": PosteriorColor[posterior].value,
     }
 
+
 def algorithm_style(algorithm: str) -> dict[str, str]:
     """Get matplotlib style for an algorithm"""
     return {
@@ -74,7 +86,16 @@ def algorithm_style(algorithm: str) -> dict[str, str]:
         "color": "black",
     }
 
-def flexible_figure(agg_df: pd.DataFrame, plot_type: str, gb_col: str = "dgp", max_epsilon: float = np.inf, ncols: int = 2, sharex: bool = False, sharey: bool = False):
+
+def flexible_figure(
+    agg_df: pd.DataFrame,
+    plot_type: str,
+    gb_col: str = "dgp",
+    max_epsilon: float = np.inf,
+    ncols: int = 2,
+    sharex: bool = False,
+    sharey: bool = False,
+):
     """A flexible plotting function
 
     Examples:
@@ -93,10 +114,22 @@ def flexible_figure(agg_df: pd.DataFrame, plot_type: str, gb_col: str = "dgp", m
         ```
     """
     gb = agg_df.groupby(gb_col)
-    nrows = int(np.ceil(len(gb)/float(ncols)))
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, sharex=sharex, sharey=sharey, figsize=(ncols*5,nrows*5))
+    nrows = int(np.ceil(len(gb) / float(ncols)))
+    fig, axes = plt.subplots(
+        nrows=nrows,
+        ncols=ncols,
+        sharex=sharex,
+        sharey=sharey,
+        figsize=(ncols * 5, nrows * 5),
+    )
     for i, (group, group_df) in enumerate(gb):
-        algorithm_dgp_posterior_set = set(zip(group_df.index.get_level_values("algorithm"), group_df.index.get_level_values("dgp"),  group_df.index.get_level_values("posterior")))
+        algorithm_dgp_posterior_set = set(
+            zip(
+                group_df.index.get_level_values("algorithm"),
+                group_df.index.get_level_values("dgp"),
+                group_df.index.get_level_values("posterior"),
+            )
+        )
 
         # get the column and row indicies to get the axis
         col = i % ncols
@@ -109,7 +142,7 @@ def flexible_figure(agg_df: pd.DataFrame, plot_type: str, gb_col: str = "dgp", m
             axis = axes[row][col]
 
         # add a new plot on the same axis for each parameter setting
-        for (algorithm, dgp, posterior) in algorithm_dgp_posterior_set:
+        for algorithm, dgp, posterior in algorithm_dgp_posterior_set:
             df = group_df.loc[algorithm, dgp, :max_epsilon, posterior]
 
             # decide how to style the lines
@@ -123,9 +156,11 @@ def flexible_figure(agg_df: pd.DataFrame, plot_type: str, gb_col: str = "dgp", m
                 assert len(df.index.get_level_values("algorithm").unique()) == 1
                 style = posterior_style(posterior)
             elif len(gb_col) > 1:
-                raise NotImplementedError("Cannot yet handle more than 1 groupby column")
+                raise NotImplementedError(
+                    "Cannot yet handle more than 1 groupby column"
+                )
 
-            # plot 
+            # plot
             if plot_type == "mean_variance":
                 mean_variance_plot(axis, df, posterior, **style)
             elif plot_type in ("solve_time", "setup_time", "posterior_time"):
@@ -135,6 +170,7 @@ def flexible_figure(agg_df: pd.DataFrame, plot_type: str, gb_col: str = "dgp", m
         axis.legend()
     axis.legend()
     return fig, axes
+
 
 def time_taken_plot(
     axis: mpl.axis.Axis,
@@ -149,13 +185,14 @@ def time_taken_plot(
     axis.set_xscale("log")
     axis.set_yscale("log")
 
+
 def mean_variance_plot(
     axis: mpl.axis.Axis,
     df: pd.DataFrame,
     posterior: str,
     **kwargs,
 ) -> None:
-    posterior_var =  df["var_cost"]["mean"] + df["mean_cost"]["var"]
+    posterior_var = df["var_cost"]["mean"] + df["mean_cost"]["var"]
 
     # plot mean-variance trade-off
     axis.plot(posterior_var, df["mean_cost"]["mean"], **kwargs)
@@ -164,6 +201,18 @@ def mean_variance_plot(
     epsilon_list = list(df.index.get_level_values("epsilon"))
     for i, epsilon in enumerate(epsilon_list):
         if posterior in ("bayes", "gamma", "normal_gamma") and i % 4 == 0:
-            axis.text(posterior_var[:,:,epsilon,:].iloc[0], df["mean_cost"]["mean"][:,:,epsilon,:].iloc[0], epsilon, ha='left', va='bottom')
-        if posterior == "mmd" and (i+2) % 4 == 0:
-            axis.text(posterior_var[:,:,epsilon,:].iloc[0], df["mean_cost"]["mean"][:,:,epsilon,:].iloc[0], epsilon, ha='right', va='bottom')
+            axis.text(
+                posterior_var[:, :, epsilon, :].iloc[0],
+                df["mean_cost"]["mean"][:, :, epsilon, :].iloc[0],
+                epsilon,
+                ha="left",
+                va="bottom",
+            )
+        if posterior == "mmd" and (i + 2) % 4 == 0:
+            axis.text(
+                posterior_var[:, :, epsilon, :].iloc[0],
+                df["mean_cost"]["mean"][:, :, epsilon, :].iloc[0],
+                epsilon,
+                ha="right",
+                va="bottom",
+            )

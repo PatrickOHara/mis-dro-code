@@ -6,24 +6,37 @@ from scipy.stats import expon, gamma
 
 from bayesian_dro.Bayesian_DRO_continuous import data_generation
 
-def sample_dgp(dgp: str, num_observations: int, contamination: float = 0.0, generator: Optional[np.random.Generator] = None) -> np.ndarray:
+
+def sample_dgp(
+    dgp: str,
+    num_observations: int,
+    contamination: float = 0.0,
+    generator: Optional[np.random.Generator] = None,
+) -> np.ndarray:
     """Sample from the DGP"""
     if not generator:
         generator = np.random.default_rng()
     if dgp == "truncated_normal":
-        return data_generation(num_observations, random_state=generator)  # generate new observations
+        return data_generation(
+            num_observations, random_state=generator
+        )  # generate new observations
     if dgp == "contaminated_exp":
         # specify contamination level
-        return data_generation_outliers(num_observations, contamination, random_state=generator)
+        return data_generation_outliers(
+            num_observations, contamination, random_state=generator
+        )
     if dgp == "exponential":
         return expon.rvs(scale=20.0, size=num_observations, random_state=generator)
     if dgp == "gamma":
         return data_generation_gamma(num_observations, a=10, random_state=generator)
-    raise ValueError(
-        f"The data-generating process specified is not supported: {dgp}"
-    )
+    raise ValueError(f"The data-generating process specified is not supported: {dgp}")
 
-def data_generation_outliers(num_observations: int, contamination: float, random_state: Optional[np.random.Generator] = None):
+
+def data_generation_outliers(
+    num_observations: int,
+    contamination: float,
+    random_state: Optional[np.random.Generator] = None,
+):
     """A contaminated exponential data-generating process (DGP)
 
     Args:
@@ -44,9 +57,12 @@ def data_generation_outliers(num_observations: int, contamination: float, random
     random_state.shuffle(data)  # shuffles the data in-place
     return data
 
-def data_generation_gamma(num_observations: int, a: float, random_state: Optional[np.random.Generator] = None):
+
+def data_generation_gamma(
+    num_observations: int, a: float, random_state: Optional[np.random.Generator] = None
+):
     """A Gamma data-generating process (DGP)
-    
+
     Args:
         num_observations: Number of observations from DGP
         a: shape parameter
@@ -54,9 +70,7 @@ def data_generation_gamma(num_observations: int, a: float, random_state: Optiona
     """
     if not random_state:
         random_state = np.random.default_rng()
-        
+
     gamma_samples = gamma.rvs(a, size=num_observations)
-    
+
     return gamma_samples
-    
-        

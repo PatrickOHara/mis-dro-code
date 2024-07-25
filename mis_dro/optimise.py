@@ -6,7 +6,6 @@ import cvxpy as cp
 from bayesian_dro.Bayesian_DRO_continuous import LARGEST_X, SMALLEST_X
 
 
-
 def get_kl_bdro_problem(
     decision_objective: Callable[[cp.Variable, cp.Parameter], cp.Expression],
     num_posterior_samples: int,
@@ -35,7 +34,10 @@ def get_kl_bdro_problem(
     """
     # declare variables
     x = cp.Variable(1, name="x")
-    lam = [cp.Variable(1, name=f"lam_{i}", nonneg=True) for i in range(num_posterior_samples)]
+    lam = [
+        cp.Variable(1, name=f"lam_{i}", nonneg=True)
+        for i in range(num_posterior_samples)
+    ]
     t = cp.Variable((num_posterior_samples, num_likelihood_samples), name="t")
 
     # declare parameters
@@ -47,12 +49,16 @@ def get_kl_bdro_problem(
     # NOTE we pass the max function to f_recession because,
     # as lam -> 0, then lam * LSE(t[i] / lam) tends to max(t[i]).
     bdro_obj = cp.Minimize(
-        (1.0/num_posterior_samples) * cp.sum([
-            lam[i] * epsilon
-            + lam[i] * cp.log(1.0 / num_likelihood_samples) @ kl_bdro_constant
-            + kl_bdro_constant * cp.perspective(cp.log_sum_exp(t[i]), lam[i], f_recession=cp.max(t[i]))
-            for i in range(num_posterior_samples)
-        ])
+        (1.0 / num_posterior_samples)
+        * cp.sum(
+            [
+                lam[i] * epsilon
+                + lam[i] * cp.log(1.0 / num_likelihood_samples) @ kl_bdro_constant
+                + kl_bdro_constant
+                * cp.perspective(cp.log_sum_exp(t[i]), lam[i], f_recession=cp.max(t[i]))
+                for i in range(num_posterior_samples)
+            ]
+        )
     )
     # add the decision objective as an epigraph constraint
     # examples of decision objectives are the newsvendor objective
@@ -62,4 +68,3 @@ def get_kl_bdro_problem(
     ] + [decision_objective(x, xi[i]) <= t[i] for i in range(num_posterior_samples)]
 
     return cp.Problem(bdro_obj, constraints)
-

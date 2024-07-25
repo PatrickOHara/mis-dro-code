@@ -18,11 +18,13 @@ from .constants import (
     NUM_TEST_OBSERVATIONS,
 )
 
+
 class ExperimentName(StrEnum):
     """Names of experiments"""
 
     newsvendor_1d = "newsvendor_1d"
     compare_solve = "compare_solve"
+
 
 def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
     """Returns the experiment associated with the name"""
@@ -68,6 +70,7 @@ def newsvendor_1d() -> List[Dict]:
         experiment.append(params)
     return experiment
 
+
 def compare_solve() -> List[Dict]:
     """Compares the original grid-search algorithm and cvxpy algorithm"""
     experiment = []
@@ -79,7 +82,7 @@ def compare_solve() -> List[Dict]:
     ):
         num_posterior_samples = NUM_POSTERIOR_SAMPLES
         if algorithm == "normal_gamma_dro" and posterior != "normal_gamma":
-            continue    # skip if the posterior doesn't match our algorithm
+            continue  # skip if the posterior doesn't match our algorithm
         elif algorithm == "normal_gamma_dro":
             # we calculate the posterior exactly in closed form!
             num_posterior_samples = 1

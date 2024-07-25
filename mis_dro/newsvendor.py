@@ -5,6 +5,7 @@ import cvxpy as cp
 BACKORDER_COST = 8  # denoted b
 HOLDING_COST = 3  # denoted h
 
+
 def newsvendor_cost_cvxpy(x, xi):
     """Evaluate Newsvendor cost function with cvxpy
 

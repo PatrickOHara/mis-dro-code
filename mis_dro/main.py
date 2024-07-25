@@ -12,7 +12,13 @@ from scipy.stats import expon
 import typer
 
 from bayesian_dro.Bayesian_DRO_continuous import main_Bayesian_DRO
-from .bayes_conjugates import sample_posterior, default_prior_params, get_kl_bdro_constant, get_posterior_params, derive_analytical_posterior_params
+from .bayes_conjugates import (
+    sample_posterior,
+    default_prior_params,
+    get_kl_bdro_constant,
+    get_posterior_params,
+    derive_analytical_posterior_params,
+)
 from .constants import (
     CONTAMINATION_LEVEL,
     NUM_LIKELIHOOD_SAMPLES,
@@ -32,7 +38,9 @@ app = typer.Typer(name="misdro")
 
 
 @app.command(name="setup")
-def setup(experiment_name: ExperimentName, experiment_dir: Path, overwrite: bool = False):
+def setup(
+    experiment_name: ExperimentName, experiment_dir: Path, overwrite: bool = False
+):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
         experiment_dir.mkdir(parents=False, exist_ok=False)
@@ -51,11 +59,18 @@ def setup(experiment_name: ExperimentName, experiment_dir: Path, overwrite: bool
         dgp_algorithm_pairs.add((params["dgp"], params["algorithm"]))
 
     # setup SLURM file
-    with open(Path(__file__).parent / "template.slurm", "r", encoding="utf-8") as slurm_file:
+    with open(
+        Path(__file__).parent / "template.slurm", "r", encoding="utf-8"
+    ) as slurm_file:
         slurm_string = slurm_file.read()
-    for (dgp, algorithm) in dgp_algorithm_pairs:
-        dgp_string = slurm_string.format(experiment_dir=experiment_dir, dgp=dgp, algorithm=algorithm)
-        (experiment_dir / f"{experiment_name}_{dgp}_{algorithm}.slurm").write_text(dgp_string)
+    for dgp, algorithm in dgp_algorithm_pairs:
+        dgp_string = slurm_string.format(
+            experiment_dir=experiment_dir, dgp=dgp, algorithm=algorithm
+        )
+        (experiment_dir / f"{experiment_name}_{dgp}_{algorithm}.slurm").write_text(
+            dgp_string
+        )
+
 
 @app.command(name="csv")
 def generate_csv(experiment_dir: Path):
@@ -64,16 +79,23 @@ def generate_csv(experiment_dir: Path):
     with open(experiment_filepath, "r", encoding="utf-8") as json_file:
         experiment = json.load(json_file)
     df = pd.DataFrame(experiment).set_index("uuid")
-    result_df = pd.concat([
-        pd.read_csv(experiment_dir / f"{uuid}.csv", index_col=["uuid", "replication"])
-        for uuid in df.index if (experiment_dir / f"{uuid}.csv").exists()
-    ])
+    result_df = pd.concat(
+        [
+            pd.read_csv(
+                experiment_dir / f"{uuid}.csv", index_col=["uuid", "replication"]
+            )
+            for uuid in df.index
+            if (experiment_dir / f"{uuid}.csv").exists()
+        ]
+    )
     result_df = result_df.join(df, on="uuid")
     result_df.to_csv(experiment_dir / "results.csv", index=True)
 
 
 @app.command(name="experiment")
-def run_experiment(experiment_dir: Path, dgp: str, algorithm: str, only_missing: bool = False):
+def run_experiment(
+    experiment_dir: Path, dgp: str, algorithm: str, only_missing: bool = False
+):
     """When using SLURM, this function is called to run an experiment"""
     filepath = experiment_dir / "experiment.json"
     with open(filepath, "r", encoding="utf-8") as json_file:
@@ -82,8 +104,11 @@ def run_experiment(experiment_dir: Path, dgp: str, algorithm: str, only_missing:
     Parallel(n_jobs=-1)(
         delayed(run)(experiment_dir, **params)
         for params in experiment
-        if params["dgp"] == dgp and params["algorithm"] == algorithm and not((experiment_dir / params["uuid"]).exists() and only_missing)
+        if params["dgp"] == dgp
+        and params["algorithm"] == algorithm
+        and not ((experiment_dir / params["uuid"]).exists() and only_missing)
     )
+
 
 @app.command(name="uuid")
 def run_uuid(experiment_dir: Path, uuid: UUID, verbose: bool = False) -> None:
@@ -98,6 +123,7 @@ def run_uuid(experiment_dir: Path, uuid: UUID, verbose: bool = False) -> None:
             run(experiment_dir, verbose=verbose, **params)
     if not found:
         raise ValueError(f"UUID {uuid} not found in {filepath}")
+
 
 @app.command(name="run")
 def run(
@@ -121,7 +147,9 @@ def run(
     """Run Newsvendor Misspecified Bayesian DRO"""
     if uuid:
         print("Running", uuid)
-    cost = np.zeros((num_replications, num_test_observations))  # init costs for each run
+    cost = np.zeros(
+        (num_replications, num_test_observations)
+    )  # init costs for each run
     solutions = np.zeros(num_replications)
     times = {
         "dgp_time": [],
@@ -130,7 +158,9 @@ def run(
         "solve_time": [],
         "setup_time": [],
     }
-    problem = get_kl_bdro_problem(newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples)
+    problem = get_kl_bdro_problem(
+        newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples
+    )
 
     # If the number of parameters is small enough, then use Disciplined Parametrized Programming (DPP)
     # to reduce the compilation time in each replication.
@@ -145,8 +175,12 @@ def run(
         generator = np.random.default_rng(seed=j)
         dgp_start = datetime.now()
         # NOTE if contamination is specified, then only contaminate the training samples (not test samples)
-        data = sample_dgp(dgp, num_observations, contamination=contamination, generator=generator)
-        data_eval = sample_dgp(dgp, num_test_observations, contamination=0.0, generator=generator)
+        data = sample_dgp(
+            dgp, num_observations, contamination=contamination, generator=generator
+        )
+        data_eval = sample_dgp(
+            dgp, num_test_observations, contamination=0.0, generator=generator
+        )
         times["dgp_time"].append((datetime.now() - dgp_start).total_seconds())
 
         # 2. sample from the posterior
@@ -158,11 +192,25 @@ def run(
             if algorithm == "normal_gamma_dro":
                 assert num_posterior_samples == 1
                 kl_bdro_constant = get_kl_bdro_constant(posterior, theta_posterior)
-                theta_sample = derive_analytical_posterior_params(posterior, theta_posterior)
+                theta_sample = derive_analytical_posterior_params(
+                    posterior, theta_posterior
+                )
             else:
-                theta_sample = sample_posterior(posterior, theta_posterior, num_posterior_samples, generator=generator)                    
+                theta_sample = sample_posterior(
+                    posterior,
+                    theta_posterior,
+                    num_posterior_samples,
+                    generator=generator,
+                )
         elif inference in ("wll", "mmd"):
-            sample_npl(data, inference, posterior, num_posterior_samples, lengthscale=lengthscale, generator=generator)
+            sample_npl(
+                data,
+                inference,
+                posterior,
+                num_posterior_samples,
+                lengthscale=lengthscale,
+                generator=generator,
+            )
         else:
             raise ValueError(f"Inference procedure '{inference}' is not supported.")
         assert kl_bdro_constant >= 0
@@ -172,7 +220,13 @@ def run(
 
         # 3. sample from the likelihood
         likelihood_start = datetime.now()
-        xi = sample_likelihood(likelihood, posterior, theta_sample, num_likelihood_samples, generator=generator)
+        xi = sample_likelihood(
+            likelihood,
+            posterior,
+            theta_sample,
+            num_likelihood_samples,
+            generator=generator,
+        )
         times["likelihood_time"].append(
             (datetime.now() - likelihood_start).total_seconds()
         )
@@ -195,7 +249,7 @@ def run(
         elif algorithm == "bdro_grid_search":
             solutions[j] = main_Bayesian_DRO(xi, epsilon)
             times["solve_time"].append((datetime.now() - solve_start).total_seconds())
-            times["setup_time"].append(0.0) # can't really measure this easily
+            times["setup_time"].append(0.0)  # can't really measure this easily
         # TODO put in other algorithms here, e.g. main_Bayesian_DRO_epsilon1!
         else:
             solutions[j] = 0
@@ -212,24 +266,28 @@ def run(
     var_of_means = np.var(mean_cost)
 
     print(f"Finished running {algorithm} with posterior {posterior} and DGP {dgp}.")
-    print(f"Out-of-sample mean: {mean_of_means}. Out-of-sample variances: {mean_of_variances + var_of_means}.")
+    print(
+        f"Out-of-sample mean: {mean_of_means}. Out-of-sample variances: {mean_of_variances + var_of_means}."
+    )
     print("Total DGP time:", sum(times["dgp_time"]))
     print("Total posterior time:", sum(times["posterior_time"]))
     print("Total likelihood time:", sum(times["likelihood_time"]))
     print("Total solve time:", sum(times["solve_time"]))
 
-    df = pd.DataFrame({
-        "uuid": [uuid] * num_replications,
-        "replication": np.arange(num_replications),
-        "mean_cost": mean_cost,
-        "var_cost": var_cost,
-        "solution": solutions,
-        "dgp_time": times["dgp_time"],
-        "likelihood_time": times["likelihood_time"],
-        "posterior_time": times["posterior_time"],
-        "solve_time": times["solve_time"],
-        "setup_time": times["setup_time"],
-    })
+    df = pd.DataFrame(
+        {
+            "uuid": [uuid] * num_replications,
+            "replication": np.arange(num_replications),
+            "mean_cost": mean_cost,
+            "var_cost": var_cost,
+            "solution": solutions,
+            "dgp_time": times["dgp_time"],
+            "likelihood_time": times["likelihood_time"],
+            "posterior_time": times["posterior_time"],
+            "solve_time": times["solve_time"],
+            "setup_time": times["setup_time"],
+        }
+    )
     csv_filepath = experiment_dir / f"{uuid}.csv"
     print(f"Writing CSV to {csv_filepath}")
     df.to_csv(csv_filepath, index=False)
