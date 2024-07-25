@@ -11,13 +11,8 @@ import pandas as pd
 from scipy.stats import expon
 import typer
 
-from bayesian_dro.Bayesian_DRO_continuous import (
-    main_Bayesian_DRO,
-    data_generation,
-    xi_generation,
-    theta_generation,
-)
-from .bayesian_conjugates import normal_gamma_posterior, normal_gamma_rvs
+from bayesian_dro.Bayesian_DRO_continuous import main_Bayesian_DRO
+from .bayes_conjugates import sample_posterior, default_prior_params, get_kl_bdro_constant, get_posterior_params, derive_analytical_posterior_params
 from .constants import (
     CONTAMINATION_LEVEL,
     NUM_LIKELIHOOD_SAMPLES,
@@ -26,12 +21,12 @@ from .constants import (
     NUM_REPLICATIONS,
     NUM_TEST_OBSERVATIONS,
 )
-from .dataset import data_generation_outliers, data_generation_gamma
+from .dataset import sample_dgp
 from .experiments import ExperimentName, get_experiment
-from .npl import Npl
-from .newsvendor import newsvendor_cost
-from .models import ExponentialModel
-from .optimise import get_kl_bdro_problem, get_normal_gamma_constant, newsvendor_cost_cvxpy
+from .likelihood import sample_likelihood
+from .newsvendor import newsvendor_cost_cvxpy
+from .npl import sample_npl
+from .optimise import get_kl_bdro_problem
 
 app = typer.Typer(name="misdro")
 
@@ -69,9 +64,10 @@ def generate_csv(experiment_dir: Path):
     with open(experiment_filepath, "r", encoding="utf-8") as json_file:
         experiment = json.load(json_file)
     df = pd.DataFrame(experiment).set_index("uuid")
-    result_df = pd.concat(Parallel(n_jobs=-1)(
-        delayed(pd.read_csv)(experiment_dir / f"{uuid}.csv", index_col=["uuid", "replication"]) for uuid in df.index if (experiment_dir / f"{uuid}.csv").exists()
-    ))
+    result_df = pd.concat([
+        pd.read_csv(experiment_dir / f"{uuid}.csv", index_col=["uuid", "replication"])
+        for uuid in df.index if (experiment_dir / f"{uuid}.csv").exists()
+    ])
     result_df = result_df.join(df, on="uuid")
     result_df.to_csv(experiment_dir / "results.csv", index=True)
 
@@ -110,6 +106,7 @@ def run(
     contamination: float = CONTAMINATION_LEVEL,
     dgp: str = "truncated_normal",
     epsilon: float = 1.0,
+    inference: str = "bayes",
     lengthscale: float = -1.0,
     likelihood: str = "exponential",
     num_likelihood_samples: int = NUM_LIKELIHOOD_SAMPLES,
@@ -118,14 +115,12 @@ def run(
     num_replications: int = NUM_REPLICATIONS,
     num_test_observations: int = NUM_TEST_OBSERVATIONS,
     posterior: str = "gamma",
-    prior: str = "gamma",
     uuid: str = str(uuid4()),
     verbose: bool = False,
 ):
     """Run Newsvendor Misspecified Bayesian DRO"""
     if uuid:
         print("Running", uuid)
-    p = 1  # numbers of unknown parameters
     cost = np.zeros((num_replications, num_test_observations))  # init costs for each run
     solutions = np.zeros(num_replications)
     times = {
@@ -146,92 +141,47 @@ def run(
         ignore_dpp = True
 
     for j in range(num_replications):
-        # generate dataset
-        dgp_start = datetime.now()
+        # 1. generate dataset
         generator = np.random.default_rng(seed=j)
-        if dgp == "truncated_normal":
-            data = data_generation(num_observations, random_state=generator)  # generate new observations
-            data_eval = data_generation(num_test_observations, random_state=generator)  # test data
-        elif dgp == "contaminated_exp":
-            # specify contamination level for train data
-            data = data_generation_outliers(num_observations, contamination, random_state=generator)
-            # but DO NOT specify any contamination for test data!
-            data_eval = data_generation_outliers(num_test_observations, 0.0, random_state=generator)
-        elif dgp == "exponential":
-            data = expon.rvs(scale=20.0, size=num_observations, random_state=generator)
-            data_eval = expon.rvs(scale=20.0, size=num_test_observations, random_state=generator)
-        elif dgp == "gamma":
-            data = data_generation_gamma(num_observations, a=10, random_state=generator)
-            data_eval = data_generation_gamma(num_test_observations, a=10, random_state=generator)
-        else:
-            raise ValueError(
-                f"The data-generating process specified is not supported: {dgp}"
-            )
+        dgp_start = datetime.now()
+        # NOTE if contamination is specified, then only contaminate the training samples (not test samples)
+        data = sample_dgp(dgp, num_observations, contamination=contamination, generator=generator)
+        data_eval = sample_dgp(dgp, num_test_observations, contamination=0.0, generator=generator)
         times["dgp_time"].append((datetime.now() - dgp_start).total_seconds())
 
-        # sample from the posterior
+        # 2. sample from the posterior
         posterior_start = datetime.now()
-        posterior_constant = 1.0
-        if posterior in ("wll", "mmd"):
-            # NPL posterior sample for theta
-            m = NUM_OBSERVATIONS
-            model = ExponentialModel(m)
-            npl_toy = Npl(
-                data.reshape((num_observations, 1)),
-                num_posterior_samples,
-                p,
-                m,
-                model,
-                l=lengthscale,
-                loss_fn=posterior,
-            )
-            npl_toy.draw_samples(random_state=generator)
-            theta_sample = npl_toy.sample
-        elif posterior == "gamma" and prior == "gamma":
-            # standard Bayesian posterior sample for theta
-            theta_sample = theta_generation(data, num_posterior_samples, random_state=generator)
-        elif posterior == "normal_gamma" and prior == "normal_gamma":
-            # We place a Normal-Gamma distribution on the mean and precision parameters.
-            # The likelihood distribution is a Gaussian distribution
-            # TODO pick suitible parameters for the prior
-            mu_prior, kappa_prior, alpha_prior, beta_prior  = 0.0, 1.0, 1.0, 1.0
-            mu_posterior, kappa_posterior, alpha_posterior, beta_posterior = normal_gamma_posterior(data, mu_prior, kappa_prior, alpha_prior, beta_prior)
-            theta_sample = np.zeros((num_posterior_samples, 2))
+        kl_bdro_constant = 1.0
+        if inference == "bayes":
+            theta_prior = default_prior_params(posterior)
+            theta_posterior = get_posterior_params(posterior, data, theta_prior)
             if algorithm == "normal_gamma_dro":
                 assert num_posterior_samples == 1
-                # we want an analytical form for the precision, which is alpha over beta
-                theta_sample[0] = np.array([mu_posterior, alpha_posterior / beta_posterior])
-                posterior_constant = get_normal_gamma_constant(alpha_posterior, kappa_posterior)
+                kl_bdro_constant = get_kl_bdro_constant(posterior, theta_posterior)
+                theta_sample = derive_analytical_posterior_params(posterior, theta_posterior)
             else:
-                theta_sample = normal_gamma_rvs(num_posterior_samples, mu_posterior, kappa_posterior, alpha_posterior, beta_posterior, generator=generator)
-
-        if posterior_constant < 0:
-            raise ValueError(f"posterior_constant must be non-negative. Value is: {posterior_constant}")
+                theta_sample = sample_posterior(posterior, theta_posterior, num_posterior_samples, generator=generator)                    
+        elif inference in ("wll", "mmd"):
+            sample_npl(data, inference, posterior, num_posterior_samples, lengthscale=lengthscale, generator=generator)
+        else:
+            raise ValueError(f"Inference procedure '{inference}' is not supported.")
+        assert kl_bdro_constant >= 0
         times["posterior_time"].append(
             (datetime.now() - posterior_start).total_seconds()
         )
 
-        # sample from the likelihood
+        # 3. sample from the likelihood
         likelihood_start = datetime.now()
-        xi = np.zeros([num_posterior_samples, num_likelihood_samples])  # init the xi's
-        if likelihood == "exponential":
-            for i in range(num_posterior_samples):
-                xi[i] = xi_generation(theta_sample[i], num_likelihood_samples, random_state=generator)
-        elif likelihood == "normal" and posterior == "normal_gamma":
-            for i in range(num_posterior_samples):
-                # NOTE numpy normal takes standard deviation as scale parameter - not variance or precision!
-                xi[i] = generator.normal(theta_sample[i,0], np.sqrt(1.0 / theta_sample[i,1]), size=num_likelihood_samples)
-        else:
-            raise NotImplementedError(f"Likelihood {likelihood} with posterior {posterior} not implemented.")
+        xi = sample_likelihood(likelihood, posterior, theta_sample, num_likelihood_samples, generator=generator)
         times["likelihood_time"].append(
             (datetime.now() - likelihood_start).total_seconds()
         )
 
-        # run the chosen DRO algorithm
+        # 4. run the chosen DRO algorithm
         solve_start = datetime.now()
         if algorithm in ["bayesian_dro", "normal_gamma_dro"]:
             # set parameters then solve
-            problem.param_dict["posterior_constant"].value = np.array([posterior_constant])
+            problem.param_dict["kl_bdro_constant"].value = np.array([kl_bdro_constant])
             problem.param_dict["xi"].value = xi
             problem.param_dict["epsilon"].value = np.array([epsilon])
             problem.solve(solver=cp.MOSEK, verbose=verbose, ignore_dpp=ignore_dpp)
@@ -252,7 +202,7 @@ def run(
             raise ValueError("Please choose a valid algorithm")
 
         # evaluate the cost
-        cost[j] = newsvendor_cost(solutions[j], data_eval)
+        cost[j] = newsvendor_cost_cvxpy(solutions[j], data_eval).value
 
     # Calculate out-of-sample mean and variance
     mean_cost = np.mean(cost, axis=1)

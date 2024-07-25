@@ -1,34 +1,10 @@
 """Optimisation code"""
 
-from typing import List, Iterable, Tuple, Union, Callable
+from typing import Callable
 import cvxpy as cp
-import numpy as np
-import scipy as sp
 
 from bayesian_dro.Bayesian_DRO_continuous import LARGEST_X, SMALLEST_X
-from .newsvendor import BACKORDER_COST, HOLDING_COST
 
-def newsvendor_cost_cvxpy(x, xi):
-    """Evaluate Newsvendor cost function with cvxpy
-
-    Args:
-        x: Demand decision variable
-        xi: Realised random demand
-    """
-    return HOLDING_COST * cp.maximum(0, x - xi) + BACKORDER_COST * cp.maximum(0, xi - x)
-
-def get_epsilon_list(epsilon: Union[float, Iterable[float]]) -> list[float]:
-    try:
-        iterator = iter(epsilon)
-        return list(iterator)
-    except TypeError:
-        if isinstance(epsilon, float):
-            return [epsilon]
-        raise TypeError(f"Parameter epsilon should be float or Iterable[float]. Got {type(epsilon)}")
-
-def get_normal_gamma_constant(alpha: int, kappa: float) -> float:
-    """Get the constant for normal-gamma DRO"""
-    return 0.5 * (1/ kappa + np.log(alpha) - sp.special.digamma(alpha))
 
 
 def get_kl_bdro_problem(
@@ -64,7 +40,7 @@ def get_kl_bdro_problem(
 
     # declare parameters
     epsilon = cp.Parameter(1, name="epsilon", nonneg=True)
-    posterior_constant = cp.Parameter(1, name="posterior_constant", nonneg=True)
+    kl_bdro_constant = cp.Parameter(1, name="kl_bdro_constant", nonneg=True)
     xi = cp.Parameter((num_posterior_samples, num_likelihood_samples), name="xi")
 
     # create the objective function for the Bayesian DRO problem
@@ -73,8 +49,8 @@ def get_kl_bdro_problem(
     bdro_obj = cp.Minimize(
         (1.0/num_posterior_samples) * cp.sum([
             lam[i] * epsilon
-            + lam[i] * cp.log(1.0 / num_likelihood_samples) @ posterior_constant
-            + posterior_constant * cp.perspective(cp.log_sum_exp(t[i]), lam[i], f_recession=cp.max(t[i]))
+            + lam[i] * cp.log(1.0 / num_likelihood_samples) @ kl_bdro_constant
+            + kl_bdro_constant * cp.perspective(cp.log_sum_exp(t[i]), lam[i], f_recession=cp.max(t[i]))
             for i in range(num_posterior_samples)
         ])
     )

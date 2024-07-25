@@ -4,19 +4,46 @@ import numpy as np
 from joblib import Parallel, delayed
 from scipy.stats import dirichlet
 import scipy.spatial.distance as distance
-import math
-import copy
-from numpy.random import choice
-from sklearn.utils import shuffle
 import itertools
-from tqdm import tqdm
-import ot
 import jax
 from jax import numpy as jnp
 from jax import vmap, value_and_grad, jit, config
 from jax.example_libraries import optimizers
-from .gaussian_kernel import k, k_jax, k_comp
+from .gaussian_kernel import k, k_jax
+from .models import ExponentialModel
 
+def sample_npl(data: np.ndarray, inference: str, posterior: str, num_posterior_samples: int, lengthscale: float = -1.0, generator: Optional[np.random.Generator] = None, p: int = 1) -> np.ndarray:
+    """Wrapper function for sampling from the NPL posterior with either WLL or MMD loss function
+    
+    Args:
+        data: Observations sampled from DGP
+        inference: Either 'wll' or 'mmd'
+        posterior: Form of posterior, e.g. 'exponential'
+        num_posterior_samples: Number of times to sample from posterior
+        generator: numpy random generator
+        p: numbers of unknown parameters
+
+    Returns:
+        Array of size `num_posterior_samples`
+    """
+    # NPL posterior sample for theta
+    m = data.shape[0]
+    if posterior == "exponential":
+        model = ExponentialModel(m)
+    else:
+        raise NotImplementedError(f"Posterior '{posterior}' is not implemented for '{inference}' inference.")
+    npl_toy = Npl(
+        data.reshape((data.shape[0], 1)),
+        num_posterior_samples,
+        p,
+        m,
+        model,
+        l=lengthscale,
+        loss_fn=posterior,
+    )
+    npl_toy.draw_samples(random_state=generator)
+    theta_sample = npl_toy.sample
+    return theta_sample
 
 class Npl:
     """This class contains functions to perform NPL inference (for alpha = 0 in the DP prior) for the Exponential distribution model."""
