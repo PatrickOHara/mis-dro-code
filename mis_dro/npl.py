@@ -61,7 +61,7 @@ def sample_npl(
 class Npl:
     """This class contains functions to perform NPL inference (for alpha = 0 in the DP prior) for the Exponential distribution model."""
 
-    def __init__(self, X, B, p, m, model, l=-1, loss_fn="wll"):
+    def __init__(self, X, B, p, m, model, l=-1, loss_fn="npl_wlb"):
         """
         Args:
             X: Data set
@@ -100,7 +100,7 @@ class Npl:
         weights = dirichlet.rvs(np.ones(self.n), size=self.B, random_state=random_state)
         samples = np.zeros((self.B, self.p))
 
-        if self.loss_fn == "wll":
+        if self.loss_fn == "npl_wlb":
             # FIXME n_jobs > 1
             temp = Parallel(
                 n_jobs=n_jobs,
@@ -112,7 +112,7 @@ class Npl:
             for i in range(self.B):
                 samples[i, :] = temp[i]
                 self.sample = np.array(samples)
-        elif self.loss_fn == "mmd":
+        elif self.loss_fn == "npl_mmd":
             key = jax.random.PRNGKey(113)
             key, *subkeys = jax.random.split(
                 key, num=self.B + 1

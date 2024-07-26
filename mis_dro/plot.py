@@ -9,8 +9,8 @@ class AlgorithmLineStyle(StrEnum):
     """Consistent algorithm line styles"""
 
     bdro_grid_search = "solid"
-    bayesian_dro = "dashed"
-    normal_gamma_dro = "dotted"
+    kl_bdro = "dashed"
+    our_kl_bdro = "dotted"
 
 
 class AlgorithmMarkerStyle(StrEnum):
@@ -18,62 +18,60 @@ class AlgorithmMarkerStyle(StrEnum):
 
     bdro_grid_search = "o"
     bayesian_dro = "x"
-    normal_gamma_dro = "*"
+    our_kl_bdro = "*"
 
 
 class AlgorithmName(StrEnum):
     """Consistent algorithm line styles"""
 
     bdro_grid_search = "BDRO grid search"
-    bayesian_dro = "BDRO optimised"
-    normal_gamma_dro = "BDRO normal-gamma"
+    kl_bdro = "BDRO optimised"
+    our_kl_bdro = "Our BDRO"
 
 
-class PosteriorLineStyle(StrEnum):
+class InferenceLineStyle(StrEnum):
     """Consistent line styles"""
 
     bayes = "solid"
-    gamma = "solid"
-    normal_gamma = "dashdot"
-    wll = "dashed"
-    mmd = "dotted"
+    npl_wlb = "dashed"
+    npl_mmd = "dotted"
 
 
-class PosteriorMarker(StrEnum):
+class InferenceMarker(StrEnum):
     """Consistent marker styles"""
 
     bayes = "o"
-    gamma = "o"
-    normal_gamma = "^"
-    wll = "x"
-    mmd = "v"
+    npl_wlb = "x"
+    npl_mmd = "v"
 
 
-class PosteriorName(StrEnum):
+class PosteriorPrettyName(StrEnum):
     """Nice looking names for posteriors"""
 
+    gamma = "gamma"
+    normal_gamma = "normal-gamma"
+
+
+class InferencePrettyName(StrEnum):
+    """Nice looking names for inference"""
+
     bayes = "Bayes"
-    gamma = "Bayes: Gamma"
-    normal_gamma = "Bayes: Normal-gamma"
-    wll = "WLL-NPL"
-    mmd = "MMD-NPL"
+    npl_wlb = "NPL-WLB"
+    npl_mmd = "NPL-MMD"
 
-
-class PosteriorColor(StrEnum):
+class InferenceColor(StrEnum):
     bayes = "blue"
-    gamma = "blue"
-    normal_gamma = "blue"
-    wll = "orange"
-    mmd = "green"
+    npl_wlb = "orange"
+    npl_mmd = "green"
 
 
-def posterior_style(posterior: str) -> dict[str, str]:
-    """Get matplotlib style for a posterior"""
+def inference_style(inference: str) -> dict[str, str]:
+    """Get matplotlib style for an inference"""
     return {
-        "marker": PosteriorMarker[posterior].value,
-        "linestyle": PosteriorLineStyle[posterior].value,
-        "label": PosteriorName[posterior].value,
-        "color": PosteriorColor[posterior].value,
+        "marker": InferenceMarker[inference].value,
+        "linestyle": InferenceLineStyle[inference].value,
+        "label": InferencePrettyName[inference].value,
+        "color": InferenceColor[inference].value,
     }
 
 
@@ -123,10 +121,11 @@ def flexible_figure(
         figsize=(ncols * 5, nrows * 5),
     )
     for i, (group, group_df) in enumerate(gb):
-        algorithm_dgp_posterior_set = set(
+        index_set = set(
             zip(
                 group_df.index.get_level_values("algorithm"),
                 group_df.index.get_level_values("dgp"),
+                group_df.index.get_level_values("inference"),
                 group_df.index.get_level_values("posterior"),
             )
         )
@@ -142,27 +141,22 @@ def flexible_figure(
             axis = axes[row][col]
 
         # add a new plot on the same axis for each parameter setting
-        for algorithm, dgp, posterior in algorithm_dgp_posterior_set:
-            df = group_df.loc[algorithm, dgp, :max_epsilon, posterior]
+        for algorithm, dgp, inference, posterior in index_set:
+            df = group_df.loc[algorithm, dgp, :max_epsilon, inference, posterior]
 
             # decide how to style the lines
             if gb_col == "posterior":
                 assert len(df.index.get_level_values("dgp").unique()) == 1
                 style = algorithm_style(algorithm)
-            elif gb_col == "algorithm":
-                assert len(df.index.get_level_values("dgp").unique()) == 1
-                style = posterior_style(posterior)
             elif gb_col == "dgp":
                 assert len(df.index.get_level_values("algorithm").unique()) == 1
-                style = posterior_style(posterior)
-            elif len(gb_col) > 1:
-                raise NotImplementedError(
-                    "Cannot yet handle more than 1 groupby column"
-                )
+                style = inference_style(inference)
+            else:
+                raise NotImplementedError()
 
             # plot
             if plot_type == "mean_variance":
-                mean_variance_plot(axis, df, posterior, **style)
+                mean_variance_plot(axis, df, **style)
             elif plot_type in ("solve_time", "setup_time", "posterior_time"):
                 time_taken_plot(axis, df, plot_type, **style)
         # set title and label epsilon
@@ -189,7 +183,6 @@ def time_taken_plot(
 def mean_variance_plot(
     axis: mpl.axis.Axis,
     df: pd.DataFrame,
-    posterior: str,
     **kwargs,
 ) -> None:
     posterior_var = df["var_cost"]["mean"] + df["mean_cost"]["var"]
@@ -200,19 +193,11 @@ def mean_variance_plot(
     axis.set_ylabel("out-of-sample mean")
     epsilon_list = list(df.index.get_level_values("epsilon"))
     for i, epsilon in enumerate(epsilon_list):
-        if posterior in ("bayes", "gamma", "normal_gamma") and i % 4 == 0:
+        if i % 4 == 0:
             axis.text(
                 posterior_var[:, :, epsilon, :].iloc[0],
                 df["mean_cost"]["mean"][:, :, epsilon, :].iloc[0],
                 epsilon,
                 ha="left",
-                va="bottom",
-            )
-        if posterior == "mmd" and (i + 2) % 4 == 0:
-            axis.text(
-                posterior_var[:, :, epsilon, :].iloc[0],
-                df["mean_cost"]["mean"][:, :, epsilon, :].iloc[0],
-                epsilon,
-                ha="right",
                 va="bottom",
             )

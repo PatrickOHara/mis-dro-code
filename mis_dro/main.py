@@ -131,7 +131,7 @@ def run_uuid(experiment_dir: Path, uuid: UUID, verbose: bool = False) -> None:
 @app.command(name="run")
 def run(
     experiment_dir: Path,
-    algorithm: str = "bayesian_dro",
+    algorithm: str = "kl_bdro",
     contamination: float = CONTAMINATION_LEVEL,
     dgp: str = "truncated_normal",
     epsilon: float = 1.0,
@@ -161,17 +161,21 @@ def run(
         "solve_time": [],
         "setup_time": [],
     }
-    problem = get_kl_bdro_problem(
-        newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples
-    )
+    if algorithm in ("kl_bdro", "our_kl_bdro"):
+        problem = get_kl_bdro_problem(
+            newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples
+        )
+    elif algorithm == "kdro":
+        raise NotImplementedError("Harita's future code goes here :)")
 
     # If the number of parameters is small enough, then use Disciplined Parametrized Programming (DPP)
     # to reduce the compilation time in each replication.
     # However, a large number of parameters uses an enormous amout of RAM in the current cvxpy implementation.
-    ignore_dpp = False
-    n_parameters = np.sum(np.prod(param.shape) for param in problem.parameters())
-    if n_parameters >= cp.settings.PARAM_THRESHOLD:
-        ignore_dpp = True
+    if algorithm in ("kl_bdro", "our_kl_bdro", "kdro"):
+        ignore_dpp = False
+        n_parameters = np.sum(np.prod(param.shape) for param in problem.parameters())
+        if n_parameters >= cp.settings.PARAM_THRESHOLD:
+            ignore_dpp = True
 
     for j in range(num_replications):
         # 1. generate dataset
@@ -192,7 +196,7 @@ def run(
         if inference == "bayes":
             theta_prior = default_prior_params(posterior)
             theta_posterior = get_posterior_params(posterior, data, theta_prior)
-            if algorithm == "normal_gamma_dro":
+            if algorithm == "our_kl_bdro":
                 assert num_posterior_samples == 1
                 kl_bdro_constant = get_kl_bdro_constant(posterior, theta_posterior)
                 theta_sample = derive_analytical_posterior_params(
@@ -205,7 +209,7 @@ def run(
                     num_posterior_samples,
                     generator=generator,
                 )
-        elif inference in ("wll", "mmd"):
+        elif inference in ("npl_wlb", "npl_mmd"):
             theta_sample = sample_npl(
                 data,
                 inference,
@@ -236,15 +240,17 @@ def run(
 
         # 4. run the chosen DRO algorithm
         solve_start = datetime.now()
-        if algorithm in ["bayesian_dro", "normal_gamma_dro"]:
+        if algorithm in ("kl_bdro", "our_kl_bdro"):
             # set parameters then solve
             problem.param_dict["kl_bdro_constant"].value = np.array([kl_bdro_constant])
             problem.param_dict["xi"].value = xi
             problem.param_dict["epsilon"].value = np.array([epsilon])
             problem.solve(solver=cp.MOSEK, verbose=verbose, ignore_dpp=ignore_dpp)
-            solutions[j] = problem.var_dict["x"].value[0]
+            solutions[j] = problem.var_dict["x"].value
             times["solve_time"].append(problem.solver_stats.solve_time)
             times["setup_time"].append(problem.solver_stats.setup_time)
+        elif algorithm == "kdro":
+            raise NotImplementedError("Harita's future code goes here :)")
         elif algorithm == "bdro_grid_search":
             solutions[j] = main_Bayesian_DRO(xi, epsilon)
             times["solve_time"].append((datetime.now() - solve_start).total_seconds())

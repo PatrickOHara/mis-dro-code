@@ -45,10 +45,10 @@ def newsvendor_1d() -> List[Dict]:
     # iterate over each of the parameters
     experiment = []
     for algorithm, dgp, epsilon, inference in itertools.product(
-        ["bayesian_dro"],
+        ["kl_bdro"],
         ["exponential", "truncated_normal", "contaminated_exp", "gamma"],
         EPSILON_SET,
-        ["bayes", "wll", "mmd"],
+        ["bayes", "npl_wlb", "npl_mmd"],
     ):
         contamination = 0.0
         if dgp == "contaminated_exp":
@@ -77,15 +77,15 @@ def compare_solve() -> List[Dict]:
     """Compares the original grid-search algorithm and cvxpy algorithms"""
     experiment = []
     for algorithm, dgp, epsilon, (posterior, likelihood) in itertools.product(
-        ["bayesian_dro", "bdro_grid_search", "normal_gamma_dro"],
+        ["kl_bdro", "bdro_grid_search", "our_kl_bdro"],
         ["truncated_normal"],
         [0.001, 0.01, 0.1, 1.0, 10.0, 100.0],
         [("gamma", "exponential"), ("normal_gamma", "normal")],
     ):
         num_posterior_samples = NUM_POSTERIOR_SAMPLES
-        if algorithm == "normal_gamma_dro" and posterior != "normal_gamma":
+        if algorithm == "our_kl_bdro" and posterior != "normal_gamma":
             continue  # skip if the posterior doesn't match our algorithm
-        elif algorithm == "normal_gamma_dro":
+        elif algorithm == "our_kl_bdro":
             # we calculate the posterior exactly in closed form!
             num_posterior_samples = 1
         params = {
