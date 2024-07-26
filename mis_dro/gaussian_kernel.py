@@ -2,7 +2,7 @@
 
 import numpy as np
 from jax import numpy as jnp
-from jax import vmap
+from jax import vmap, lax
 import scipy.spatial.distance as distance
 from scipy import stats
 
@@ -30,6 +30,18 @@ def k_jax(x,y,l):
 
     return K
 
+def k_jax_sym(x, y, l):
+    #TODO with vmap insteaf of for loop
+    n = x.shape[0]
+    K = jnp.zeros((n, n))
+    
+    for i in range(n):
+        for j in range(i, n):
+            K = K.at[i, j].set(rbf_kernel(x, y, l))
+            K = K.at[j, i].set(K[i, j])
+    
+    return K
+
 def k_comp(x,y):
     """Composition of Gaussian kernels with different lengthscale parameters"""
 
@@ -41,3 +53,18 @@ def k_comp(x,y):
       k_gaus += k_jax(x,y,l)
 
     return k_gaus
+
+def mat_decomp_jax(K):
+    """Function for matrix decomposition"""
+    rank = jnp.linalg.matrix_rank(K)
+    # Check if the matrix is singular
+    is_singular = rank < min(K.shape)
+    if is_singular:
+        # print('warning, Gram matrix K is singular')
+        d, v = jnp.linalg.eigh(K) #L == U*diag(d)*U'. the scipy function forces real eigs
+        d = jnp.where(d < 0, 0, d) # get rid of small eigs
+        L = v @ jnp.diag(jnp.sqrt(d))
+    else:
+        L = lax.linalg.cholesky(K)
+    print(L)
+    return L
