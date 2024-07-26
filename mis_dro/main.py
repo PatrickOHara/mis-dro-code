@@ -93,14 +93,18 @@ def generate_csv(experiment_dir: Path):
 
 @app.command(name="experiment")
 def run_experiment(
-    experiment_dir: Path, dgp: str, algorithm: str, only_missing: bool = False
+    experiment_dir: Path,
+    dgp: str,
+    algorithm: str,
+    only_missing: bool = False,
+    njobs: int = -1,
 ):
     """When using SLURM, this function is called to run an experiment"""
     filepath = experiment_dir / "experiment.json"
     with open(filepath, "r", encoding="utf-8") as json_file:
         experiment = json.load(json_file)
     # NOTE if only-missing flag, then only run if the results CSV file doesn't exist
-    Parallel(n_jobs=-1)(
+    Parallel(n_jobs=njobs)(
         delayed(run)(experiment_dir, **params)
         for params in experiment
         if params["dgp"] == dgp
@@ -202,7 +206,7 @@ def run(
                     generator=generator,
                 )
         elif inference in ("wll", "mmd"):
-            sample_npl(
+            theta_sample = sample_npl(
                 data,
                 inference,
                 posterior,
@@ -239,10 +243,6 @@ def run(
             problem.param_dict["epsilon"].value = np.array([epsilon])
             problem.solve(solver=cp.MOSEK, verbose=verbose, ignore_dpp=ignore_dpp)
             solutions[j] = problem.var_dict["x"].value[0]
-
-            # get lambda value list if you need it
-            # [problem.var_dict[f"lam_{i}"].value for i in range(num_posterior_samples)]
-
             times["solve_time"].append(problem.solver_stats.solve_time)
             times["setup_time"].append(problem.solver_stats.setup_time)
         elif algorithm == "bdro_grid_search":
