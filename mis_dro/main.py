@@ -63,8 +63,12 @@ def setup(
     ) as slurm_file:
         slurm_string = slurm_file.read()
     for dgp, algorithm in dgp_algorithm_pairs:
+        if algorithm in ("kl_bdro"):
+            njobs = 1
+        else:
+            njobs = -1
         dgp_string = slurm_string.format(
-            experiment_dir=experiment_dir, dgp=dgp, algorithm=algorithm
+            experiment_dir=experiment_dir, dgp=dgp, algorithm=algorithm, njobs=njobs,
         )
         (experiment_dir / f"{experiment_name}_{dgp}_{algorithm}.slurm").write_text(
             dgp_string
