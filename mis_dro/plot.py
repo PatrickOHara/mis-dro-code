@@ -1,0 +1,218 @@
+from enum import StrEnum
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+
+class AlgorithmLineStyle(StrEnum):
+    """Consistent algorithm line styles"""
+
+    bdro_grid_search = "solid"
+    bayesian_dro = "dashed"
+    normal_gamma_dro = "dotted"
+
+
+class AlgorithmMarkerStyle(StrEnum):
+    """Consistent algorithm marker styles"""
+
+    bdro_grid_search = "o"
+    bayesian_dro = "x"
+    normal_gamma_dro = "*"
+
+
+class AlgorithmName(StrEnum):
+    """Consistent algorithm line styles"""
+
+    bdro_grid_search = "BDRO grid search"
+    bayesian_dro = "BDRO optimised"
+    normal_gamma_dro = "BDRO normal-gamma"
+
+
+class PosteriorLineStyle(StrEnum):
+    """Consistent line styles"""
+
+    bayes = "solid"
+    gamma = "solid"
+    normal_gamma = "dashdot"
+    wll = "dashed"
+    mmd = "dotted"
+
+
+class PosteriorMarker(StrEnum):
+    """Consistent marker styles"""
+
+    bayes = "o"
+    gamma = "o"
+    normal_gamma = "^"
+    wll = "x"
+    mmd = "v"
+
+
+class PosteriorName(StrEnum):
+    """Nice looking names for posteriors"""
+
+    bayes = "Bayes"
+    gamma = "Bayes: Gamma"
+    normal_gamma = "Bayes: Normal-gamma"
+    wll = "WLL-NPL"
+    mmd = "MMD-NPL"
+
+
+class PosteriorColor(StrEnum):
+    bayes = "blue"
+    gamma = "blue"
+    normal_gamma = "blue"
+    wll = "orange"
+    mmd = "green"
+
+
+def posterior_style(posterior: str) -> dict[str, str]:
+    """Get matplotlib style for a posterior"""
+    return {
+        "marker": PosteriorMarker[posterior].value,
+        "linestyle": PosteriorLineStyle[posterior].value,
+        "label": PosteriorName[posterior].value,
+        "color": PosteriorColor[posterior].value,
+    }
+
+
+def algorithm_style(algorithm: str) -> dict[str, str]:
+    """Get matplotlib style for an algorithm"""
+    return {
+        "marker": AlgorithmMarkerStyle[algorithm],
+        "linestyle": AlgorithmLineStyle[algorithm],
+        "label": AlgorithmName[algorithm],
+        "color": "black",
+    }
+
+
+def flexible_figure(
+    agg_df: pd.DataFrame,
+    plot_type: str,
+    gb_col: str = "dgp",
+    max_epsilon: float = np.inf,
+    ncols: int = 2,
+    sharex: bool = False,
+    sharey: bool = False,
+):
+    """A flexible plotting function
+
+    Examples:
+        Plot the mean-variance tradeoff for each value of epsilon:
+        ```
+        fig, axes = mean_variance_figure(agg_df, "mean_variance")
+
+        fig.show()
+        ```
+
+        Plot the solve time of algorithms for each value of epsilon:
+        ```
+        fig, axes = mean_variance_figure(agg_df, "solve_time", gb_col="posterior")
+
+        fig.show()
+        ```
+    """
+    gb = agg_df.groupby(gb_col)
+    nrows = int(np.ceil(len(gb) / float(ncols)))
+    fig, axes = plt.subplots(
+        nrows=nrows,
+        ncols=ncols,
+        sharex=sharex,
+        sharey=sharey,
+        figsize=(ncols * 5, nrows * 5),
+    )
+    for i, (group, group_df) in enumerate(gb):
+        algorithm_dgp_posterior_set = set(
+            zip(
+                group_df.index.get_level_values("algorithm"),
+                group_df.index.get_level_values("dgp"),
+                group_df.index.get_level_values("posterior"),
+            )
+        )
+
+        # get the column and row indicies to get the axis
+        col = i % ncols
+        if nrows == 1 and ncols == 1:
+            axis = axes
+        elif nrows == 1:
+            axis = axes[col]
+        else:
+            row = int(np.floor(i / 2.0))
+            axis = axes[row][col]
+
+        # add a new plot on the same axis for each parameter setting
+        for algorithm, dgp, posterior in algorithm_dgp_posterior_set:
+            df = group_df.loc[algorithm, dgp, :max_epsilon, posterior]
+
+            # decide how to style the lines
+            if gb_col == "posterior":
+                assert len(df.index.get_level_values("dgp").unique()) == 1
+                style = algorithm_style(algorithm)
+            elif gb_col == "algorithm":
+                assert len(df.index.get_level_values("dgp").unique()) == 1
+                style = posterior_style(posterior)
+            elif gb_col == "dgp":
+                assert len(df.index.get_level_values("algorithm").unique()) == 1
+                style = posterior_style(posterior)
+            elif len(gb_col) > 1:
+                raise NotImplementedError(
+                    "Cannot yet handle more than 1 groupby column"
+                )
+
+            # plot
+            if plot_type == "mean_variance":
+                mean_variance_plot(axis, df, posterior, **style)
+            elif plot_type in ("solve_time", "setup_time", "posterior_time"):
+                time_taken_plot(axis, df, plot_type, **style)
+        # set title and label epsilon
+        axis.set_title(f"{plot_type}: {group}")
+        axis.legend()
+    axis.legend()
+    return fig, axes
+
+
+def time_taken_plot(
+    axis: mpl.axis.Axis,
+    df: pd.DataFrame,
+    time_name: str,
+    **kwargs,
+) -> None:
+    # get a dataframe for each posterior
+    axis.plot(df.index.get_level_values("epsilon"), df[time_name]["mean"], **kwargs)
+    axis.set_xlabel("$\epsilon$")
+    axis.set_ylabel(f"{time_name} (s)")
+    axis.set_xscale("log")
+    axis.set_yscale("log")
+
+
+def mean_variance_plot(
+    axis: mpl.axis.Axis,
+    df: pd.DataFrame,
+    posterior: str,
+    **kwargs,
+) -> None:
+    posterior_var = df["var_cost"]["mean"] + df["mean_cost"]["var"]
+
+    # plot mean-variance trade-off
+    axis.plot(posterior_var, df["mean_cost"]["mean"], **kwargs)
+    axis.set_xlabel("out-of-sample variance")
+    axis.set_ylabel("out-of-sample mean")
+    epsilon_list = list(df.index.get_level_values("epsilon"))
+    for i, epsilon in enumerate(epsilon_list):
+        if posterior in ("bayes", "gamma", "normal_gamma") and i % 4 == 0:
+            axis.text(
+                posterior_var[:, :, epsilon, :].iloc[0],
+                df["mean_cost"]["mean"][:, :, epsilon, :].iloc[0],
+                epsilon,
+                ha="left",
+                va="bottom",
+            )
+        if posterior == "mmd" and (i + 2) % 4 == 0:
+            axis.text(
+                posterior_var[:, :, epsilon, :].iloc[0],
+                df["mean_cost"]["mean"][:, :, epsilon, :].iloc[0],
+                epsilon,
+                ha="right",
+                va="bottom",
+            )

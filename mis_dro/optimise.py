@@ -1,60 +1,70 @@
 """Optimisation code"""
 
-from typing import List, Tuple
+from typing import Callable
 import cvxpy as cp
-import numpy as np
 
 from bayesian_dro.Bayesian_DRO_continuous import LARGEST_X, SMALLEST_X
-from .newsvendor import BACKORDER_COST, HOLDING_COST
 
-def newsvendor_cost_cvxpy(x, xi):
-    """Evaluate Newsvendor cost function with cvxpy
 
-    Args:
-        x: Demand decision variable
-        xi: Realised random demand
-    """
-    return HOLDING_COST * cp.maximum(0, x - xi) + BACKORDER_COST * cp.maximum(0, xi - x)
-
-def solve_bdro(xi, epsilon: float) -> Tuple[float, List[float]]:
+def get_kl_bdro_problem(
+    decision_objective: Callable[[cp.Variable, cp.Parameter], cp.Expression],
+    num_posterior_samples: int,
+    num_likelihood_samples: int,
+) -> cp.Problem:
     """Bayesian DRO as a cvxpy optimisaton problem.
-    
-    We use an epigraph variable t to upper bound the function G(x, xi).
-    That is, we add constraints G(x, xi[i]) <= t[i] for all i = 1,...,num_theta.
-    
-    The main optimisation trick is then to use the perspective of the log-sum-exp function.
 
     Args:
-        xi: Data sampled from the likelihood
-        epsilon: Size of the KL-ball
+        decision_objective: A callable objective function implemented using cvxpy.
+            The first argument should be a cvxpy variable.
+            The second argument should be a cvxpy parameter representing the data samples.
+            The return should be a cvxpy expression.
+        num_posterior_samples: Number of posterior samples.
+        num_likelihood_samples: Number of likelihood samples for each posterior sample.
 
     Returns:
-        x: The decision variable
-        lam: List of lagrangian variables for each posterior sample
+        problem: A cvxpy Problem object
 
     Notes:
-        Requires the MOSEK solver to be installed
+        We use an epigraph variable t to upper bound the objective function G(x, xi).
+        That is, we add constraints G(x, xi[i]) <= t[i] for all i = 1,...,num_posterior_samples.
+
+        The main optimisation trick is then to use the perspective of the log-sum-exp (LSE) function.
+        Specifically, the perspective is l * LSE(t[i] / l), where l is the Lagrangian variable.
+        As l -> 0, then l * LSE(t[i] / l) tends to max(t[i]).
     """
-    num_theta_samples = xi.shape[0]
-    num_xi_samples = xi.shape[1]
-
+    # declare variables
     x = cp.Variable(1, name="x")
-    lam = [cp.Variable(1, name=f"lam_{i}", nonneg=True) for i in range(num_theta_samples)]
-    t = cp.Variable(xi.shape, name="t")
+    lam = [
+        cp.Variable(1, name=f"lam_{i}", nonneg=True)
+        for i in range(num_posterior_samples)
+    ]
+    t = cp.Variable((num_posterior_samples, num_likelihood_samples), name="t")
 
-    objective = cp.Minimize(
-        (1.0/num_theta_samples) * cp.sum([
-            lam[i] * epsilon
-            + lam[i] * cp.log(1.0 / num_xi_samples)
-            + cp.perspective(cp.log_sum_exp(t[i]), lam[i])
-            for i in range(num_theta_samples)
-        ])
+    # declare parameters
+    epsilon = cp.Parameter(1, name="epsilon", nonneg=True)
+    kl_bdro_constant = cp.Parameter(1, name="kl_bdro_constant", nonneg=True)
+    xi = cp.Parameter((num_posterior_samples, num_likelihood_samples), name="xi")
+
+    # create the objective function for the Bayesian DRO problem
+    # NOTE we pass the max function to f_recession because,
+    # as lam -> 0, then lam * LSE(t[i] / lam) tends to max(t[i]).
+    bdro_obj = cp.Minimize(
+        (1.0 / num_posterior_samples)
+        * cp.sum(
+            [
+                lam[i] * epsilon
+                + lam[i] * cp.log(1.0 / num_likelihood_samples) @ kl_bdro_constant
+                + kl_bdro_constant
+                * cp.perspective(cp.log_sum_exp(t[i]), lam[i], f_recession=cp.max(t[i]))
+                for i in range(num_posterior_samples)
+            ]
+        )
     )
+    # add the decision objective as an epigraph constraint
+    # examples of decision objectives are the newsvendor objective
     constraints = [
         x >= SMALLEST_X,
         x <= LARGEST_X,
-    ] + [newsvendor_cost_cvxpy(x, xi[i]) <= t[i] for i in range(num_theta_samples)]
+    ] + [decision_objective(x, xi[i]) <= t[i] for i in range(num_posterior_samples)]
 
-    problem = cp.Problem(objective, constraints)
-    problem.solve(solver="MOSEK")
-    return x.value[0], np.array([lam[i].value for i in range(num_theta_samples)])
+    return cp.Problem(bdro_obj, constraints)
