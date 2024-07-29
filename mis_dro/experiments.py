@@ -41,7 +41,7 @@ def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
 
 
 def newsvendor_1d() -> List[Dict]:
-    """Vary epsilon and compare Bayesian DRO with Bayes/NPL posterior"""
+    """Vary epsilon and compare Bayesian DRO with Bayes/NPL inference"""
     # iterate over each of the parameters
     experiment = []
     for algorithm, dgp, epsilon, inference in itertools.product(
