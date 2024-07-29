@@ -17,7 +17,7 @@ class AlgorithmMarkerStyle(StrEnum):
     """Consistent algorithm marker styles"""
 
     bdro_grid_search = "o"
-    bayesian_dro = "x"
+    kl_bdro = "x"
     our_kl_bdro = "*"
 
 
