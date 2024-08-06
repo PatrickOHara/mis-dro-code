@@ -66,5 +66,5 @@ def mat_decomp_jax(K):
         L = v @ jnp.diag(jnp.sqrt(d))
     else:
         L = lax.linalg.cholesky(K)
-    print(L)
+
     return L
