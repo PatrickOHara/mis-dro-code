@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 from scipy.stats import expon
 import cvxpy as cp
+from joblib import Parallel, delayed
+
 
 from bayesian_dro.Bayesian_DRO_continuous import (
     main_Bayesian_DRO,
@@ -37,7 +39,7 @@ class KdroJointEpsBall_Cvxpy():
     '''
     Robustify the joint distribution. 
     '''
-    def __init__(self, dim_theta, loss_call, K, Xobs, Xcert):
+    def __init__(self, dim_theta, loss_call):
         '''
         #####
         Adjusted from https://github.com/jj-zhu/kdro/blob/main/kdro/kdro.py
@@ -65,28 +67,24 @@ class KdroJointEpsBall_Cvxpy():
 
         self.dim_theta = dim_theta
         self.loss_call = loss_call
-        self.Xobs = Xobs
-        self.Xcert = Xcert
-        self.K = K
+        # self.Xobs = Xobs
+        # self.Xcert = Xcert
 
-    def robust_opt(self):
+    def get_problem(self, n_sample, num_certify_samples):
         '''
-        eps: epsilon to control the size of the norm ball constraint.
-
-        Return a dictionary of optimization results.
         '''
-        results = []
-        n_sample = self.Xobs.shape[0]
+        #results = []
+        # n_sample = num_posterior_samples*num_likelihood_samples
         # sample size for the set of certification points
-        n_certify = self.Xcert.shape[0]
-        K = self.K
-        # K = cp.Parameter((self.n_sample+self.n_certify, self.n_sample+self.n_certify))
-        epsilon = cp.Parameter(nonneg=True)
-        # Xobs = cp.Parameter((self.n_sample,1))
-        # Xcert = cp.Parameter((self.n_certify,1))
+        n_certify = num_certify_samples
+        K = cp.Parameter((n_sample+n_certify, n_sample+n_certify), name="K")
+        K_decomposed = cp.Parameter((n_sample+n_certify, n_sample+n_certify), name="K_decomposed")
+        epsilon = cp.Parameter(nonneg=True, name="epsilon")
+        Xobs = cp.Parameter((n_sample,1), name="Xobs")
+        Xcert = cp.Parameter((n_certify,1), name="Xcert")
         
         # All variables to be optimized
-        theta = cp.Variable(self.dim_theta)
+        theta = cp.Variable(self.dim_theta, name="theta")
 
         # f0 = a bias term as part of the RKHS function. A scalar
         f0 = cp.Variable()
@@ -102,49 +100,56 @@ class KdroJointEpsBall_Cvxpy():
         loss_call = self.loss_call
         # always certify the observations
         for i in range(n_sample):
-            constraints += [loss_call(theta, self.Xobs[i]) 
+            constraints += [loss_call(theta, Xobs[i]) 
             <= f0 + fvals[i] ]
 
         # certify the certifying points
         for i in range(n_certify):
             # wi = self.cert_locs[i]
-            xcert_i = self.Xcert[i]
+            xcert_i = Xcert[i]
             constraints += [loss_call(theta, xcert_i) <= f0 +
             fvals[i+n_sample]]
         
         emp = f0 + cp.sum(fvals[:n_sample]) / n_sample
         # regularization term
         # rkhs_norm = cp.sqrt(cp.quad_form(beta, K + 1e+1*np.eye(K.shape[0])))
-        rkhs_norm = cp.norm(beta.T @ matDecomp(K)) # pass matdecomp directly
+        rkhs_norm = cp.norm(beta.T @ K_decomposed) # pass matdecomp directly
         reg_term = epsilon * rkhs_norm
 
         # objective function
         obj = emp + reg_term
         opt = cp.Problem(cp.Minimize(obj), constraints)
         
-        for eps in EPSILON_SET:
-            epsilon.value = eps
-            opt.solve(cp.MOSEK, verbose=False)  #solver=cp.MOSEK cp.ECOS_BB cp.GUROBI
-            results.append(theta.value)
-        return results
+        # for eps in EPSILON_SET:
+        #     epsilon.value = eps
+        #     opt.solve(cp.MOSEK, verbose=False)  #solver=cp.MOSEK cp.ECOS_BB cp.GUROBI
+        #     results.append(theta.value)
+        # def main_loop(eps):
+        #     epsilon.value = eps
+        #     opt.solve(cp.MOSEK, verbose=False)
+        #     return theta.value
+            
+        # results = Parallel(n_jobs=-1)(delayed(main_loop)(eps) for eps in [0.5])
+        
+        return opt
     
-def optimise(loss_call, xi, n_certify, l, dim_theta):
-    '''
-    Main function to create gram matrix and optimise objective
-    '''
-    # Sample certification points
-    # Compute Gram matrix 
-    # Optimize
-    _, dim_x = xi.shape
-    Xcert = np.random.uniform(np.min(xi), np.max(xi), size=[n_certify,dim_x])
-    zetai = np.concatenate([xi, Xcert])
-    if l == -1: # median heuristic
-        l = np.sqrt((1/2)*np.median(distance.cdist(zetai, zetai, 'sqeuclidean')))
-    K = k(zetai, zetai, l)
-    kdro_class = KdroJointEpsBall_Cvxpy(dim_theta, loss_call, K, xi, Xcert)
-    results = kdro_class.robust_opt()
+# def optimise(loss_call, xi, n_certify, l, dim_theta):
+#     '''
+#     Main function to create gram matrix and optimise objective
+#     '''
+#     # Sample certification points
+#     # Compute Gram matrix 
+#     # Optimize
+#     # _, dim_x = xi.shape
+#     # Xcert = np.random.uniform(np.min(xi), np.max(xi), size=[n_certify,dim_x])
+#     # zetai = np.concatenate([xi, Xcert])
+#     # if l == -1: # median heuristic
+#     #     l = np.sqrt((1/2)*np.median(distance.cdist(zetai, zetai, 'sqeuclidean')))
+#     # K = k_jax(zetai, zetai, l)
+#     kdro_class = KdroJointEpsBall_Cvxpy(dim_theta, loss_call, xi, Xcert)
+#     results = kdro_class.robust_opt()
     
-    return results
+#     return results
 
 def main(num_replications, 
          num_observations, 
@@ -154,11 +159,11 @@ def main(num_replications,
          num_posterior_samples, 
          n_certify, 
          lengthscale=-1, 
-         posterior='mmd', 
-         algorithm='kdro_exp_mmd',
+         posterior='mmd',  # bayes
+         algorithm='kdro_exp_mmd',     # bayesian_dro
          dgp="contaminated_exp",
          experiment_dir="./misdro/results_kdro/"):
-    #
+    
     p = 1  # numbers of unknown parameters
     dim_theta = 1 # dimension of unknown parameter
     cost = np.zeros((num_replications, num_test_observations, len(EPSILON_SET)))  # init costs for each run
@@ -170,6 +175,18 @@ def main(num_replications,
         "solve_time": [],
     }
     #
+    kdro_class = KdroJointEpsBall_Cvxpy(dim_theta, newsvendor_cost_cvxpy)
+    n_samples = num_posterior_samples*num_likelihood_samples
+    problem = kdro_class.get_problem(n_samples, n_certify)
+    print("compiled prob")
+    # If the number of parameters is small enough, then use Disciplined Parametrized Programming (DPP)
+    # to reduce the compilation time in each replication.
+    # However, a large number of parameters uses an enormous amout of RAM in the current cvxpy implementation.
+    ignore_dpp = False
+    n_parameters = np.sum(np.prod(param.shape) for param in problem.parameters())
+    if n_parameters >= cp.settings.PARAM_THRESHOLD:
+        ignore_dpp = True
+        
     for j in range(num_replications):
         # generate dataset
         dgp_start = datetime.now()
@@ -236,9 +253,26 @@ def main(num_replications,
                 solutions[j,i] = main_Bayesian_DRO(xi, eps)
         # # TODO put in other algorithms here, e.g. main_Bayesian_DRO_epsilon1!
         elif algorithm == "kdro_exp_mmd":
-            thetas_list = optimise(newsvendor_cost_cvxpy, 
-                                    xi.reshape((num_posterior_samples*num_likelihood_samples,1)), 
-                                    n_certify, lengthscale, dim_theta)
+            xi = xi.reshape((num_likelihood_samples*num_posterior_samples,1))
+            _, dim_x = xi.shape
+            Xcert = np.random.uniform(np.min(xi), np.max(xi), size=[n_certify,dim_x])
+            zetai = np.concatenate([xi, Xcert])
+            # if l == -1: # median heuristic
+            l = np.sqrt((1/2)*np.median(distance.cdist(zetai, zetai, 'sqeuclidean')))
+            K = k_jax_sym(zetai, zetai, l)
+            K_decomp = mat_decomp_jax(K)
+            problem.param_dict["Xobs"].value = xi
+            problem.param_dict["Xcert"].value = Xcert
+            problem.param_dict["K"].value = np.asarray(K)
+            problem.param_dict["K_decomposed"].value = np.asarray(K_decomp)
+            thetas_list = []
+            for eps in EPSILON_SET:
+                problem.param_dict["epsilon"].value = eps
+                problem.solve(cp.MOSEK, verbose=True, ignore_dpp=ignore_dpp)  #solver=cp.MOSEK cp.ECOS_BB cp.GUROBI
+                thetas_list.append(problem.var_dict["theta"].value)
+            # thetas_list = optimise(newsvendor_cost_cvxpy, 
+            #                         xi.reshape((num_posterior_samples*num_likelihood_samples,1)), 
+            #                         n_certify, lengthscale, dim_theta)
             solutions[j,:] = np.asarray(thetas_list).flatten()
         else:
             solutions[j,:] = 0
@@ -278,12 +312,12 @@ def main(num_replications,
         df.to_csv(experiment_dir + f"test_results_eps_{eps}.csv", index=False)
     
 if __name__ == "__main__":
-    num_replications = 5
+    num_replications = 100
     num_observations = 20
     num_test_observations = 20
     num_likelihood_samples = 100
     contamination = 0.1
-    num_posterior_samples = 100 
+    num_posterior_samples = 10
     n_certify = 20
             
     main(num_replications, 
