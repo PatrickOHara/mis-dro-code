@@ -2,9 +2,9 @@
 
 from typing import Optional
 import numpy as np
-from scipy.stats import expon, gamma
+from scipy.stats import expon, gamma, norm
 
-from bayesian_dro.Bayesian_DRO_continuous import data_generation
+from bayesian_dro.Bayesian_DRO_continuous import data_generation, DGP_STD_TRUNCATED_NORMAL
 
 
 def sample_dgp(
@@ -16,6 +16,13 @@ def sample_dgp(
     """Sample from the DGP"""
     if not generator:
         generator = np.random.default_rng()
+    if dgp == "normal":
+        return norm.rvs(
+            loc=25,
+            scale=DGP_STD_TRUNCATED_NORMAL,
+            size=num_observations,
+            random_state=generator,
+        )
     if dgp == "truncated_normal":
         return data_generation(
             num_observations, random_state=generator

@@ -24,6 +24,8 @@ class ExperimentName(StrEnum):
 
     newsvendor_1d = "newsvendor_1d"
     compare_solve = "compare_solve"
+    exp_bayes_newsvendor = "exp_bayes_newsvendor"
+    normal_bayes_newsvendor = "normal_bayes_newsvendor"
 
 
 def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
@@ -31,6 +33,8 @@ def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
     function_lookup = {
         ExperimentName.newsvendor_1d: newsvendor_1d,
         ExperimentName.compare_solve: compare_solve,
+        ExperimentName.exp_bayes_newsvendor: exp_bayes_newsvendor,
+        ExperimentName.normal_bayes_newsvendor: normal_bayes_newsvendor,
     }
     try:
         return function_lookup[experiment_name]()
@@ -39,6 +43,70 @@ def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
             f"Please add {experiment_name} as a key in the function lookup dictionary"
         ) from e
 
+def exp_bayes_newsvendor() -> List[Dict]:
+    """Compare our Bayesian ambiguity set against Bayesian DRO with exponential likelihood"""
+    experiment = []
+    for algorithm, dgp, epsilon in itertools.product(
+        ["our_kl_bdro", "kl_bdro"],
+        ["exponential", "contaminated_exp", "truncated_normal"],
+        EPSILON_SET,
+    ):
+        num_posterior_samples = NUM_POSTERIOR_SAMPLES
+        if algorithm == "our_kl_bdro":
+            # we calculate the posterior exactly in closed form!
+            num_posterior_samples = 1
+        params = {
+            "algorithm": algorithm,
+            "contamination": 0.0,
+            "dgp": dgp,
+            "epsilon": epsilon,
+            "inference": "bayes",
+            "lengthscale": -1.0,
+            "likelihood": "exponential",
+            "num_likelihood_samples": NUM_LIKELIHOOD_SAMPLES,
+            "num_observations": NUM_OBSERVATIONS,
+            "num_posterior_samples": NUM_POSTERIOR_SAMPLES,
+            "num_replications": NUM_REPLICATIONS,
+            "num_test_observations": NUM_TEST_OBSERVATIONS,
+            "posterior": "gamma",
+            "uuid": str(uuid4()),  # uniquely identify a run
+        }
+        experiment.append(params)
+    return experiment
+
+def normal_bayes_newsvendor() -> List[Dict]:
+    """Compare our Bayesian ambiguity set against Bayesian DRO with normal likelihood"""
+    experiment = []
+    for algorithm, dgp, epsilon in itertools.product(
+        ["our_kl_bdro", "kl_bdro"],
+        ["normal", "truncated_normal"],
+        EPSILON_SET,
+    ):
+        num_posterior_samples = NUM_POSTERIOR_SAMPLES
+        if algorithm == "our_kl_bdro":
+            # we calculate the posterior exactly in closed form!
+            num_posterior_samples = 1
+        contamination = 0.0
+        if dgp == "contaminated_exp":
+            contamination = CONTAMINATION_LEVEL
+        params = {
+            "algorithm": algorithm,
+            "contamination": contamination,
+            "dgp": dgp,
+            "epsilon": epsilon,
+            "inference": "bayes",
+            "lengthscale": -1.0,
+            "likelihood": "normal",
+            "num_likelihood_samples": NUM_LIKELIHOOD_SAMPLES,
+            "num_observations": NUM_OBSERVATIONS,
+            "num_posterior_samples": num_posterior_samples,
+            "num_replications": NUM_REPLICATIONS,
+            "num_test_observations": NUM_TEST_OBSERVATIONS,
+            "posterior": "normal_gamma",
+            "uuid": str(uuid4()),  # uniquely identify a run
+        }
+        experiment.append(params)
+    return experiment
 
 def newsvendor_1d() -> List[Dict]:
     """Vary epsilon and compare Bayesian DRO with Bayes/NPL inference"""
