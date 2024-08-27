@@ -52,10 +52,9 @@ def get_kl_bdro_problem(
         (1.0 / num_posterior_samples)
         * cp.sum(
             [
-                lam[i] * epsilon
-                + lam[i] * cp.log(1.0 / num_likelihood_samples) @ kl_bdro_constant
-                + kl_bdro_constant
-                * cp.perspective(cp.log_sum_exp(t[i]), lam[i], f_recession=cp.max(t[i]))
+                lam[i] * (epsilon + kl_bdro_constant)
+                + lam[i] * cp.log(1.0 / num_likelihood_samples)
+                + cp.perspective(cp.log_sum_exp(t[i]), lam[i], f_recession=cp.max(t[i]))
                 for i in range(num_posterior_samples)
             ]
         )

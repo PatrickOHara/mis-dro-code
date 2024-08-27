@@ -48,7 +48,10 @@ def derive_analytical_posterior_params(
 ) -> np.ndarray:
     """When using our closed form expressions for 'Bayesian ambiguity sets',
     we derive a new distribution from the posterior parameters"""
-    if posterior == "normal_gamma":
+    if posterior == "gamma":
+        alpha_posterior, beta_posterior = posterior_params
+        return np.array([alpha_posterior / beta_posterior])
+    elif posterior == "normal_gamma":
         theta = np.zeros((1, 2))
         mu_posterior, _, alpha_posterior, beta_posterior = posterior_params
         # we want an analytical form for the precision, which is alpha over beta
@@ -96,7 +99,10 @@ def sample_posterior(
 
 def get_kl_bdro_constant(posterior: str, posterior_params: list) -> float:
     """Given the posterior params, return the optimization constant for Bayesian DRO"""
-    if posterior == "normal_gamma":
+    if posterior == "gamma":
+        alpha_posterior, _ = posterior_params
+        return np.log(alpha_posterior) - sp.special.digamma(alpha_posterior)
+    elif posterior == "normal_gamma":
         _, kappa_posterior, alpha_posterior, _ = posterior_params
         return get_normal_gamma_constant(alpha_posterior, kappa_posterior)
     else:

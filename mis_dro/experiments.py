@@ -55,9 +55,12 @@ def exp_bayes_newsvendor() -> List[Dict]:
         if algorithm == "our_kl_bdro":
             # we calculate the posterior exactly in closed form!
             num_posterior_samples = 1
+        contamination = 0.0
+        if dgp == "contaminated_exp":
+            contamination = CONTAMINATION_LEVEL
         params = {
             "algorithm": algorithm,
-            "contamination": 0.0,
+            "contamination": contamination,
             "dgp": dgp,
             "epsilon": epsilon,
             "inference": "bayes",
@@ -65,7 +68,7 @@ def exp_bayes_newsvendor() -> List[Dict]:
             "likelihood": "exponential",
             "num_likelihood_samples": NUM_LIKELIHOOD_SAMPLES,
             "num_observations": NUM_OBSERVATIONS,
-            "num_posterior_samples": NUM_POSTERIOR_SAMPLES,
+            "num_posterior_samples": num_posterior_samples,
             "num_replications": NUM_REPLICATIONS,
             "num_test_observations": NUM_TEST_OBSERVATIONS,
             "posterior": "gamma",

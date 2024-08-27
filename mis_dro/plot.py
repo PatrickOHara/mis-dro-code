@@ -25,8 +25,8 @@ class AlgorithmName(StrEnum):
     """Consistent algorithm line styles"""
 
     bdro_grid_search = "BDRO grid search"
-    kl_bdro = "BDRO optimised"
-    our_kl_bdro = "Our BDRO"
+    kl_bdro = "BDRO"
+    our_kl_bdro = "BAS-DRO"
 
 
 class InferenceLineStyle(StrEnum):
@@ -88,6 +88,7 @@ def algorithm_style(algorithm: str) -> dict[str, str]:
 def flexible_figure(
     agg_df: pd.DataFrame,
     plot_type: str,
+    compare_col: str = "inference",
     gb_col: str = "dgp",
     max_epsilon: float = np.inf,
     ncols: int = 2,
@@ -149,8 +150,14 @@ def flexible_figure(
                 assert len(df.index.get_level_values("dgp").unique()) == 1
                 style = algorithm_style(algorithm)
             elif gb_col == "dgp":
-                assert len(df.index.get_level_values("algorithm").unique()) == 1
-                style = inference_style(inference)
+                if compare_col == "inference":
+                    assert len(df.index.get_level_values("algorithm").unique()) == 1
+                    style = inference_style(inference)
+                elif compare_col == "algorithm":
+                    assert len(df.index.get_level_values("inference").unique()) == 1
+                    style = algorithm_style(algorithm)
+                else:
+                    raise NotImplementedError(f"Comparing column '{compare_col}' not supported.")
             else:
                 raise NotImplementedError()
 
