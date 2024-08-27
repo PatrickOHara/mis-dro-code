@@ -52,9 +52,11 @@ def exp_bayes_newsvendor() -> List[Dict]:
         EPSILON_SET,
     ):
         num_posterior_samples = NUM_POSTERIOR_SAMPLES
+        num_likelihood_samples = NUM_LIKELIHOOD_SAMPLES
         if algorithm == "our_kl_bdro":
             # we calculate the posterior exactly in closed form!
             num_posterior_samples = 1
+            num_likelihood_samples = 10000  # NOTE temporary experimental value
         contamination = 0.0
         if dgp == "contaminated_exp":
             contamination = CONTAMINATION_LEVEL
@@ -66,7 +68,7 @@ def exp_bayes_newsvendor() -> List[Dict]:
             "inference": "bayes",
             "lengthscale": -1.0,
             "likelihood": "exponential",
-            "num_likelihood_samples": NUM_LIKELIHOOD_SAMPLES,
+            "num_likelihood_samples": num_likelihood_samples,
             "num_observations": NUM_OBSERVATIONS,
             "num_posterior_samples": num_posterior_samples,
             "num_replications": NUM_REPLICATIONS,
@@ -85,9 +87,13 @@ def normal_bayes_newsvendor() -> List[Dict]:
         ["normal", "truncated_normal"],
         EPSILON_SET,
     ):
-        num_posterior_samples = NUM_POSTERIOR_SAMPLES
+        n_total_samples_sqrt = 50
+        if algorithm == "kl_bdro":
+            num_posterior_samples = n_total_samples_sqrt
+            num_likelihood_samples = n_total_samples_sqrt
         if algorithm == "our_kl_bdro":
             # we calculate the posterior exactly in closed form!
+            num_likelihood_samples = n_total_samples_sqrt**2  # NOTE temporary experimental value
             num_posterior_samples = 1
         contamination = 0.0
         if dgp == "contaminated_exp":
@@ -100,7 +106,7 @@ def normal_bayes_newsvendor() -> List[Dict]:
             "inference": "bayes",
             "lengthscale": -1.0,
             "likelihood": "normal",
-            "num_likelihood_samples": NUM_LIKELIHOOD_SAMPLES,
+            "num_likelihood_samples": num_likelihood_samples,
             "num_observations": NUM_OBSERVATIONS,
             "num_posterior_samples": num_posterior_samples,
             "num_replications": NUM_REPLICATIONS,

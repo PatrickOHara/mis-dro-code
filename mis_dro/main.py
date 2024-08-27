@@ -25,6 +25,7 @@ from .constants import (
     NUM_POSTERIOR_SAMPLES,
     NUM_REPLICATIONS,
     NUM_TEST_OBSERVATIONS,
+    MAX_PARAMS_OOM,
 )
 from .dataset import sample_dgp
 from .experiments import ExperimentName, get_experiment
@@ -38,7 +39,7 @@ app = typer.Typer(name="misdro")
 
 @app.command(name="setup")
 def setup(
-    experiment_name: ExperimentName, experiment_dir: Path, overwrite: bool = False
+    experiment_name: ExperimentName, experiment_dir: Path, njobs: int = -1, overwrite: bool = False
 ):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
@@ -55,22 +56,24 @@ def setup(
     # get unique DGPs
     dgp_algorithm_pairs = set()
     for params in experiment:
-        dgp_algorithm_pairs.add((params["dgp"], params["algorithm"]))
+        dgp_algorithm_pairs.add((params["dgp"], params["algorithm"], params["num_likelihood_samples"], params["num_posterior_samples"]))
 
     # setup SLURM file
     with open(
         Path(__file__).parent / "template.slurm", "r", encoding="utf-8"
     ) as slurm_file:
         slurm_string = slurm_file.read()
-    for dgp, algorithm in dgp_algorithm_pairs:
-        if algorithm in ("kl_bdro"):
-            njobs = 1
+    for dgp, algorithm, num_likelihood_samples, num_posterior_samples in dgp_algorithm_pairs:
+        is_njobs1 = num_likelihood_samples * num_posterior_samples > MAX_PARAMS_OOM
+        if is_njobs1:
+            # NOTE if lots of samples, then don't use parallel jobs. Otherwise, out-of-memory issues
+            local_njobs = 1
         else:
-            njobs = -1
+            local_njobs = njobs
         dgp_string = slurm_string.format(
-            experiment_dir=experiment_dir, dgp=dgp, algorithm=algorithm, njobs=njobs,
+            experiment_dir=experiment_dir, dgp=dgp, algorithm=algorithm, njobs=local_njobs,
         )
-        (experiment_dir / f"{experiment_name}_{dgp}_{algorithm}.slurm").write_text(
+        (experiment_dir / f"{experiment_name}_{dgp}_{algorithm}_{num_likelihood_samples}_{num_posterior_samples}.slurm").write_text(
             dgp_string
         )
 
