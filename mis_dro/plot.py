@@ -16,9 +16,9 @@ class AlgorithmLineStyle(StrEnum):
 class AlgorithmMarkerStyle(StrEnum):
     """Consistent algorithm marker styles"""
 
-    bdro_grid_search = "o"
+    bdro_grid_search = "*"
     kl_bdro = "x"
-    our_kl_bdro = "*"
+    our_kl_bdro = "o"
 
 class AlgorithmColor(StrEnum):
     """Colors of algorithm lines"""
