@@ -111,13 +111,16 @@ def run_experiment(
     with open(filepath, "r", encoding="utf-8") as json_file:
         experiment = json.load(json_file)
     # NOTE if only-missing flag, then only run if the results CSV file doesn't exist
-    Parallel(n_jobs=njobs)(
-        delayed(run)(experiment_dir, **params)
-        for params in experiment
-        if params["dgp"] == dgp
-        and params["algorithm"] == algorithm
-        and not ((experiment_dir / params["uuid"]).exists() and only_missing)
-    )
+    for params in experiment:
+        if params["dgp"] == dgp and params["algorithm"] == algorithm and not ((experiment_dir / params["uuid"]).exists() and only_missing):
+            run(experiment_dir, **params)
+    # Parallel(n_jobs=njobs)(
+    #     delayed(run)(experiment_dir, **params)
+    #     for params in experiment
+    #     if params["dgp"] == dgp
+    #     and params["algorithm"] == algorithm
+    #     and not ((experiment_dir / params["uuid"]).exists() and only_missing)
+    # )
 
 
 @app.command(name="uuid")

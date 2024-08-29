@@ -20,6 +20,13 @@ class AlgorithmMarkerStyle(StrEnum):
     kl_bdro = "x"
     our_kl_bdro = "*"
 
+class AlgorithmColor(StrEnum):
+    """Colors of algorithm lines"""
+    bdro_grid_search = "orange"
+    kl_bdro = "black"
+    our_kl_bdro = "blue"
+
+
 
 class AlgorithmName(StrEnum):
     """Consistent algorithm line styles"""
@@ -81,7 +88,7 @@ def algorithm_style(algorithm: str) -> dict[str, str]:
         "marker": AlgorithmMarkerStyle[algorithm],
         "linestyle": AlgorithmLineStyle[algorithm],
         "label": AlgorithmName[algorithm],
-        "color": "black",
+        "color": AlgorithmColor[algorithm],
     }
 
 
@@ -190,6 +197,7 @@ def time_taken_plot(
 def mean_variance_plot(
     axis: mpl.axis.Axis,
     df: pd.DataFrame,
+    is_labelled: bool = True,
     **kwargs,
 ) -> None:
     posterior_var = df["var_cost"]["mean"] + df["mean_cost"]["var"]
@@ -198,13 +206,14 @@ def mean_variance_plot(
     axis.plot(posterior_var, df["mean_cost"]["mean"], **kwargs)
     axis.set_xlabel("out-of-sample variance")
     axis.set_ylabel("out-of-sample mean")
-    epsilon_list = list(df.index.get_level_values("epsilon"))
-    for i, epsilon in enumerate(epsilon_list):
-        if i % 4 == 0:
-            axis.text(
-                posterior_var[:, :, epsilon, :].iloc[0],
-                df["mean_cost"]["mean"][:, :, epsilon, :].iloc[0],
-                epsilon,
-                ha="left",
-                va="bottom",
-            )
+    if is_labelled:
+        epsilon_list = list(df.index.get_level_values("epsilon"))
+        for i, epsilon in enumerate(epsilon_list):
+            if i % 4 == 0:
+                axis.text(
+                    posterior_var[:, :, epsilon, :].iloc[0],
+                    df["mean_cost"]["mean"][:, :, epsilon, :].iloc[0],
+                    epsilon,
+                    ha="left",
+                    va="bottom",
+                )

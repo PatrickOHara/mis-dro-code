@@ -46,17 +46,19 @@ def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
 def exp_bayes_newsvendor() -> List[Dict]:
     """Compare our Bayesian ambiguity set against Bayesian DRO with exponential likelihood"""
     experiment = []
-    for algorithm, dgp, epsilon in itertools.product(
+    for n_total_samples_sqrt, algorithm, dgp, epsilon in itertools.product(
+        [10, 20, 30, 50, 100],
         ["our_kl_bdro", "kl_bdro"],
         ["exponential", "contaminated_exp", "truncated_normal"],
         EPSILON_SET,
     ):
-        num_posterior_samples = NUM_POSTERIOR_SAMPLES
-        num_likelihood_samples = NUM_LIKELIHOOD_SAMPLES
+        if algorithm == "kl_bdro":
+            num_posterior_samples = n_total_samples_sqrt
+            num_likelihood_samples = n_total_samples_sqrt
         if algorithm == "our_kl_bdro":
             # we calculate the posterior exactly in closed form!
+            num_likelihood_samples = n_total_samples_sqrt**2  # NOTE temporary experimental value
             num_posterior_samples = 1
-            num_likelihood_samples = 10000  # NOTE temporary experimental value
         contamination = 0.0
         if dgp == "contaminated_exp":
             contamination = CONTAMINATION_LEVEL
@@ -82,12 +84,12 @@ def exp_bayes_newsvendor() -> List[Dict]:
 def normal_bayes_newsvendor() -> List[Dict]:
     """Compare our Bayesian ambiguity set against Bayesian DRO with normal likelihood"""
     experiment = []
-    for algorithm, dgp, epsilon in itertools.product(
+    for n_total_samples_sqrt, algorithm, dgp, epsilon in itertools.product(
+        [10, 20, 30, 50, 100],
         ["our_kl_bdro", "kl_bdro"],
         ["normal", "truncated_normal"],
         EPSILON_SET,
     ):
-        n_total_samples_sqrt = 50
         if algorithm == "kl_bdro":
             num_posterior_samples = n_total_samples_sqrt
             num_likelihood_samples = n_total_samples_sqrt
@@ -96,8 +98,6 @@ def normal_bayes_newsvendor() -> List[Dict]:
             num_likelihood_samples = n_total_samples_sqrt**2  # NOTE temporary experimental value
             num_posterior_samples = 1
         contamination = 0.0
-        if dgp == "contaminated_exp":
-            contamination = CONTAMINATION_LEVEL
         params = {
             "algorithm": algorithm,
             "contamination": contamination,
