@@ -113,7 +113,7 @@ def run_experiment(
 
 
 @app.command(name="uuid")
-def run_uuid(experiment_dir: Path, uuid: UUID, verbose: bool = False) -> None:
+def run_uuid(experiment_dir: Path, uuid: UUID, njobs: int = -1, verbose: bool = False) -> None:
     """Run DRO for only one specified uuid parameters"""
     filepath = experiment_dir / "experiment.json"
     with open(filepath, "r", encoding="utf-8") as json_file:
@@ -122,7 +122,7 @@ def run_uuid(experiment_dir: Path, uuid: UUID, verbose: bool = False) -> None:
     for params in experiment:
         if params["uuid"] == str(uuid):
             found = True
-            run(experiment_dir, verbose=verbose, **params)
+            run(experiment_dir, verbose=verbose, njobs=njobs, **params)
     if not found:
         raise ValueError(f"UUID {uuid} not found in {filepath}")
 
@@ -309,7 +309,7 @@ def run_replication(
             # set parameters then solve
             problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon - kl_bdro_constant])
             problem.param_dict["xi"].value = xi
-            problem.solve(solver=cp.MOSEK, verbose=verbose, ignore_dpp=ignore_dpp)
+            problem.solve(solver=cp.MOSEK, verbose=verbose, ignore_dpp=ignore_dpp, accept_unknown=True)
             solution = problem.var_dict["x"].value[0]
             # solve_time = problem.solver_stats.solve_time
             setup_time = problem.solver_stats.setup_time

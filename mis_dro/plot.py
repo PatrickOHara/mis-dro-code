@@ -8,8 +8,8 @@ import pandas as pd
 class AlgorithmLineStyle(StrEnum):
     """Consistent algorithm line styles"""
 
-    bdro_grid_search = "solid"
-    kl_bdro = "dashed"
+    bdro_grid_search = "dashed"
+    kl_bdro = "solid"
     our_kl_bdro = "dotted"
 
 
