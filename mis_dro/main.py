@@ -168,10 +168,10 @@ def run(
         n_parameters = np.sum(np.prod(param.shape) for param in problem.parameters())
         # NOTE whilst BAS-DRO can handle at least 5000 params, BDRO cannot.
         # So, for a fair comparison, we turn off DPP for both BAS-DRO and BDRO.
-        # if n_parameters >= cp.settings.PARAM_THRESHOLD:
-        if n_parameters >= 1000:
+        if n_parameters >= cp.settings.PARAM_THRESHOLD:
+        # if n_parameters >= 1000:
             ignore_dpp = True
-            # njobs = 1
+            njobs = 1
 
     # BDRO n_parameters ~ >= 900  -> OOM
     # BAS-DRO n_parameters < 10,000 -> still good
