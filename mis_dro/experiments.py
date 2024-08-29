@@ -87,7 +87,8 @@ def normal_bayes_newsvendor() -> List[Dict]:
     """Compare our Bayesian ambiguity set against Bayesian DRO with normal likelihood"""
     experiment = []
     for total_model_samples, algorithm, dgp, epsilon in itertools.product(
-        [25, 49, 100, 400, 900, 2500, 10000],
+        # [25, 49, 100, 400, 900, 2500, 10000],
+        [25, 100, 900],
         ["our_kl_bdro", "kl_bdro"],
         ["normal", "truncated_normal"],
         BAS_DRO_EPSILON_SET,

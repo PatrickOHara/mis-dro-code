@@ -149,8 +149,8 @@ def run(
 ):
     """Run Newsvendor Misspecified Bayesian DRO"""
     if uuid:
-        print("Running", uuid)
-
+        print(uuid)
+    print("DGP:", dgp, " - ALGORITHM:", algorithm, " - NUM LIKELIHOOD SAMPLES:", num_likelihood_samples, " - POSTERIOR:", posterior)
     if algorithm in ("kl_bdro", "our_kl_bdro"):
         problem = get_kl_bdro_problem(
             newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples
@@ -166,10 +166,21 @@ def run(
     ignore_dpp = False
     if algorithm in ("kl_bdro", "our_kl_bdro", "kdro"):
         n_parameters = np.sum(np.prod(param.shape) for param in problem.parameters())
-        if n_parameters >= cp.settings.PARAM_THRESHOLD:
+        # NOTE whilst BAS-DRO can handle at least 5000 params, BDRO cannot.
+        # So, for a fair comparison, we turn off DPP for both BAS-DRO and BDRO.
+        # if n_parameters >= cp.settings.PARAM_THRESHOLD:
+        if n_parameters >= 1000:
             ignore_dpp = True
-            njobs = 1
+            # njobs = 1
 
+    # BDRO n_parameters ~ >= 900  -> OOM
+    # BAS-DRO n_parameters < 10,000 -> still good
+    # n_parameters = 2500 -> both BDRO and BAS-DRO, we turn off dpp and njobs = 1
+
+    # on PARROT, we run n_parameters <= 900
+    # on PARROT, we run n_parameters >=2500, then turn off dpp for everything
+
+    # DPP is good 
     params = {
         "algorithm": algorithm,
         "contamination": contamination,
@@ -216,6 +227,7 @@ def run(
     df = pd.DataFrame(list_of_replication_stats)
     csv_filepath = experiment_dir / f"{uuid}.csv"
     print(f"Writing CSV to {csv_filepath}")
+    print()
     df.to_csv(csv_filepath, index=False)
 
 
@@ -309,6 +321,7 @@ def run_replication(
             # set parameters then solve
             problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon - kl_bdro_constant])
             problem.param_dict["xi"].value = xi
+            # NOTE the MOSEK 'accept_unknown' argument is needed due to https://github.com/cvxpy/cvxpy/pull/2117
             problem.solve(solver=cp.MOSEK, verbose=verbose, ignore_dpp=ignore_dpp, accept_unknown=True)
             solution = problem.var_dict["x"].value[0]
             # solve_time = problem.solver_stats.solve_time

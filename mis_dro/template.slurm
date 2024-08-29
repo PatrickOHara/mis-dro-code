@@ -1,9 +1,9 @@
 #!/bin/bash
 #
 #SBATCH --job-name=newsvendor  # Job name for tracking
-#SBATCH --partition=cpu-batch  # Partition you wish to use (see above for list)
-#SBATCH --cpus-per-task=40     # Number of CPU threads used by your job, set this upto 40 as required.
-#SBATCH --mem=60000            # 60GB RAM
+#SBATCH --partition=parrot     # Partition you wish to use (see above for list)
+#SBATCH --cpus-per-task=24     # Number of CPU threads used by your job, set this upto 40 as required.
+#SBATCH --mem=120000            # 60GB RAM
 #SBATCH --exclusive=mcs        # Exclusive mode, only this job will run
 #SBATCH --time=2-00:00:00      # Job time limit set to 2 days (48 hours)
 #
