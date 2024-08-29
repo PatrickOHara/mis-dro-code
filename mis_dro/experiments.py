@@ -10,6 +10,7 @@ from typing import Dict, List
 from uuid import uuid4
 from bayesian_dro.Bayesian_DRO_continuous import EPSILON_SET
 from .constants import (
+    BAS_DRO_EPSILON_SET,
     CONTAMINATION_LEVEL,
     NUM_LIKELIHOOD_SAMPLES,
     NUM_OBSERVATIONS,
@@ -85,10 +86,11 @@ def normal_bayes_newsvendor() -> List[Dict]:
     """Compare our Bayesian ambiguity set against Bayesian DRO with normal likelihood"""
     experiment = []
     for n_total_samples_sqrt, algorithm, dgp, epsilon in itertools.product(
-        [10, 20, 30, 50, 100],
+        # [10, 20, 30, 50, 100],
+        [10, 20, 30],
         ["our_kl_bdro", "kl_bdro"],
         ["normal", "truncated_normal"],
-        EPSILON_SET,
+        BAS_DRO_EPSILON_SET,
     ):
         if algorithm == "kl_bdro":
             num_posterior_samples = n_total_samples_sqrt

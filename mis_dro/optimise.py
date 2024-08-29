@@ -41,8 +41,7 @@ def get_kl_bdro_problem(
     t = cp.Variable((num_posterior_samples, num_likelihood_samples), name="t")
 
     # declare parameters
-    epsilon = cp.Parameter(1, name="epsilon", nonneg=True)
-    kl_bdro_constant = cp.Parameter(1, name="kl_bdro_constant", nonneg=True)
+    epsilon_minus_constant = cp.Parameter(1, name="epsilon_minus_constant", nonneg=True)
     xi = cp.Parameter((num_posterior_samples, num_likelihood_samples), name="xi")
 
     # create the objective function for the Bayesian DRO problem
@@ -52,7 +51,7 @@ def get_kl_bdro_problem(
         (1.0 / num_posterior_samples)
         * cp.sum(
             [
-                lam[i] * (epsilon - kl_bdro_constant)
+                lam[i] @ (epsilon_minus_constant)
                 + lam[i] * cp.log(1.0 / num_likelihood_samples)
                 + cp.perspective(cp.log_sum_exp(t[i]), lam[i], f_recession=cp.max(t[i]))
                 for i in range(num_posterior_samples)
