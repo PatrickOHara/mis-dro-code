@@ -8,6 +8,7 @@ from enum import StrEnum
 import itertools
 from typing import Dict, List
 from uuid import uuid4
+import numpy as np
 from bayesian_dro.Bayesian_DRO_continuous import EPSILON_SET
 from .constants import (
     BAS_DRO_EPSILON_SET,
@@ -85,19 +86,18 @@ def exp_bayes_newsvendor() -> List[Dict]:
 def normal_bayes_newsvendor() -> List[Dict]:
     """Compare our Bayesian ambiguity set against Bayesian DRO with normal likelihood"""
     experiment = []
-    for n_total_samples_sqrt, algorithm, dgp, epsilon in itertools.product(
-        # [10, 20, 30, 50, 100],
-        [10, 20, 30],
+    for total_model_samples, algorithm, dgp, epsilon in itertools.product(
+        [25, 49, 100, 400, 900, 2500, 10000],
         ["our_kl_bdro", "kl_bdro"],
         ["normal", "truncated_normal"],
         BAS_DRO_EPSILON_SET,
     ):
         if algorithm == "kl_bdro":
-            num_posterior_samples = n_total_samples_sqrt
-            num_likelihood_samples = n_total_samples_sqrt
+            num_posterior_samples = int(np.sqrt(total_model_samples))
+            num_likelihood_samples = int(np.sqrt(total_model_samples))
         if algorithm == "our_kl_bdro":
             # we calculate the posterior exactly in closed form!
-            num_likelihood_samples = n_total_samples_sqrt**2  # NOTE temporary experimental value
+            num_likelihood_samples = total_model_samples
             num_posterior_samples = 1
         contamination = 0.0
         params = {

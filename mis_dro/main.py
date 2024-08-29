@@ -311,18 +311,17 @@ def run_replication(
             problem.param_dict["xi"].value = xi
             problem.solve(solver=cp.MOSEK, verbose=verbose, ignore_dpp=ignore_dpp)
             solution = problem.var_dict["x"].value[0]
-            solve_time = problem.solver_stats.solve_time
+            # solve_time = problem.solver_stats.solve_time
             setup_time = problem.solver_stats.setup_time
     elif algorithm == "kdro":
         raise NotImplementedError("Harita's future code goes here :)")
     elif algorithm == "bdro_grid_search":
         solution = main_Bayesian_DRO(xi, epsilon)
-        solve_time = (datetime.now() - solve_start).total_seconds()
         setup_time = 0.0  # can't really measure this easily
     # TODO put in other algorithms here, e.g. main_Bayesian_DRO_epsilon1!
     else:
         raise ValueError("Please choose a valid algorithm")
-
+    solve_time = (datetime.now() - solve_start).total_seconds()
     # evaluate the cost
     if solution == np.inf:
         out_of_sample_mean = np.inf
