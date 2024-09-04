@@ -11,8 +11,8 @@ import gurobipy as gp
 from gurobipy import GRB
 from joblib import Parallel, delayed
 
-NUMBER_ITERATION_THETA = 100
-NUMBER_ITERATION_XI = 100
+NUMBER_ITERATION_THETA = 10
+NUMBER_ITERATION_XI = 10
 EPSILON_SET = [
     0.001,
     0.002,
@@ -35,7 +35,7 @@ EPSILON_SET = [
 ]
 b = 8
 h = 3
-LARGEST_X = 50
+LARGEST_X = 100
 SMALLEST_X = 0
 L = 100
 
@@ -523,9 +523,9 @@ def main_Bayesian_DRO_epsilon3(xi, empirical_x, theta):
 
 def main():
     print("Hello, world!")
-    # sol_true = truncnorm.ppf(
-    #     (b - 0) / (h + b), a=-DGP_MEAN_TRUNCATED_NORMAL / DGP_STD_TRUNCATED_NORMAL, b=np.inf, loc=DGP_MEAN_TRUNCATED_NORMAL, scale=DGP_STD_TRUNCATED_NORMAL
-    # )
+    sol_true = truncnorm.ppf(
+        (b - 0) / (h + b), a=-DGP_MEAN_TRUNCATED_NORMAL / DGP_STD_TRUNCATED_NORMAL, b=np.inf, loc=DGP_MEAN_TRUNCATED_NORMAL, scale=DGP_STD_TRUNCATED_NORMAL
+    )
     replication = 200
 
     generator = np.random.default_rng(seed=replication)
