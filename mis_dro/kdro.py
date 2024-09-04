@@ -4,9 +4,10 @@ from uuid import uuid4
 from joblib import Parallel, delayed
 import numpy as np
 import pandas as pd
-from scipy.stats import expon
+from scipy.stats import expon, norm
 import cvxpy as cp
 from joblib import Parallel, delayed
+from normal_conjugates import get_posterior_params, sample_pp, default_prior_params
 
 
 from bayesian_dro.Bayesian_DRO_continuous import (
@@ -16,7 +17,7 @@ from bayesian_dro.Bayesian_DRO_continuous import (
     theta_generation,
 )
 from mis_dro.constants import *
-from mis_dro.dataset import data_generation_outliers, data_generation_gamma
+from mis_dro.dataset import data_generation_outliers, data_generation_gamma, contaminated_normal
 from mis_dro.npl import Npl
 from mis_dro.newsvendor import newsvendor_cost, newsvendor_cost_cvxpy
 from mis_dro.models import ExponentialModel
@@ -161,9 +162,9 @@ def main(num_replications,
          num_posterior_samples, 
          n_certify, 
          lengthscale=-1, 
-         posterior='mmd',  # bayes
+         posterior='mmd',  # mmd bayes
          algorithm='kdro_exp_mmd',     # bayesian_dro
-         dgp="contaminated_exp",
+         dgp="contaminated_normal",
          experiment_dir="./misdro/results_kdro/"):
     
     p = 1  # numbers of unknown parameters
@@ -203,6 +204,9 @@ def main(num_replications,
         elif dgp == "gamma":
             data = data_generation_gamma(num_observations, a=10, random_state=generator)
             data_eval = data_generation_gamma(num_test_observations, a=10, random_state=generator)
+        elif dgp == "contaminated_normal":
+            data = contaminated_normal(num_observations, contamination, random_state=generator)
+            data_eval = contaminated_normal(num_test_observations, 0.0, random_state=generator)
         else:
             raise ValueError(
                 f"The data-generating process specified is not supported: {dgp}"
@@ -230,13 +234,17 @@ def main(num_replications,
             theta_sample = npl_toy.sample
         elif posterior == "bayes":
             # standard Bayesian posterior sample for theta
-            theta_sample = theta_generation(data, num_posterior_samples, random_state=generator)
+            #theta_sample = theta_generation(data, num_posterior_samples, random_state=generator)  # commenting this out for now to try PP
+            prior_params = default_prior_params("normal_known_var")
+            post_parameters = get_posterior_params("normal_known_var", data, prior_params)
+            xi_pp = sample_pp("normal_known_var", post_parameters, num_posterior_samples, generator)
         times["posterior_time"].append(
             (datetime.now() - posterior_start).total_seconds()
         )
 
         # sample from the likelihood
         likelihood_start = datetime.now()
+        # commenting out for now to try PP
         xi = np.zeros([num_posterior_samples, num_likelihood_samples])  # init the xi's
         for i in range(num_posterior_samples):
             xi[i] = xi_generation(theta_sample[i], num_likelihood_samples, random_state=generator)
@@ -251,6 +259,8 @@ def main(num_replications,
                 solutions[j,i] = main_Bayesian_DRO(xi, eps)
         # # TODO put in other algorithms here, e.g. main_Bayesian_DRO_epsilon1!
         elif algorithm == "kdro_exp_mmd":
+            # xi is now samples from the posterior predictive!
+            # xi = xi_pp.reshape((num_posterior_samples,1))
             xi = xi.reshape((num_likelihood_samples*num_posterior_samples,1))
             _, dim_x = xi.shape
             Xcert = np.random.uniform(np.min(xi), np.max(xi), size=[n_certify,dim_x])
@@ -258,7 +268,6 @@ def main(num_replications,
             # if l == -1: # median heuristic
             l = np.sqrt((1/2)*np.median(distance.cdist(zetai, zetai, 'sqeuclidean')))
             K = k_jax_sym(zetai, zetai, l)
-            print("here")
             # K_decomp = mat_decomp_jax(K)
             kdro_class = KdroJointEpsBall_Cvxpy(dim_theta, newsvendor_cost_cvxpy, xi, Xcert, K)
             n_samples = num_posterior_samples*num_likelihood_samples
@@ -311,13 +320,13 @@ def main(num_replications,
         "solve_time": times["solve_time"],
         "epsilon": eps
         })
-        df.to_csv(experiment_dir + f"test_results_eps_{eps}.csv", index=False)
+        df.to_csv(experiment_dir + f"kdro_cont_normal_N100_{eps}.csv", index=False)
     
 if __name__ == "__main__":
-    num_replications = 10
+    num_replications = 100
     num_observations = 20
     num_test_observations = 20
-    num_likelihood_samples = 100
+    num_likelihood_samples = 10
     contamination = 0.1
     num_posterior_samples = 10
     n_certify = 20
