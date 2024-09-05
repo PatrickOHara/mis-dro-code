@@ -1,7 +1,6 @@
-import json
+
 import numpy as np
 import pandas as pd
-from pathlib import Path
 from scipy import optimize
 from scipy.stats import truncnorm
 from scipy.stats import gamma
@@ -51,18 +50,18 @@ def xi_generation(theta, D_xi, random_state = None):
     return xi
 
 
-def data_generation(num_observations, random_state = None):
+def data_generation(num_observations, mean = DGP_MEAN_TRUNCATED_NORMAL, std = DGP_STD_TRUNCATED_NORMAL, random_state = None):
     """True DGP"""
     myclip_a, myclip_b = 0, np.inf
 
-    a, b = (myclip_a - DGP_MEAN_TRUNCATED_NORMAL) / DGP_STD_TRUNCATED_NORMAL, (
-        myclip_b - DGP_MEAN_TRUNCATED_NORMAL
-    ) / DGP_STD_TRUNCATED_NORMAL
+    a, b = (myclip_a - mean) / std, (
+        myclip_b - mean
+    ) / std
     data = truncnorm.rvs(
         a,
         b,
-        loc=DGP_MEAN_TRUNCATED_NORMAL,
-        scale=DGP_STD_TRUNCATED_NORMAL,
+        loc=mean,
+        scale=std,
         size=num_observations,
         random_state=random_state,
     )
@@ -176,8 +175,9 @@ def Bayesian_DRO_2(xi, x, theta_index, epsilon, lse = True):
 
 
 def Bayesian_DRO_3(xi, x, epsilon, lse=True):
-    temp_value = np.zeros(NUMBER_ITERATION_THETA)
-    for i in range(NUMBER_ITERATION_THETA):
+    num_iteration_theta = xi.shape[0]
+    temp_value = np.zeros(num_iteration_theta)
+    for i in range(num_iteration_theta):
         temp_value[i] = Bayesian_DRO_2(xi, x, i, epsilon, lse=lse)
     value = np.mean(temp_value)
     return value

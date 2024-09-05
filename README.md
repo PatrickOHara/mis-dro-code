@@ -16,7 +16,9 @@ cd mis-dro-code
 pip install -e .
 ```
 
-You will also need to install and get a license for the Gurobi optimiser software package. [See this link](https://www.gurobi.com/features/academic-named-user-license/).
+You will also need to install and get a license for:
+- the [Gurobi optimiser software package](https://www.gurobi.com/features/academic-named-user-license/).
+- the [MOSEK conic optimisation solver](https://www.mosek.com/products/academic-licenses/).
 
 ### Bayesian DRO
 
@@ -53,7 +55,7 @@ To collect all of the CSV files together in a single `results.csv` file, you can
 ```
 misdro csv $EXPERIMENT_DIR
 ```
-then to analyse the results using the `newsvendor_experiment.ipynb` notebook.
+then you can analyse the results using the `newsvendor_experiment.ipynb` notebook.
 
 
 ### Bayesian DRO
