@@ -165,7 +165,7 @@ def main(num_replications,
          posterior='mmd',  # mmd bayes
          algorithm='kdro_exp_mmd',     # bayesian_dro kdro_exp_mmd
          dgp="contaminated_exp",
-         experiment_dir="./misdro/results_kdro/"):
+         experiment_dir="./misdro/results_kdro/ncert/"):
     
     p = 1  # numbers of unknown parameters
     dim_theta = 1 # dimension of unknown parameter
@@ -270,7 +270,8 @@ def main(num_replications,
             zetai = np.concatenate([xi, Xcert])
             # if l == -1: # median heuristic
             l = np.sqrt((1/2)*np.median(distance.cdist(zetai, zetai, 'sqeuclidean')))
-            K = k_jax_sym(zetai, zetai, l)
+            # K = k_jax_sym(zetai, zetai, l)
+            K = k_jax(zetai, zetai, l)
             K_decomp = mat_decomp_jax(K)
             # kdro_class = KdroJointEpsBall_Cvxpy(dim_theta, newsvendor_cost_cvxpy, xi, Xcert, K)
             # n_samples = num_posterior_samples*num_likelihood_samples
@@ -282,8 +283,9 @@ def main(num_replications,
             thetas_list = []
             for eps in EPSILON_SET:
                 problem.param_dict["epsilon"].value = eps
-                problem.solve(cp.MOSEK, verbose=True, ignore_dpp=ignore_dpp)  #solver=cp.MOSEK cp.ECOS_BB cp.GUROBI, , ignore_dpp=ignore_dpp
+                problem.solve(cp.MOSEK, verbose=False, ignore_dpp=ignore_dpp)  #solver=cp.MOSEK cp.ECOS_BB cp.GUROBI, , ignore_dpp=ignore_dpp
                 thetas_list.append(problem.var_dict["theta"].value)
+                # print(problem.var_dict["theta"].value)
             # thetas_list = optimise(newsvendor_cost_cvxpy, 
             #                         xi.reshape((num_posterior_samples*num_likelihood_samples,1)), 
             #                         n_certify, lengthscale, dim_theta)
@@ -323,16 +325,16 @@ def main(num_replications,
         "solve_time": times["solve_time"],
         "epsilon": eps
         })
-        df.to_csv(experiment_dir + f"kdro_cont_normal_N400_{eps}.csv", index=False)
+        df.to_csv(experiment_dir + f"kdro_cont_exp_N25_ncert_100_{eps}.csv", index=False)
     
 if __name__ == "__main__":
     num_replications = 100
     num_observations = 20
     num_test_observations = 20
-    num_likelihood_samples = 20
+    num_likelihood_samples = 5
     contamination = 0.1
-    num_posterior_samples = 20
-    n_certify = 20
+    num_posterior_samples = 5
+    n_certify = 100
             
     main(num_replications, 
         num_observations, 
