@@ -20,6 +20,7 @@ def sample_npl(
     inference: str,
     posterior: str,
     num_posterior_samples: int,
+    seed: int,
     lengthscale: float = -1.0,
     generator: Optional[np.random.Generator] = None,
     p: int = 1,
@@ -51,6 +52,7 @@ def sample_npl(
         p,
         m,
         model,
+        seed,
         l=lengthscale,
         loss_fn=posterior,
     )
@@ -62,7 +64,7 @@ def sample_npl(
 class Npl:
     """This class contains functions to perform NPL inference (for alpha = 0 in the DP prior) for the Exponential distribution model."""
 
-    def __init__(self, X, B, p, m, model, l=-1, loss_fn="npl_wlb"):
+    def __init__(self, X, B, p, m, model, seed, l=-1, loss_fn="npl_wlb"):
         """
         Args:
             X: Data set
