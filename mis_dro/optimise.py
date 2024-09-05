@@ -68,3 +68,69 @@ def get_kl_bdro_problem(
     ] + [decision_objective(x, xi[i]) <= t[i] for i in range(num_posterior_samples)]
 
     return cp.Problem(bdro_obj, constraints)
+
+class KdroJointEpsBall_Cvxpy():
+    '''
+    BAS-DRO problem with the MMD as a KDRO problem in CVXPY 
+    '''
+    def __init__(self, dim_theta, loss_call): 
+        '''
+        #####
+        Adjusted from https://github.com/jj-zhu/kdro/blob/main/kdro/kdro.py
+        #####
+        dim_theta: the dimension of theta (parameter to be optimized)
+
+        loss_call: a callable (function) 
+            (theta, xcert) |-> loss value
+        '''
+        assert dim_theta > 0 
+
+        self.dim_theta = dim_theta
+        self.loss_call = loss_call
+
+    def get_problem(self, n_sample, num_certify_samples):
+        '''
+        Get the optimisation problem in CVXPY
+        '''
+        n_certify = num_certify_samples
+        K = cp.Parameter((n_sample+n_certify, n_sample+n_certify), name="K")
+        K_decomposed = cp.Parameter((n_sample+n_certify, n_sample+n_certify), name="K_decomposed")
+        epsilon = cp.Parameter(nonneg=True, name="epsilon")
+        Xobs = cp.Parameter((n_sample,1), name="Xobs")
+        Xcert = cp.Parameter((n_certify,1), name="Xcert")
+        
+        # All variables to be optimized
+        theta = cp.Variable(self.dim_theta, name="theta")
+
+        # f0 = a bias term as part of the RKHS function. A scalar
+        f0 = cp.Variable()
+
+        # Beta is the vector of coefficients of the dual RKHS function.
+        beta = cp.Variable(n_sample+n_certify)
+
+        # function values at the kernel_points
+        fvals = K @ beta
+
+        # List of constraints for cvxpy
+        constraints = []
+        loss_call = self.loss_call
+        # always certify the observations
+        for i in range(n_sample):
+            constraints += [loss_call(theta, Xobs[i]) 
+            <= f0 + fvals[i] ]
+
+        # certify the certifying points
+        for i in range(n_certify):
+            xcert_i = Xcert[i]
+            constraints += [loss_call(theta, xcert_i) <= f0 +
+            fvals[i+n_sample]]
+        
+        emp = f0 + cp.sum(fvals[:n_sample]) / n_sample
+        rkhs_norm = cp.norm(beta.T @ K_decomposed) # pass matdecomp directly
+        reg_term = epsilon * rkhs_norm
+
+        # objective function
+        obj = emp + reg_term
+        opt = cp.Problem(cp.Minimize(obj), constraints)
+        
+        return opt
