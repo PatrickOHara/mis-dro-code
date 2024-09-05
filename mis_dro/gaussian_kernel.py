@@ -31,7 +31,7 @@ def k_jax(x,y,l):
     return K
 
 def k_jax_sym(x, y, l):
-    #TODO with vmap insteaf of for loop
+    #TODO not working properly! Fix it
     n = x.shape[0]
     K = jnp.zeros((n, n))
     
