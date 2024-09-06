@@ -163,9 +163,9 @@ def main(num_replications,
          n_certify, 
          lengthscale=-1, 
          posterior='bayes',  # mmd bayes
-         algorithm='bayesian_dro',     # bayesian_dro kdro_exp_mmd
+         algorithm='mmd_dro',     # bayesian_dro kdro_exp_mmd mmd_dro
          dgp="contaminated_exp",
-         experiment_dir="./misdro/results_kdro/n100/"):
+         experiment_dir="./misdro/results_kdro/"):
     
     p = 1  # numbers of unknown parameters
     dim_theta = 1 # dimension of unknown parameter
@@ -290,6 +290,33 @@ def main(num_replications,
             #                         xi.reshape((num_posterior_samples*num_likelihood_samples,1)), 
             #                         n_certify, lengthscale, dim_theta)
             solutions[j,:] = np.asarray(thetas_list).flatten()
+        elif algorithm == "mmd-dro":
+            xi = data.reshape((num_observations,1))
+            _, dim_x = xi.shape
+            Xcert = np.random.uniform(np.min(xi), np.max(xi), size=[n_certify,dim_x])
+            zetai = np.concatenate([xi, Xcert])
+            # if l == -1: # median heuristic
+            l = np.sqrt((1/2)*np.median(distance.cdist(zetai, zetai, 'sqeuclidean')))
+            # K = k_jax_sym(zetai, zetai, l)
+            K = k_jax(zetai, zetai, l)
+            K_decomp = mat_decomp_jax(K)
+            # kdro_class = KdroJointEpsBall_Cvxpy(dim_theta, newsvendor_cost_cvxpy, xi, Xcert, K)
+            # n_samples = num_posterior_samples*num_likelihood_samples
+            # problem = kdro_class.get_problem(n_samples, n_certify)
+            problem.param_dict["Xobs"].value = xi
+            problem.param_dict["Xcert"].value = Xcert
+            problem.param_dict["K"].value = np.asarray(K)
+            problem.param_dict["K_decomposed"].value = np.asarray(K_decomp)
+            thetas_list = []
+            for eps in EPSILON_SET:
+                problem.param_dict["epsilon"].value = eps
+                problem.solve(cp.MOSEK, verbose=False, ignore_dpp=ignore_dpp)  #solver=cp.MOSEK cp.ECOS_BB cp.GUROBI, , ignore_dpp=ignore_dpp
+                thetas_list.append(problem.var_dict["theta"].value)
+                # print(problem.var_dict["theta"].value)
+            # thetas_list = optimise(newsvendor_cost_cvxpy, 
+            #                         xi.reshape((num_posterior_samples*num_likelihood_samples,1)), 
+            #                         n_certify, lengthscale, dim_theta)
+            solutions[j,:] = np.asarray(thetas_list).flatten()
         else:
             solutions[j,:] = 0
             raise ValueError("Please choose a valid algorithm")
@@ -325,16 +352,16 @@ def main(num_replications,
         "solve_time": times["solve_time"],
         "epsilon": eps
         })
-        df.to_csv(experiment_dir + f"bdro_exp_N100_ncert_100_{eps}.csv", index=False)
+        df.to_csv(experiment_dir + f"mmd_dro_exp_N100_ncert_20_{eps}.csv", index=False)
     
 if __name__ == "__main__":
     num_replications = 100
-    num_observations = 100
+    num_observations = 20
     num_test_observations = 20
     num_likelihood_samples = 10
     contamination = 0.1
     num_posterior_samples = 10
-    n_certify = 100
+    n_certify = 20
             
     main(num_replications, 
         num_observations, 
