@@ -69,9 +69,9 @@ def get_kl_bdro_problem(
 
     return cp.Problem(bdro_obj, constraints)
 
-class KdroJointEpsBall_Cvxpy():
+class DRO_BAS_MMD():
     '''
-    BAS-DRO problem with the MMD as a KDRO problem in CVXPY 
+    DRO-BAS problem with the MMD as a KDRO problem in CVXPY 
     '''
     def __init__(self, dim_theta, loss_call): 
         '''

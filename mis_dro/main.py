@@ -32,7 +32,7 @@ from .experiments import ExperimentName, get_experiment
 from .likelihood import sample_likelihood
 from .newsvendor import newsvendor_cost_cvxpy
 from .npl import sample_npl
-from .optimise import get_kl_bdro_problem, KdroJointEpsBall_Cvxpy
+from .optimise import get_kl_bdro_problem, DRO_BAS_MMD
 from .gaussian_kernel import *
 
 app = typer.Typer(name="misdro")
@@ -174,7 +174,7 @@ def run(
         )
     elif algorithm == "kdro":
         dim_theta = 1
-        kdro_class = KdroJointEpsBall_Cvxpy(dim_theta, newsvendor_cost_cvxpy)
+        kdro_class = DRO_BAS_MMD(dim_theta, newsvendor_cost_cvxpy)
         n_samples = num_posterior_samples*num_likelihood_samples
         problem = kdro_class.get_problem(n_samples, num_certify_points)
 
