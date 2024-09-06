@@ -19,7 +19,7 @@ from bayesian_dro.Bayesian_DRO_continuous import (
 from mis_dro.constants import *
 from mis_dro.dataset import data_generation_outliers, data_generation_gamma, contaminated_normal
 from mis_dro.npl import Npl
-from mis_dro.newsvendor import newsvendor_cost, newsvendor_cost_cvxpy
+from mis_dro.newsvendor import *
 from mis_dro.models import ExponentialModel
 from mis_dro.gaussian_kernel import *
 from bayesian_dro.Bayesian_DRO_continuous import EPSILON_SET
@@ -162,10 +162,10 @@ def main(num_replications,
          num_posterior_samples, 
          n_certify, 
          lengthscale=-1, 
-         posterior='mmd',  # mmd bayes
-         algorithm='kdro_exp_mmd',     # bayesian_dro kdro_exp_mmd
+         posterior='bayes',  # mmd bayes
+         algorithm='bayesian_dro',     # bayesian_dro kdro_exp_mmd
          dgp="contaminated_exp",
-         experiment_dir="./misdro/results_kdro/ncert/"):
+         experiment_dir="./misdro/results_kdro/n100/"):
     
     p = 1  # numbers of unknown parameters
     dim_theta = 1 # dimension of unknown parameter
@@ -325,15 +325,15 @@ def main(num_replications,
         "solve_time": times["solve_time"],
         "epsilon": eps
         })
-        df.to_csv(experiment_dir + f"kdro_cont_exp_N25_ncert_100_{eps}.csv", index=False)
+        df.to_csv(experiment_dir + f"bdro_exp_N100_ncert_100_{eps}.csv", index=False)
     
 if __name__ == "__main__":
     num_replications = 100
-    num_observations = 20
+    num_observations = 100
     num_test_observations = 20
-    num_likelihood_samples = 5
+    num_likelihood_samples = 10
     contamination = 0.1
-    num_posterior_samples = 5
+    num_posterior_samples = 10
     n_certify = 100
             
     main(num_replications, 
