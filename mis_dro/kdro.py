@@ -179,7 +179,10 @@ def main(num_replications,
     }
     kdro_class = KdroJointEpsBall_Cvxpy(dim_theta, newsvendor_cost_cvxpy)
     n_samples = num_posterior_samples*num_likelihood_samples
-    problem = kdro_class.get_problem(n_samples, n_certify)
+    if algorithm == "kdro_exp_mmd":
+        problem = kdro_class.get_problem(n_samples, n_certify)
+    elif algorithm == "mmd-dro":
+        problem = kdro_class.get_problem(num_observations, n_certify)
     #
     # If the number of parameters is small enough, then use Disciplined Parametrized Programming (DPP)
     # to reduce the compilation time in each replication.
@@ -310,7 +313,8 @@ def main(num_replications,
             thetas_list = []
             for eps in EPSILON_SET:
                 problem.param_dict["epsilon"].value = eps
-                problem.solve(cp.MOSEK, verbose=False, ignore_dpp=ignore_dpp)  #solver=cp.MOSEK cp.ECOS_BB cp.GUROBI, , ignore_dpp=ignore_dpp
+                # MOSEL not working for DRO-MMD - not sure why
+                problem.solve(cp.ECOS_BB, verbose=False, ignore_dpp=ignore_dpp)  #solver=cp.MOSEK cp.ECOS_BB cp.GUROBI, , ignore_dpp=ignore_dpp
                 thetas_list.append(problem.var_dict["theta"].value)
                 # print(problem.var_dict["theta"].value)
             # thetas_list = optimise(newsvendor_cost_cvxpy, 
