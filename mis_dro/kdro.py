@@ -163,7 +163,7 @@ def main(num_replications,
          n_certify, 
          lengthscale=-1, 
          posterior='bayes',  # mmd bayes
-         algorithm='mmd_dro',     # bayesian_dro kdro_exp_mmd mmd_dro
+         algorithm='mmd-dro',     # bayesian_dro kdro_exp_mmd mmd_dro
          dgp="contaminated_exp",
          experiment_dir="./misdro/results_kdro/"):
     
