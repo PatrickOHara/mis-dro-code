@@ -163,9 +163,9 @@ def main(num_replications,
          n_certify, 
          lengthscale=-1, 
          posterior='bayes',  # mmd bayes
-         algorithm='mmd-dro',     # bayesian_dro kdro_exp_mmd mmd_dro
+         algorithm='bayesian_dro',     # bayesian_dro kdro_exp_mmd mmd_dro
          dgp="contaminated_exp",
-         experiment_dir="./misdro/results_kdro/"):
+         experiment_dir="./misdro/results_kdro/n100/"):
     
     p = 1  # numbers of unknown parameters
     dim_theta = 1 # dimension of unknown parameter
@@ -181,16 +181,21 @@ def main(num_replications,
     n_samples = num_posterior_samples*num_likelihood_samples
     if algorithm == "kdro_exp_mmd":
         problem = kdro_class.get_problem(n_samples, n_certify)
-    elif algorithm == "mmd-dro":
+        ignore_dpp = False
+        n_parameters = np.sum(np.prod(param.shape) for param in problem.parameters())
+        if n_parameters >= cp.settings.PARAM_THRESHOLD:
+            ignore_dpp = True
+    elif algorithm == "mmd_dro":
         problem = kdro_class.get_problem(num_observations, n_certify)
+        ignore_dpp = False
+        n_parameters = np.sum(np.prod(param.shape) for param in problem.parameters())
+        if n_parameters >= cp.settings.PARAM_THRESHOLD:
+            ignore_dpp = True
     #
     # If the number of parameters is small enough, then use Disciplined Parametrized Programming (DPP)
     # to reduce the compilation time in each replication.
     # However, a large number of parameters uses an enormous amout of RAM in the current cvxpy implementation.
-    ignore_dpp = False
-    n_parameters = np.sum(np.prod(param.shape) for param in problem.parameters())
-    if n_parameters >= cp.settings.PARAM_THRESHOLD:
-        ignore_dpp = True
+    
         
     for j in range(num_replications):
         # generate dataset
@@ -293,7 +298,7 @@ def main(num_replications,
             #                         xi.reshape((num_posterior_samples*num_likelihood_samples,1)), 
             #                         n_certify, lengthscale, dim_theta)
             solutions[j,:] = np.asarray(thetas_list).flatten()
-        elif algorithm == "mmd-dro":
+        elif algorithm == "mmd_dro":
             xi = data.reshape((num_observations,1))
             _, dim_x = xi.shape
             Xcert = np.random.uniform(np.min(xi), np.max(xi), size=[n_certify,dim_x])
@@ -356,16 +361,16 @@ def main(num_replications,
         "solve_time": times["solve_time"],
         "epsilon": eps
         })
-        df.to_csv(experiment_dir + f"mmd_dro_exp_N100_ncert_20_{eps}.csv", index=False)
+        df.to_csv(experiment_dir + f"bdro_cont_exp_N100_ncert_200_cont_0.2_{eps}.csv", index=False)
     
 if __name__ == "__main__":
     num_replications = 100
     num_observations = 20
     num_test_observations = 20
     num_likelihood_samples = 10
-    contamination = 0.1
+    contamination = 0.2
     num_posterior_samples = 10
-    n_certify = 20
+    n_certify = 200
             
     main(num_replications, 
         num_observations, 
