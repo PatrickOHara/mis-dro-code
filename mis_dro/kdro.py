@@ -162,8 +162,8 @@ def main(num_replications,
          num_posterior_samples, 
          n_certify, 
          lengthscale=-1, 
-         posterior='bayes',  # mmd bayes
-         algorithm='bayesian_dro',     # bayesian_dro kdro_exp_mmd mmd_dro
+         posterior='mmd',  # mmd bayes
+         algorithm='kdro_exp_mmd',     # bayesian_dro kdro_exp_mmd mmd_dro
          dgp="contaminated_exp",
          experiment_dir="./misdro/results_kdro/n100/"):
     
@@ -361,15 +361,15 @@ def main(num_replications,
         "solve_time": times["solve_time"],
         "epsilon": eps
         })
-        df.to_csv(experiment_dir + f"bdro_cont_exp_N100_ncert_200_cont_0.2_{eps}.csv", index=False)
+        df.to_csv(experiment_dir + f"kdro_cont_exp_N400_ncert_200_cont_0.2_{eps}.csv", index=False)
     
 if __name__ == "__main__":
     num_replications = 100
     num_observations = 20
     num_test_observations = 20
-    num_likelihood_samples = 10
+    num_likelihood_samples = 20
     contamination = 0.2
-    num_posterior_samples = 10
+    num_posterior_samples = 20
     n_certify = 200
             
     main(num_replications, 
