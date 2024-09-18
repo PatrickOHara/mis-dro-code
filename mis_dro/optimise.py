@@ -99,7 +99,7 @@ class DRO_BAS_MMD():
         Xobs = cp.Parameter((n_sample,1), name="Xobs")
         Xcert = cp.Parameter((n_certify,1), name="Xcert")
         
-        # All variables to be optimized
+        # theta is the decision variable
         theta = cp.Variable(self.dim_theta, name="theta")
 
         # f0 = a bias term as part of the RKHS function. A scalar
@@ -126,7 +126,7 @@ class DRO_BAS_MMD():
             fvals[i+n_sample]]
         
         emp = f0 + cp.sum(fvals[:n_sample]) / n_sample
-        rkhs_norm = cp.norm(beta.T @ K_decomposed) # pass matdecomp directly
+        rkhs_norm = cp.norm(beta.T @ K_decomposed) # pass decomposed kernel directly
         reg_term = epsilon * rkhs_norm
 
         # objective function

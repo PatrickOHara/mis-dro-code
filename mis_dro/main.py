@@ -172,16 +172,19 @@ def run(
         problem = get_kl_bdro_problem(
             newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples
         )
-    elif algorithm == "kdro":
+    elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
         dim_theta = 1
         kdro_class = DRO_BAS_MMD(dim_theta, newsvendor_cost_cvxpy)
-        n_samples = num_posterior_samples*num_likelihood_samples
+        if algorithm == "dro_bas_mmd":
+            n_samples = num_posterior_samples*num_likelihood_samples
+        elif algorithm == "empirical_mmd":
+            n_samples = num_observations
         problem = kdro_class.get_problem(n_samples, num_certify_points)
 
     # If the number of parameters is small enough, then use Disciplined Parametrized Programming (DPP)
     # to reduce the compilation time in each replication.
     # However, a large number of parameters uses an enormous amout of RAM in the current cvxpy implementation.
-    if algorithm in ("kl_bdro", "our_kl_bdro", "kdro"):
+    if algorithm in ("kl_bdro", "our_kl_bdro", "dro_bas_mmd", "empirical_mmd"):
         ignore_dpp = False
         n_parameters = np.sum(np.prod(param.shape) for param in problem.parameters())
         if n_parameters >= cp.settings.PARAM_THRESHOLD:
@@ -260,10 +263,13 @@ def run(
             solutions[j] = problem.var_dict["x"].value
             times["solve_time"].append(problem.solver_stats.solve_time)
             times["setup_time"].append(problem.solver_stats.setup_time)
-        elif algorithm == "kdro":
-            xi = xi.reshape((num_likelihood_samples*num_posterior_samples,1))
+        elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
+            if algorithm == "dro_bas_mmd":
+                xi = xi.reshape((num_likelihood_samples*num_posterior_samples,1))
+            elif algorithm == "empirical_mmd":
+                xi = data.reshape((num_observations,1))
             _, dim_x = xi.shape
-            Xcert = np.random.uniform(np.min(xi), np.max(xi), size=[n_certify,dim_x])
+            Xcert = np.random.uniform(np.min(xi), np.max(xi), size=[num_certify_points,dim_x])
             zetai = np.concatenate([xi, Xcert])
             l = np.sqrt((1/2)*np.median(distance.cdist(zetai, zetai, 'sqeuclidean')))
             K = k_jax(zetai, zetai, l)
