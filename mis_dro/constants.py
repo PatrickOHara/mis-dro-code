@@ -9,6 +9,13 @@ NUM_REPLICATIONS = 200  # num times to repeat for loop
 MAX_PARAMS_OOM = 1000   # if the number of params of a cvxpy exceeds this number, we might go out-of-memory
 
 BAS_DRO_EPSILON_SET = [
+    0.001,
+    0.002,
+    0.005,
+    0.01,
+    0.02,
+    0.03,
+    0.04,
     0.05,
     0.06,
     0.07,

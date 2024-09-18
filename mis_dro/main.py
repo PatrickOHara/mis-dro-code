@@ -15,7 +15,7 @@ from bayesian_dro.Bayesian_DRO_continuous import main_Bayesian_DRO
 from .bayes_conjugates import (
     sample_posterior,
     default_prior_params,
-    get_kl_bdro_constant,
+    get_log_partition_constant,
     get_posterior_params,
     derive_analytical_posterior_params,
 )
@@ -151,7 +151,7 @@ def run(
     if uuid:
         print(uuid)
     print("DGP:", dgp, " - ALGORITHM:", algorithm, " - NUM LIKELIHOOD SAMPLES:", num_likelihood_samples, " - POSTERIOR:", posterior)
-    if algorithm in ("kl_bdro", "our_kl_bdro"):
+    if algorithm in ("kl_bdro", "kl_dro_bas"):
         problem = get_kl_bdro_problem(
             newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples
         )
@@ -164,7 +164,7 @@ def run(
     # to reduce the compilation time in each replication.
     # However, a large number of parameters uses an enormous amount of RAM in the current cvxpy implementation.
     ignore_dpp = False
-    if algorithm in ("kl_bdro", "our_kl_bdro", "kdro"):
+    if algorithm in ("kl_bdro", "kl_dro_bas", "kdro"):
         n_parameters = np.sum(np.prod(param.shape) for param in problem.parameters())
         # NOTE whilst BAS-DRO can handle at least 5000 params, BDRO cannot.
         # So, for a fair comparison, we turn off DPP for both BAS-DRO and BDRO.
@@ -173,14 +173,6 @@ def run(
             ignore_dpp = True
             njobs = 1
 
-    # BDRO n_parameters ~ >= 900  -> OOM
-    # BAS-DRO n_parameters < 10,000 -> still good
-    # n_parameters = 2500 -> both BDRO and BAS-DRO, we turn off dpp and njobs = 1
-
-    # on PARROT, we run n_parameters <= 900
-    # on PARROT, we run n_parameters >=2500, then turn off dpp for everything
-
-    # DPP is good 
     params = {
         "algorithm": algorithm,
         "contamination": contamination,
@@ -265,13 +257,13 @@ def run_replication(
 
     # 2. sample from the posterior
     posterior_start = datetime.now()
-    kl_bdro_constant = 0.0
+    log_partition_constant = 0.0
     if inference == "bayes":
         theta_prior = default_prior_params(posterior)
         theta_posterior = get_posterior_params(posterior, data, theta_prior)
-        if algorithm == "our_kl_bdro":
+        if algorithm == "kl_dro_bas":
             assert num_posterior_samples == 1
-            kl_bdro_constant = get_kl_bdro_constant(posterior, theta_posterior)
+            log_partition_constant = get_log_partition_constant(posterior, theta_posterior)
             theta_sample = derive_analytical_posterior_params(
                 posterior, theta_posterior
             )
@@ -293,8 +285,8 @@ def run_replication(
         )
     else:
         raise ValueError(f"Inference procedure '{inference}' is not supported.")
-    assert kl_bdro_constant >= 0
-    # assert kl_bdro_constant < epsilon
+    assert log_partition_constant >= 0
+    # assert log_partition_constant < epsilon
     posterior_time = (datetime.now() - posterior_start).total_seconds()
 
     # 3. sample from the likelihood
@@ -311,15 +303,15 @@ def run_replication(
     # 4. run the chosen DRO algorithm
     solve_start = datetime.now()
     solution = np.nan
-    if algorithm in ("kl_bdro", "our_kl_bdro"):
-        if epsilon - kl_bdro_constant < 0:
+    if algorithm in ("kl_bdro", "kl_dro_bas"):
+        if epsilon - log_partition_constant < 0:
             # NOTE the optimisation problem is unbounded below
             solution = np.inf
             solve_time = 0.0
             setup_time = 0.0
         else:
             # set parameters then solve
-            problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon - kl_bdro_constant])
+            problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon - log_partition_constant])
             problem.param_dict["xi"].value = xi
             # NOTE the MOSEK 'accept_unknown' argument is needed due to https://github.com/cvxpy/cvxpy/pull/2117
             problem.solve(solver=cp.MOSEK, verbose=verbose, ignore_dpp=ignore_dpp, accept_unknown=True)

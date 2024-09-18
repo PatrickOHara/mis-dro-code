@@ -97,7 +97,7 @@ def sample_posterior(
         raise NotImplementedError(f"Posterior '{posterior}' is not implemented")
 
 
-def get_kl_bdro_constant(posterior: str, posterior_params: list) -> float:
+def get_log_partition_constant(posterior: str, posterior_params: list) -> float:
     """Given the posterior params, return the optimization constant for Bayesian DRO"""
     if posterior == "gamma":
         alpha_posterior, _ = posterior_params
@@ -106,7 +106,7 @@ def get_kl_bdro_constant(posterior: str, posterior_params: list) -> float:
         _, kappa_posterior, alpha_posterior, _ = posterior_params
         return get_normal_gamma_constant(alpha_posterior, kappa_posterior)
     else:
-        raise NotImplementedError(f"get_kl_bdro_constant not implemented for posterior {posterior}")
+        raise NotImplementedError(f"get_log_partition_constant not implemented for posterior {posterior}")
 
 
 def get_normal_gamma_constant(alpha: int, kappa: float) -> float:
