@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#SBATCH --job-name=lse-comp # Job name for tracking
+#SBATCH --job-name=mmd # Job name for tracking
 #SBATCH --partition=cpu-batch  # Partition you wish to use (see above for list)
 #SBATCH --cpus-per-task=40     # Number of CPU threads used by your job, set this upto 40 as required.
 #SBATCH --mem=60000            # 60GB RAM
@@ -12,4 +12,4 @@
 #SBATCH --error=joboutput_%j.err  # Standard error from your job
 
 ## Execute your program(s) ##
-srun python /dcs/pg23/u1604520/mis-dro-code/bayesian_dro/Bayesian_DRO_continuous.py
+srun python /dcs/pg23/u1604520/mis-dro-code/mis_dro/kdro.py

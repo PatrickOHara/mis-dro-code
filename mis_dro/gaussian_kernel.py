@@ -2,9 +2,10 @@
 
 import numpy as np
 from jax import numpy as jnp
-from jax import vmap
+from jax import vmap, lax
 import scipy.spatial.distance as distance
 from scipy import stats
+from sklearn.kernel_approximation import RBFSampler
 
 
 def k(x, y, l):
@@ -34,6 +35,12 @@ def k_jax(x, y, l):
 
     return K
 
+def k_fourier(x,l, seed):
+    g = 1 / (2 * l**2)
+    rbf_feature = RBFSampler(gamma=g, random_state=seed)
+    X_features = rbf_feature.fit_transform(x)
+    K = np.dot(X_features, X_features.T)
+    return K
 
 def k_comp(x, y):
     """Composition of Gaussian kernels with different lengthscale parameters"""
@@ -48,3 +55,18 @@ def k_comp(x, y):
         k_gaus += k_jax(x, y, l)
 
     return k_gaus
+
+def mat_decomp_jax(K):
+    """Function for matrix decomposition"""
+    rank = jnp.linalg.matrix_rank(K)
+    # Check if the matrix is singular
+    is_singular = rank < min(K.shape)
+    if is_singular:
+        # print('warning, Gram matrix K is singular')
+        d, v = jnp.linalg.eigh(K) #L == U*diag(d)*U'. the scipy function forces real eigs
+        d = jnp.where(d < 0, 0, d) # get rid of small eigs
+        L = v @ jnp.diag(jnp.sqrt(d))
+    else:
+        L = lax.linalg.cholesky(K)
+
+    return L

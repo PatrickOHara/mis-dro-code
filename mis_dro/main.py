@@ -25,13 +25,15 @@ from .constants import (
     NUM_POSTERIOR_SAMPLES,
     NUM_REPLICATIONS,
     NUM_TEST_OBSERVATIONS,
+    NUM_CERTIFY
 )
 from .dataset import sample_dgp
 from .experiments import ExperimentName, get_experiment
 from .likelihood import sample_likelihood
 from .newsvendor import newsvendor_cost_cvxpy
 from .npl import sample_npl
-from .optimise import get_kl_bdro_problem
+from .optimise import get_kl_bdro_problem, DRO_BAS_MMD
+from .gaussian_kernel import *
 
 app = typer.Typer(name="misdro")
 
@@ -147,6 +149,7 @@ def run(
     num_posterior_samples: int = NUM_POSTERIOR_SAMPLES,
     num_replications: int = NUM_REPLICATIONS,
     num_test_observations: int = NUM_TEST_OBSERVATIONS,
+    num_certify_points: int = NUM_CERTIFY,
     posterior: str = "gamma",
     uuid: str = str(uuid4()),
     verbose: bool = False,
@@ -169,13 +172,19 @@ def run(
         problem = get_kl_bdro_problem(
             newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples
         )
-    elif algorithm == "kdro":
-        raise NotImplementedError("Harita's future code goes here :)")
+    elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
+        dim_theta = 1
+        kdro_class = DRO_BAS_MMD(dim_theta, newsvendor_cost_cvxpy)
+        if algorithm == "dro_bas_mmd":
+            n_samples = num_posterior_samples*num_likelihood_samples
+        elif algorithm == "empirical_mmd":
+            n_samples = num_observations
+        problem = kdro_class.get_problem(n_samples, num_certify_points)
 
     # If the number of parameters is small enough, then use Disciplined Parametrized Programming (DPP)
     # to reduce the compilation time in each replication.
     # However, a large number of parameters uses an enormous amout of RAM in the current cvxpy implementation.
-    if algorithm in ("kl_bdro", "our_kl_bdro", "kdro"):
+    if algorithm in ("kl_bdro", "our_kl_bdro", "dro_bas_mmd", "empirical_mmd"):
         ignore_dpp = False
         n_parameters = np.sum(np.prod(param.shape) for param in problem.parameters())
         if n_parameters >= cp.settings.PARAM_THRESHOLD:
@@ -217,14 +226,12 @@ def run(
             theta_sample = sample_npl(
                 data,
                 inference,
-                posterior,
+                likelihood,
                 num_posterior_samples,
+                seed=j,
                 lengthscale=lengthscale,
                 generator=generator,
             )
-        else:
-            raise ValueError(f"Inference procedure '{inference}' is not supported.")
-        assert kl_bdro_constant >= 0
         times["posterior_time"].append(
             (datetime.now() - posterior_start).total_seconds()
         )
@@ -253,8 +260,26 @@ def run(
             solutions[j] = problem.var_dict["x"].value
             times["solve_time"].append(problem.solver_stats.solve_time)
             times["setup_time"].append(problem.solver_stats.setup_time)
-        elif algorithm == "kdro":
-            raise NotImplementedError("Harita's future code goes here :)")
+        elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
+            if algorithm == "dro_bas_mmd":
+                xi = xi.reshape((num_likelihood_samples*num_posterior_samples,1))
+            elif algorithm == "empirical_mmd":
+                xi = data.reshape((num_observations,1))
+            _, dim_x = xi.shape
+            Xcert = np.random.uniform(np.min(xi), np.max(xi), size=[num_certify_points,dim_x])
+            zetai = np.concatenate([xi, Xcert])
+            l = np.sqrt((1/2)*np.median(distance.cdist(zetai, zetai, 'sqeuclidean')))
+            K = k_jax(zetai, zetai, l)
+            K_decomp = mat_decomp_jax(K)
+            problem.param_dict["Xobs"].value = xi
+            problem.param_dict["Xcert"].value = Xcert
+            problem.param_dict["K"].value = np.asarray(K)
+            problem.param_dict["K_decomposed"].value = np.asarray(K_decomp)
+            problem.param_dict["epsilon"].value = np.array([epsilon])
+            problem.solve(cp.MOSEK, verbose=False, ignore_dpp=ignore_dpp)
+            solutions[j] = problem.var_dict["theta"].value
+            times["solve_time"].append(problem.solver_stats.solve_time)
+            times["setup_time"].append(problem.solver_stats.setup_time)
         elif algorithm == "bdro_grid_search":
             solutions[j] = main_Bayesian_DRO(xi, epsilon)
             times["solve_time"].append((datetime.now() - solve_start).total_seconds())
