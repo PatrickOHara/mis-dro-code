@@ -35,18 +35,6 @@ def k_jax(x, y, l):
 
     return K
 
-def k_jax_sym(x, y, l):
-    #TODO not working properly! Fix it
-    n = x.shape[0]
-    K = jnp.zeros((n, n))
-    
-    for i in range(n):
-        for j in range(i, n):
-            K = K.at[i, j].set(rbf_kernel(x, y, l))
-            K = K.at[j, i].set(K[i, j])
-    
-    return K
-
 def k_fourier(x,l, seed):
     g = 1 / (2 * l**2)
     rbf_feature = RBFSampler(gamma=g, random_state=seed)
