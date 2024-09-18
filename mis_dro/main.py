@@ -346,6 +346,7 @@ def run_replication(
         "posterior_time": posterior_time,
         "solve_time": solve_time,
         "setup_time": setup_time,
+        "log_partition_constant": log_partition_constant,
     }
 
 if __name__ == "__main__":
