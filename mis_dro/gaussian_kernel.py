@@ -5,6 +5,7 @@ from jax import numpy as jnp
 from jax import vmap, lax
 import scipy.spatial.distance as distance
 from scipy import stats
+from sklearn.kernel_approximation import RBFSampler
 
 
 def k(x, y, l):
@@ -46,7 +47,12 @@ def k_jax_sym(x, y, l):
     
     return K
 
-
+def k_fourier(x,l, seed):
+    g = 1 / (2 * l**2)
+    rbf_feature = RBFSampler(gamma=g, random_state=seed)
+    X_features = rbf_feature.fit_transform(x)
+    K = np.dot(X_features, X_features.T)
+    return K
 
 def k_comp(x, y):
     """Composition of Gaussian kernels with different lengthscale parameters"""

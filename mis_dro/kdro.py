@@ -162,10 +162,10 @@ def main(num_replications,
          num_posterior_samples, 
          n_certify, 
          lengthscale=-1, 
-         posterior='mmd',  # mmd bayes
-         algorithm='kdro_exp_mmd',     # bayesian_dro kdro_exp_mmd mmd_dro
+         posterior='bayes',  # mmd bayes
+         algorithm='mmd_dro',     # bayesian_dro kdro_exp_mmd mmd_dro
          dgp="contaminated_exp",
-         experiment_dir="./misdro/results_kdro/n100/"):
+         experiment_dir="./misdro/results_kdro/"):
     
     p = 1  # numbers of unknown parameters
     dim_theta = 1 # dimension of unknown parameter
@@ -279,8 +279,10 @@ def main(num_replications,
             # if l == -1: # median heuristic
             l = np.sqrt((1/2)*np.median(distance.cdist(zetai, zetai, 'sqeuclidean')))
             # K = k_jax_sym(zetai, zetai, l)
-            K = k_jax(zetai, zetai, l)
-            K_decomp = mat_decomp_jax(K)
+            #K = k_jax(zetai, zetai, l)
+            #K_decomp = mat_decomp_jax(K)
+            K = k_fourier(zetai, l, j)
+            K_decomp = matDecomp(K)
             # kdro_class = KdroJointEpsBall_Cvxpy(dim_theta, newsvendor_cost_cvxpy, xi, Xcert, K)
             # n_samples = num_posterior_samples*num_likelihood_samples
             # problem = kdro_class.get_problem(n_samples, n_certify)
@@ -306,8 +308,10 @@ def main(num_replications,
             # if l == -1: # median heuristic
             l = np.sqrt((1/2)*np.median(distance.cdist(zetai, zetai, 'sqeuclidean')))
             # K = k_jax_sym(zetai, zetai, l)
-            K = k_jax(zetai, zetai, l)
-            K_decomp = mat_decomp_jax(K)
+            # K = k_jax(zetai, zetai, l)
+            # K_decomp = mat_decomp_jax(K)
+            K = k_fourier(zetai, l, j)
+            K_decomp = matDecomp(K)
             # kdro_class = KdroJointEpsBall_Cvxpy(dim_theta, newsvendor_cost_cvxpy, xi, Xcert, K)
             # n_samples = num_posterior_samples*num_likelihood_samples
             # problem = kdro_class.get_problem(n_samples, n_certify)
@@ -361,15 +365,15 @@ def main(num_replications,
         "solve_time": times["solve_time"],
         "epsilon": eps
         })
-        df.to_csv(experiment_dir + f"kdro_cont_exp_N400_ncert_200_cont_0.2_{eps}.csv", index=False)
+        df.to_csv(experiment_dir + f"mmd_cont_exp_N900_ncert_200_cont_0.1_{eps}_n100.csv", index=False)
     
 if __name__ == "__main__":
     num_replications = 100
-    num_observations = 20
+    num_observations = 100
     num_test_observations = 20
-    num_likelihood_samples = 20
-    contamination = 0.2
-    num_posterior_samples = 20
+    num_likelihood_samples = 10
+    contamination = 0.1
+    num_posterior_samples = 90
     n_certify = 200
             
     main(num_replications, 
