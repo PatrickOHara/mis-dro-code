@@ -45,44 +45,6 @@ def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
             f"Please add {experiment_name} as a key in the function lookup dictionary"
         ) from e
 
-def exp_bayes_newsvendor() -> List[Dict]:
-    """Compare our Bayesian ambiguity set against Bayesian DRO with exponential likelihood"""
-    experiment = []
-    for n_total_samples_sqrt, algorithm, dgp, epsilon in itertools.product(
-        [10, 20, 30, 50, 100],
-        ["kl_dro_bas", "kl_bdro"],
-        ["exponential", "contaminated_exp", "truncated_normal"],
-        EPSILON_SET,
-    ):
-        if algorithm == "kl_bdro":
-            num_posterior_samples = n_total_samples_sqrt
-            num_likelihood_samples = n_total_samples_sqrt
-        if algorithm == "kl_dro_bas":
-            # we calculate the posterior exactly in closed form!
-            num_likelihood_samples = n_total_samples_sqrt**2  # NOTE temporary experimental value
-            num_posterior_samples = 1
-        contamination = 0.0
-        if dgp == "contaminated_exp":
-            contamination = CONTAMINATION_LEVEL
-        params = {
-            "algorithm": algorithm,
-            "contamination": contamination,
-            "dgp": dgp,
-            "epsilon": epsilon,
-            "inference": "bayes",
-            "lengthscale": -1.0,
-            "likelihood": "exponential",
-            "num_likelihood_samples": num_likelihood_samples,
-            "num_observations": NUM_OBSERVATIONS,
-            "num_posterior_samples": num_posterior_samples,
-            "num_replications": NUM_REPLICATIONS,
-            "num_test_observations": NUM_TEST_OBSERVATIONS,
-            "posterior": "gamma",
-            "uuid": str(uuid4()),  # uniquely identify a run
-        }
-        experiment.append(params)
-    return experiment
-
 def newsvendor_1d() -> List[Dict]:
     """Univariate newsvendor: compare our Bayesian ambiguity set against Bayesian DRO"""
     experiment = []
@@ -120,38 +82,6 @@ def newsvendor_1d() -> List[Dict]:
             "num_replications": NUM_REPLICATIONS,
             "num_test_observations": NUM_TEST_OBSERVATIONS,
             "posterior": posterior,
-            "uuid": str(uuid4()),  # uniquely identify a run
-        }
-        experiment.append(params)
-    return experiment
-
-def newsvendor_1d() -> List[Dict]:
-    """Vary epsilon and compare Bayesian DRO with Bayes/NPL inference"""
-    # iterate over each of the parameters
-    experiment = []
-    for algorithm, dgp, epsilon, inference in itertools.product(
-        ["kl_bdro"],
-        ["exponential", "truncated_normal", "contaminated_exp", "gamma"],
-        EPSILON_SET,
-        ["bayes", "npl_wlb", "npl_mmd"],
-    ):
-        contamination = 0.0
-        if dgp == "contaminated_exp":
-            contamination = CONTAMINATION_LEVEL
-        params = {
-            "algorithm": algorithm,
-            "contamination": contamination,
-            "dgp": dgp,
-            "epsilon": epsilon,
-            "inference": inference,
-            "lengthscale": -1.0,
-            "likelihood": "exponential",
-            "num_likelihood_samples": NUM_LIKELIHOOD_SAMPLES,
-            "num_observations": NUM_OBSERVATIONS,
-            "num_posterior_samples": NUM_POSTERIOR_SAMPLES,
-            "num_replications": NUM_REPLICATIONS,
-            "num_test_observations": NUM_TEST_OBSERVATIONS,
-            "posterior": "gamma",
             "uuid": str(uuid4()),  # uniquely identify a run
         }
         experiment.append(params)
