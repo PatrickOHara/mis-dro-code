@@ -226,10 +226,10 @@ def run(
             theta_sample = sample_npl(
                 data,
                 inference,
-                posterior,
+                likelihood,
                 num_posterior_samples,
                 seed=j,
-                l=lengthscale,
+                lengthscale=lengthscale,
                 generator=generator,
             )
         elif posterior == "bayes":
@@ -281,6 +281,8 @@ def run(
             problem.param_dict["epsilon"].value = np.array([epsilon])
             problem.solve(cp.MOSEK, verbose=False, ignore_dpp=ignore_dpp)
             solutions[j] = problem.var_dict["theta"].value
+            times["solve_time"].append(problem.solver_stats.solve_time)
+            times["setup_time"].append(problem.solver_stats.setup_time)
         elif algorithm == "bdro_grid_search":
             solutions[j] = main_Bayesian_DRO(xi, epsilon)
             times["solve_time"].append((datetime.now() - solve_start).total_seconds())

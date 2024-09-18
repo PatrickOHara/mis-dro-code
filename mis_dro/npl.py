@@ -18,7 +18,7 @@ from .models import ExponentialModel
 def sample_npl(
     data: np.ndarray,
     inference: str,
-    posterior: str,
+    likelihood: str,
     num_posterior_samples: int,
     seed: int,
     lengthscale: float = -1.0,
@@ -29,8 +29,8 @@ def sample_npl(
 
     Args:
         data: Observations sampled from DGP
-        inference: Either 'wll' or 'mmd'
-        posterior: Form of posterior, e.g. 'exponential'
+        inference: Either 'npl_wll' or 'npl_mmd'
+        likelihood: Form of likelihood, e.g. 'exponential'
         num_posterior_samples: Number of times to sample from posterior
         generator: numpy random generator
         p: numbers of unknown parameters
@@ -40,11 +40,11 @@ def sample_npl(
     """
     # NPL posterior sample for theta
     m = data.shape[0]
-    if posterior == "exponential":
+    if likelihood == "exponential":
         model = ExponentialModel(m)
     else:
         raise NotImplementedError(
-            f"Posterior '{posterior}' is not implemented for '{inference}' inference."
+            f"Posterior '{likelihood}' is not implemented for '{inference}' inference."
         )
     npl_toy = Npl(
         data.reshape((data.shape[0], 1)),
@@ -54,7 +54,7 @@ def sample_npl(
         model,
         seed,
         l=lengthscale,
-        loss_fn=posterior,
+        loss_fn=inference,
     )
     npl_toy.draw_samples(random_state=generator)
     theta_sample = npl_toy.sample
@@ -116,7 +116,7 @@ class Npl:
             for i in range(self.B):
                 samples[i, :] = temp[i]
                 self.sample = np.array(samples)
-        elif self.loss_fn == "mmd":
+        elif self.loss_fn == "npl_mmd":
             key = jax.random.PRNGKey(self.seed)
             key, *subkeys = jax.random.split(key, num=self.B+1) # generate B random keys
 
