@@ -1,5 +1,6 @@
 """Data generation and dataset functions"""
 
+from pathlib import Path
 from typing import Optional
 import numpy as np
 from scipy.stats import expon, gamma, norm
@@ -81,3 +82,36 @@ def data_generation_gamma(
     gamma_samples = gamma.rvs(a, size=num_observations)
 
     return gamma_samples
+
+def portfolio_dataset(dgp: str, replication: int, portfolio_dir: Optional[Path]) -> tuple[np.ndarray, np.ndarray]:
+    """Gets the training and test datasets for the porfolio problem.
+    
+    Args:
+        dgp: Data-generating process. Either 'dow30' or 'brownian'.
+        replication: The ID of the quarter.
+
+    Returns:
+        training_data: numpy array of shape (NUM_TRADING_DAYS_IN_YEAR, NUM_STOCKS)
+        test_data: numpy array of shape (NUM_TRADING_DAYS_IN_QUARTER, NUM_STOCKS)
+
+    Notes:
+        The replication is the ID of the quarter.
+        Assume we are given K total quarters and let replciation 0 be Year 1 first quarter.
+        Then replication 2 is Year 1 second quarter, 6 is Year 2 third quarter, etc.
+    """
+    NUM_TRADING_DAYS_IN_YEAR = 0        # NOTE does this change per 
+    NUM_TRADING_DAYS_IN_QUARTER = 0
+    NUM_STOCKS = 30
+    training_data = np.zeros(NUM_TRADING_DAYS_IN_YEAR, NUM_STOCKS)
+    test_data = np.zeros(NUM_TRADING_DAYS_IN_QUARTER, NUM_STOCKS)
+    if dgp == "dow30":
+        # Dow Jones Industrial Average (I think this what we said Dhanush?)
+        # TODO get four quarters of training data and 1 quarter of test dataset using the replication
+        pass
+
+    elif dgp == "brownian":
+        # TODO a synthetic datatset that uses brownian motion - only 10 stocks? keep it small
+        # the replication is used to seed the random number generator
+        pass
+
+    return training_data, test_data

@@ -1,9 +1,9 @@
 """Entrypoint app functions"""
 
-import warnings
 from datetime import datetime
 import json
 from pathlib import Path
+from typing import Optional
 from uuid import uuid4, UUID
 from joblib import Parallel, delayed
 import cvxpy as cp
@@ -28,7 +28,7 @@ from .constants import (
     NUM_TEST_OBSERVATIONS,
     MAX_PARAMS_OOM,
 )
-from .dataset import sample_dgp
+from .dataset import sample_dgp, portfolio_dataset
 from .experiments import ExperimentName, get_experiment
 from .likelihood import sample_likelihood
 from .newsvendor import newsvendor_cost_cvxpy
@@ -236,6 +236,8 @@ def run_replication(
     problem: cp.Problem,
     algorithm: str = "kl_bdro",
     contamination: float = CONTAMINATION_LEVEL,
+    dataset: str = "newsvendor_1d",
+    dataset_dir: Optional[Path] = None,
     dgp: str = "truncated_normal",
     epsilon: float = 1.0,
     ignore_dpp: bool = False,
@@ -252,15 +254,22 @@ def run_replication(
 ):
     """Run a single replication where the seed is given by the replication number"""
     # 1. generate dataset
-    generator = np.random.default_rng(seed=replication)
     dgp_start = datetime.now()
-    # NOTE if contamination is specified, then only contaminate the training samples (not test samples)
-    data = sample_dgp(
-        dgp, num_observations, contamination=contamination, generator=generator
-    )
-    data_eval = sample_dgp(
-        dgp, num_test_observations, contamination=0.0, generator=generator
-    )
+    generator = np.random.default_rng(seed=replication)
+    if dataset in ("newsvendor_1d", "newsvendor_5d"):
+        # NOTE if contamination is specified, then only contaminate the training samples (not test samples)
+        data = sample_dgp(
+            dgp, num_observations, contamination=contamination, generator=generator
+        )
+        data_eval = sample_dgp(
+            dgp, num_test_observations, contamination=0.0, generator=generator
+        )
+    elif dataset == "portfolio":
+        # TODO decide on number of 3-month time windows
+        # TODO load portfolio dataset for 1 year of training data and 3 months of test data
+        # NOTE shape of data (N, D) where N is number of observations (i.e. number of days)
+        # and where D is the number of stocks
+        data, data_eval = portfolio_dataset
     dgp_time = (datetime.now() - dgp_start).total_seconds()
 
     # 2. sample from the posterior
@@ -343,6 +352,11 @@ def run_replication(
         out_of_sample_costs = newsvendor_cost_cvxpy(solution, data_eval).value
         out_of_sample_mean = np.mean(out_of_sample_costs)
         out_of_sample_var = np.var(out_of_sample_costs)
+
+    # TODO calculate the Sharp ratio
+    # TODO caclulate the total return,
+    # TODO the solution should be a vector
+
     return {
         "uuid": uuid,
         "replication": replication,
@@ -354,6 +368,7 @@ def run_replication(
         "posterior_time": posterior_time,
         "solve_time": solve_time,
         "setup_time": setup_time,
+        "sharp_ratio": 0.0,     # TODO add sharp here
     }
 
 if __name__ == "__main__":
