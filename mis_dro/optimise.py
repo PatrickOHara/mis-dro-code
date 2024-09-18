@@ -80,8 +80,10 @@ class DRO_BAS_MMD():
         #####
         dim_theta: the dimension of theta (parameter to be optimized)
 
-        loss_call: a callable (function) 
-            (theta, xcert) |-> loss value
+        loss_call: A callable objective function implemented using cvxpy.
+            The first argument should be a cvxpy variable.
+            The second argument should be a cvxpy parameter representing the certifying points.
+            The return should be a cvxpy expression.
         '''
         assert dim_theta > 0 
 
@@ -91,11 +93,19 @@ class DRO_BAS_MMD():
     def get_problem(self, n_sample, num_certify_samples):
         '''
         Get the optimisation problem in CVXPY
+        
+        Args:
+        n_sample: Number of total samples.
+        num_certify_samples: Number of certifying points for the discretisation of the constraint.
+
+        Returns:
+        problem: A cvxpy Problem object
+        
         '''
         n_certify = num_certify_samples
         K = cp.Parameter((n_sample+n_certify, n_sample+n_certify), name="K")
         K_decomposed = cp.Parameter((n_sample+n_certify, n_sample+n_certify), name="K_decomposed")
-        epsilon = cp.Parameter(nonneg=True, name="epsilon")
+        epsilon = cp.Parameter(1, name="epsilon", nonneg=True)
         Xobs = cp.Parameter((n_sample,1), name="Xobs")
         Xcert = cp.Parameter((n_certify,1), name="Xcert")
         
