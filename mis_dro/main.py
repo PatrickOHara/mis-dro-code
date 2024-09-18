@@ -232,6 +232,9 @@ def run(
                 lengthscale=lengthscale,
                 generator=generator,
             )
+        times["posterior_time"].append(
+            (datetime.now() - posterior_start).total_seconds()
+        )
 
         # 3. sample from the likelihood
         likelihood_start = datetime.now()
