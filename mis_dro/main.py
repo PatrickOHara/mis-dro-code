@@ -232,12 +232,6 @@ def run(
                 lengthscale=lengthscale,
                 generator=generator,
             )
-        elif posterior == "bayes":
-            # standard Bayesian posterior sample for theta
-            theta_sample = theta_generation(data, num_posterior_samples, random_state=generator)
-        times["posterior_time"].append(
-            (datetime.now() - posterior_start).total_seconds()
-        )
 
         # 3. sample from the likelihood
         likelihood_start = datetime.now()
