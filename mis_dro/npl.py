@@ -12,7 +12,7 @@ from jax import numpy as jnp
 from jax import vmap, value_and_grad, jit, config
 from jax.example_libraries import optimizers
 from .gaussian_kernel import k, k_jax
-from .models import ExponentialModel
+from .models import *
 
 
 def sample_npl(
@@ -42,6 +42,11 @@ def sample_npl(
     m = data.shape[0]
     if likelihood == "exponential":
         model = ExponentialModel(m)
+    elif likelihood == "normal":
+        model = univariate_GaussianModel(m)
+    elif likelihood == "multivariate_normal":
+        d = data.shape[1]
+        model = multivariate_GaussianModel(m, d)
     else:
         raise NotImplementedError(
             f"Posterior '{likelihood}' is not implemented for '{inference}' inference."

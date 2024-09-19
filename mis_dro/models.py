@@ -15,3 +15,30 @@ class ExponentialModel:
         )  # Exponential with parameter lambda
 
         return x
+    
+class univariate_GaussianModel:
+    def __init__(self, m):
+        self.m = m
+    
+    def sample(self, theta, key):
+        mu = theta[0]
+        std = theta[1]
+        x = (
+            mu + std*jax.random.normal(key, shape=(self.m,1))
+        )
+        
+        return x
+
+class multivariate_GaussianModel:
+    def __init__(self, m, d):
+        self.m = m
+        self.d = d
+    
+    def sample(self, theta, key):
+        mu, sigma = theta
+        x = (
+            jax.random.multivariate_normal(key, mean = mu, cov = sigma, shape=(self.m,self.d))
+        )
+        
+        return x
+    
