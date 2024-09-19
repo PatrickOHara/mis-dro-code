@@ -26,7 +26,7 @@ from .constants import (
     NUM_POSTERIOR_SAMPLES,
     NUM_REPLICATIONS,
     NUM_TEST_OBSERVATIONS,
-    NUM_CERTIFY
+    NUM_CERTIFY,
     MAX_PARAMS_OOM,
 )
 from .dataset import sample_dgp
@@ -57,6 +57,7 @@ def setup(
         json.dump(experiment, json_file, indent=4)
 
     # get unique DGPs
+    # TODO add groupby inference
     dgp_algorithm_pairs = set()
     for params in experiment:
         dgp_algorithm_pairs.add((params["dgp"], params["algorithm"]))
@@ -190,6 +191,7 @@ def run(
         "inference": inference,
         "lengthscale": lengthscale,
         "likelihood": likelihood,
+        "num_certify_points": num_certify_points,
         "num_likelihood_samples": num_likelihood_samples,
         "num_observations": num_observations,
         "num_posterior_samples": num_posterior_samples,
@@ -242,6 +244,7 @@ def run_replication(
     inference: str = "bayes",
     lengthscale: float = -1.0,
     likelihood: str = "exponential",
+    num_certify_points: int = NUM_CERTIFY,
     num_likelihood_samples: int = NUM_LIKELIHOOD_SAMPLES,
     num_observations: int = NUM_OBSERVATIONS,
     num_posterior_samples: int = NUM_POSTERIOR_SAMPLES,
@@ -287,6 +290,9 @@ def run_replication(
             lengthscale=lengthscale,
             generator=generator,
         )
+    elif inference == "empirical":
+        # empirical does not have a posterior
+        theta_sample = np.nan * np.ones(num_posterior_samples)
     else:
         raise ValueError(f"Inference procedure '{inference}' is not supported.")
     assert log_partition_constant >= 0
@@ -295,13 +301,15 @@ def run_replication(
 
     # 3. sample from the likelihood
     likelihood_start = datetime.now()
-    xi = sample_likelihood(
-        likelihood,
-        posterior,
-        theta_sample,
-        num_likelihood_samples,
-        generator=generator,
-    )
+    if inference == "empirical":
+        xi = data
+    else:
+        xi = sample_likelihood(
+            likelihood,
+            theta_sample,
+            num_likelihood_samples,
+            generator=generator,
+        )
     likelihood_time = (datetime.now() - likelihood_start).total_seconds()
 
     # 4. run the chosen DRO algorithm

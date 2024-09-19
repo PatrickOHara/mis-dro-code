@@ -12,6 +12,7 @@ import numpy as np
 from .constants import (
     BAS_DRO_EPSILON_SET,
     CONTAMINATION_LEVEL,
+    NUM_CERTIFY,
     NUM_LIKELIHOOD_SAMPLES,
     NUM_OBSERVATIONS,
     NUM_POSTERIOR_SAMPLES,
@@ -23,14 +24,16 @@ from .constants import (
 class ExperimentName(StrEnum):
     """Names of experiments"""
 
-    newsvendor_1d = "newsvendor_1d"
+    kl_newsvendor_1d = "kl_newsvendor_1d"
+    mmd_newsvendor_1d = "mmd_newsvendor_1d"
     compare_solve = "compare_solve"
 
 
 def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
     """Returns the experiment associated with the name"""
     function_lookup = {
-        ExperimentName.newsvendor_1d: newsvendor_1d,
+        ExperimentName.kl_newsvendor_1d: kl_newsvendor_1d,
+        ExperimentName.mmd_newsvendor_1d: mmd_newsvendor_1d,
         ExperimentName.compare_solve: compare_solve,
     }
     try:
@@ -40,8 +43,8 @@ def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
             f"Please add {experiment_name} as a key in the function lookup dictionary"
         ) from e
 
-def newsvendor_1d() -> List[Dict]:
-    """Univariate newsvendor: compare our Bayesian ambiguity set against Bayesian DRO"""
+def kl_newsvendor_1d() -> List[Dict]:
+    """KL univariate newsvendor: compare our Bayesian ambiguity set against Bayesian DRO"""
     experiment = []
     for total_model_samples, algorithm, (dgp, likelihood, posterior), epsilon in itertools.product(
         [25, 100, 900, 2500],
@@ -82,6 +85,46 @@ def newsvendor_1d() -> List[Dict]:
         experiment.append(params)
     return experiment
 
+def mmd_newsvendor_1d() -> List[Dict]:
+    """MMD univariate newsvendor: compare our MMD Bayesian ambiguity set against empirical kernel DRO"""
+    experiment = []
+    num_likelihood_samples = 10     # FIXME?
+    num_posterior_samples = 10      # FIXME?
+    # NOTE when using empirical, set likelihood to 'empirical'
+    for (algorithm, dgp, likelihood), epsilon in itertools.product(
+        [
+            ("dro_bas_mmd", "contaminated_exp", "exponential"),     # misspecified
+            ("empirical_mmd", "contaminated_exp", "empirical"),            # empirical
+            ("dro_bas_mmd", "exponential", "exponential"),          # well specified
+            ("empirical_mmd", "exponential", "empirical"),                 # empirical
+        ],
+        BAS_DRO_EPSILON_SET,
+    ):
+        if likelihood == "empirical":
+            inference = "empirical"
+        else:
+            inference = "npl_mmd"
+        if dgp == "contaminated_exp":
+            contamination = CONTAMINATION_LEVEL
+        params = {
+            "algorithm": algorithm,
+            "contamination": contamination,
+            "dgp": dgp,
+            "epsilon": epsilon,
+            "inference": inference,
+            "lengthscale": -1.0,        # FIXME?
+            "likelihood": likelihood,
+            "num_certify_points": NUM_CERTIFY,
+            "num_likelihood_samples": num_likelihood_samples,
+            "num_observations": NUM_OBSERVATIONS,
+            "num_posterior_samples": num_posterior_samples,
+            "num_replications": NUM_REPLICATIONS,
+            "num_test_observations": NUM_TEST_OBSERVATIONS,
+            "posterior": "npl",
+            "uuid": str(uuid4()),  # uniquely identify a run
+        }
+        experiment.append(params)
+    return experiment
 
 def compare_solve() -> List[Dict]:
     """Compares the original grid-search algorithm and cvxpy algorithms"""
