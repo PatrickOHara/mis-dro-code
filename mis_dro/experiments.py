@@ -8,9 +8,11 @@ from enum import StrEnum
 import itertools
 from typing import Dict, List
 from uuid import uuid4
-from bayesian_dro.Bayesian_DRO_continuous import EPSILON_SET
+import numpy as np
 from .constants import (
+    BAS_DRO_EPSILON_SET,
     CONTAMINATION_LEVEL,
+    NUM_CERTIFY,
     NUM_LIKELIHOOD_SAMPLES,
     NUM_OBSERVATIONS,
     NUM_POSTERIOR_SAMPLES,
@@ -22,14 +24,16 @@ from .constants import (
 class ExperimentName(StrEnum):
     """Names of experiments"""
 
-    newsvendor_1d = "newsvendor_1d"
+    kl_newsvendor_1d = "kl_newsvendor_1d"
+    mmd_newsvendor_1d = "mmd_newsvendor_1d"
     compare_solve = "compare_solve"
 
 
 def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
     """Returns the experiment associated with the name"""
     function_lookup = {
-        ExperimentName.newsvendor_1d: newsvendor_1d,
+        ExperimentName.kl_newsvendor_1d: kl_newsvendor_1d,
+        ExperimentName.mmd_newsvendor_1d: mmd_newsvendor_1d,
         ExperimentName.compare_solve: compare_solve,
     }
     try:
@@ -39,18 +43,67 @@ def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
             f"Please add {experiment_name} as a key in the function lookup dictionary"
         ) from e
 
-
-def newsvendor_1d() -> List[Dict]:
-    """Vary epsilon and compare Bayesian DRO with Bayes/NPL inference"""
-    # iterate over each of the parameters
+def kl_newsvendor_1d() -> List[Dict]:
+    """KL univariate newsvendor: compare our Bayesian ambiguity set against Bayesian DRO"""
     experiment = []
-    for algorithm, dgp, epsilon, inference in itertools.product(
-        ["kl_bdro"],
-        ["exponential", "truncated_normal", "contaminated_exp", "gamma"],
-        EPSILON_SET,
-        ["bayes", "npl_wlb", "npl_mmd"],
+    for total_model_samples, algorithm, (dgp, likelihood, posterior), epsilon in itertools.product(
+        [25, 100, 900, 2500],
+        ["kl_dro_bas", "kl_bdro"],
+        [
+            ("normal", "normal", "normal_gamma"),
+            ("truncated_normal", "normal", "normal_gamma"),
+            ("exponential", "exponential", "gamma"),
+            ("contaminated_exp", "exponential", "gamma"),
+        ],
+        BAS_DRO_EPSILON_SET,
     ):
-        contamination = 0.0
+        if algorithm == "kl_bdro":
+            num_posterior_samples = int(np.sqrt(total_model_samples))
+            num_likelihood_samples = int(np.sqrt(total_model_samples))
+        if algorithm == "kl_dro_bas":
+            # we calculate the posterior exactly in closed form!
+            num_likelihood_samples = total_model_samples
+            num_posterior_samples = 1
+        if dgp == "contaminated_exp":
+            contamination = CONTAMINATION_LEVEL
+        params = {
+            "algorithm": algorithm,
+            "contamination": contamination,
+            "dgp": dgp,
+            "epsilon": epsilon,
+            "inference": "bayes",
+            "lengthscale": -1.0,
+            "likelihood": likelihood,
+            "num_likelihood_samples": num_likelihood_samples,
+            "num_observations": NUM_OBSERVATIONS,
+            "num_posterior_samples": num_posterior_samples,
+            "num_replications": NUM_REPLICATIONS,
+            "num_test_observations": NUM_TEST_OBSERVATIONS,
+            "posterior": posterior,
+            "uuid": str(uuid4()),  # uniquely identify a run
+        }
+        experiment.append(params)
+    return experiment
+
+def mmd_newsvendor_1d() -> List[Dict]:
+    """MMD univariate newsvendor: compare our MMD Bayesian ambiguity set against empirical kernel DRO"""
+    experiment = []
+    num_likelihood_samples = 10     # FIXME?
+    num_posterior_samples = 10      # FIXME?
+    # NOTE when using empirical, set likelihood to 'empirical'
+    for (algorithm, dgp, likelihood), epsilon in itertools.product(
+        [
+            ("dro_bas_mmd", "contaminated_exp", "exponential"),     # misspecified
+            ("empirical_mmd", "contaminated_exp", "empirical"),            # empirical
+            ("dro_bas_mmd", "exponential", "exponential"),          # well specified
+            ("empirical_mmd", "exponential", "empirical"),                 # empirical
+        ],
+        BAS_DRO_EPSILON_SET,
+    ):
+        if likelihood == "empirical":
+            inference = "empirical"
+        else:
+            inference = "npl_mmd"
         if dgp == "contaminated_exp":
             contamination = CONTAMINATION_LEVEL
         params = {
@@ -59,33 +112,33 @@ def newsvendor_1d() -> List[Dict]:
             "dgp": dgp,
             "epsilon": epsilon,
             "inference": inference,
-            "lengthscale": -1.0,
-            "likelihood": "exponential",
-            "num_likelihood_samples": NUM_LIKELIHOOD_SAMPLES,
+            "lengthscale": -1.0,        # FIXME?
+            "likelihood": likelihood,
+            "num_certify_points": NUM_CERTIFY,
+            "num_likelihood_samples": num_likelihood_samples,
             "num_observations": NUM_OBSERVATIONS,
-            "num_posterior_samples": NUM_POSTERIOR_SAMPLES,
+            "num_posterior_samples": num_posterior_samples,
             "num_replications": NUM_REPLICATIONS,
             "num_test_observations": NUM_TEST_OBSERVATIONS,
-            "posterior": "gamma",
+            "posterior": "npl",
             "uuid": str(uuid4()),  # uniquely identify a run
         }
         experiment.append(params)
     return experiment
 
-
 def compare_solve() -> List[Dict]:
     """Compares the original grid-search algorithm and cvxpy algorithms"""
     experiment = []
     for algorithm, dgp, epsilon, (posterior, likelihood) in itertools.product(
-        ["kl_bdro", "bdro_grid_search", "our_kl_bdro"],
+        ["kl_bdro", "bdro_grid_search", "kl_dro_bas"],
         ["truncated_normal"],
         [0.001, 0.01, 0.1, 1.0, 10.0, 100.0],
         [("gamma", "exponential"), ("normal_gamma", "normal")],
     ):
         num_posterior_samples = NUM_POSTERIOR_SAMPLES
-        if algorithm == "our_kl_bdro" and posterior != "normal_gamma":
+        if algorithm == "kl_dro_bas" and posterior != "normal_gamma":
             continue  # skip if the posterior doesn't match our algorithm
-        elif algorithm == "our_kl_bdro":
+        elif algorithm == "kl_dro_bas":
             # we calculate the posterior exactly in closed form!
             num_posterior_samples = 1
         params = {

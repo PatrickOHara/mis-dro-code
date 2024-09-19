@@ -8,25 +8,32 @@ import pandas as pd
 class AlgorithmLineStyle(StrEnum):
     """Consistent algorithm line styles"""
 
-    bdro_grid_search = "solid"
-    kl_bdro = "dashed"
-    our_kl_bdro = "dotted"
+    bdro_grid_search = "dashed"
+    kl_bdro = "solid"
+    kl_dro_bas = "dotted"
 
 
 class AlgorithmMarkerStyle(StrEnum):
     """Consistent algorithm marker styles"""
 
-    bdro_grid_search = "o"
+    bdro_grid_search = "*"
     kl_bdro = "x"
-    our_kl_bdro = "*"
+    kl_dro_bas = "o"
+
+class AlgorithmColor(StrEnum):
+    """Colors of algorithm lines"""
+    bdro_grid_search = "orange"
+    kl_bdro = "black"
+    kl_dro_bas = "blue"
+
 
 
 class AlgorithmName(StrEnum):
     """Consistent algorithm line styles"""
 
     bdro_grid_search = "BDRO grid search"
-    kl_bdro = "BDRO optimised"
-    our_kl_bdro = "Our BDRO"
+    kl_bdro = "BDRO"
+    kl_dro_bas = "DRO-BAS"
 
 
 class InferenceLineStyle(StrEnum):
@@ -81,13 +88,14 @@ def algorithm_style(algorithm: str) -> dict[str, str]:
         "marker": AlgorithmMarkerStyle[algorithm],
         "linestyle": AlgorithmLineStyle[algorithm],
         "label": AlgorithmName[algorithm],
-        "color": "black",
+        "color": AlgorithmColor[algorithm],
     }
 
 
 def flexible_figure(
     agg_df: pd.DataFrame,
     plot_type: str,
+    compare_col: str = "inference",
     gb_col: str = "dgp",
     max_epsilon: float = np.inf,
     ncols: int = 2,
@@ -149,8 +157,14 @@ def flexible_figure(
                 assert len(df.index.get_level_values("dgp").unique()) == 1
                 style = algorithm_style(algorithm)
             elif gb_col == "dgp":
-                assert len(df.index.get_level_values("algorithm").unique()) == 1
-                style = inference_style(inference)
+                if compare_col == "inference":
+                    assert len(df.index.get_level_values("algorithm").unique()) == 1
+                    style = inference_style(inference)
+                elif compare_col == "algorithm":
+                    assert len(df.index.get_level_values("inference").unique()) == 1
+                    style = algorithm_style(algorithm)
+                else:
+                    raise NotImplementedError(f"Comparing column '{compare_col}' not supported.")
             else:
                 raise NotImplementedError()
 
@@ -183,6 +197,7 @@ def time_taken_plot(
 def mean_variance_plot(
     axis: mpl.axis.Axis,
     df: pd.DataFrame,
+    is_labelled: bool = True,
     **kwargs,
 ) -> None:
     posterior_var = df["var_cost"]["mean"] + df["mean_cost"]["var"]
@@ -191,13 +206,14 @@ def mean_variance_plot(
     axis.plot(posterior_var, df["mean_cost"]["mean"], **kwargs)
     axis.set_xlabel("out-of-sample variance")
     axis.set_ylabel("out-of-sample mean")
-    epsilon_list = list(df.index.get_level_values("epsilon"))
-    for i, epsilon in enumerate(epsilon_list):
-        if i % 4 == 0:
-            axis.text(
-                posterior_var[:, :, epsilon, :].iloc[0],
-                df["mean_cost"]["mean"][:, :, epsilon, :].iloc[0],
-                epsilon,
-                ha="left",
-                va="bottom",
-            )
+    if is_labelled:
+        epsilon_list = list(df.index.get_level_values("epsilon"))
+        for i, epsilon in enumerate(epsilon_list):
+            if i % 4 == 0:
+                axis.text(
+                    posterior_var[:, :, epsilon, :].iloc[0],
+                    df["mean_cost"]["mean"][:, :, epsilon, :].iloc[0],
+                    epsilon,
+                    ha="left",
+                    va="bottom",
+                )
