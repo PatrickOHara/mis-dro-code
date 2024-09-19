@@ -9,7 +9,6 @@ import itertools
 from typing import Dict, List
 from uuid import uuid4
 import numpy as np
-from bayesian_dro.Bayesian_DRO_continuous import EPSILON_SET
 from .constants import (
     BAS_DRO_EPSILON_SET,
     CONTAMINATION_LEVEL,
@@ -26,8 +25,6 @@ class ExperimentName(StrEnum):
 
     newsvendor_1d = "newsvendor_1d"
     compare_solve = "compare_solve"
-    exp_bayes_newsvendor = "exp_bayes_newsvendor"
-    normal_bayes_newsvendor = "normal_bayes_newsvendor"
 
 
 def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
@@ -35,8 +32,6 @@ def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
     function_lookup = {
         ExperimentName.newsvendor_1d: newsvendor_1d,
         ExperimentName.compare_solve: compare_solve,
-        ExperimentName.exp_bayes_newsvendor: exp_bayes_newsvendor,
-        ExperimentName.normal_bayes_newsvendor: normal_bayes_newsvendor,
     }
     try:
         return function_lookup[experiment_name]()

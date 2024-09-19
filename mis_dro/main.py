@@ -174,8 +174,8 @@ def run(
     if algorithm in ("kl_bdro", "kl_dro_bas", "dro_bas_mmd", "empirical_mmd"):
         ignore_dpp = False
         n_parameters = np.sum(np.prod(param.shape) for param in problem.parameters())
-        # NOTE whilst BAS-DRO can handle at least 5000 params, BDRO cannot.
-        # So, for a fair comparison, we turn off DPP for both BAS-DRO and BDRO.
+        # NOTE whilst DRO-BAS can handle at least 5000 params, BDRO cannot.
+        # So, for a fair comparison, we turn off DPP for both DRO-BAS and BDRO.
         if n_parameters >= cp.settings.PARAM_THRESHOLD:
         # if n_parameters >= 1000:
             ignore_dpp = True

@@ -33,7 +33,7 @@ class AlgorithmName(StrEnum):
 
     bdro_grid_search = "BDRO grid search"
     kl_bdro = "BDRO"
-    kl_dro_bas = "BAS-DRO"
+    kl_dro_bas = "DRO-BAS"
 
 
 class InferenceLineStyle(StrEnum):
