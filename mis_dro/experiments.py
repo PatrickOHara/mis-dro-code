@@ -64,6 +64,7 @@ def kl_newsvendor_1d() -> List[Dict]:
             # we calculate the posterior exactly in closed form!
             num_likelihood_samples = total_model_samples
             num_posterior_samples = 1
+        contamination = 0.0
         if dgp == "contaminated_exp":
             contamination = CONTAMINATION_LEVEL
         params = {
@@ -104,6 +105,7 @@ def mmd_newsvendor_1d() -> List[Dict]:
             inference = "empirical"
         else:
             inference = "npl_mmd"
+        contamination = 0.0
         if dgp == "contaminated_exp":
             contamination = CONTAMINATION_LEVEL
         params = {
