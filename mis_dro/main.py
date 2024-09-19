@@ -276,21 +276,14 @@ def run_replication(
                 posterior, theta_posterior
             )
         else:
-            theta_sample = sample_npl(
-                data,
-                inference,
-                likelihood,
-                num_posterior_samples,
-                seed=replication,
-                lengthscale=lengthscale,
-                generator=generator,
-            )
+            theta_sample = sample_posterior(posterior, theta_posterior, num_likelihood_samples, generator=generator)
     elif inference in ("npl_wlb", "npl_mmd"):
         theta_sample = sample_npl(
             data,
             inference,
-            posterior,
+            likelihood,
             num_posterior_samples,
+            seed=replication,
             lengthscale=lengthscale,
             generator=generator,
         )

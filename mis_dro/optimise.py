@@ -132,6 +132,7 @@ class DRO_BAS_MMD():
             xcert_i = Xcert[i]
             constraints += [loss_call(theta, xcert_i) <= f0 +
             fvals[i+n_sample]]
+        constraints += [theta >= SMALLEST_X, theta <= LARGEST_X]
         
         emp = f0 + cp.sum(fvals[:n_sample]) / n_sample
         rkhs_norm = cp.norm(beta.T @ K_decomposed) # pass decomposed kernel directly
