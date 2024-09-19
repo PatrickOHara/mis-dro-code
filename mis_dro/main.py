@@ -346,7 +346,8 @@ def run_replication(
         problem.param_dict["K"].value = np.asarray(K)
         problem.param_dict["K_decomposed"].value = np.asarray(K_decomp)
         problem.param_dict["epsilon"].value = np.array([epsilon])
-        problem.solve(cp.MOSEK, verbose=False, ignore_dpp=ignore_dpp)
+        # NOTE the MOSEK 'accept_unknown' argument is needed due to https://github.com/cvxpy/cvxpy/pull/2117
+        problem.solve(cp.MOSEK, verbose=False, ignore_dpp=ignore_dpp, accept_unknown=True)
         solution = problem.var_dict["theta"].value
         # solve_time = problem.solver_stats.solve_time
         setup_time = problem.solver_stats.setup_time
