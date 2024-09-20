@@ -10,6 +10,7 @@ import cvxpy as cp
 import numpy as np
 import pandas as pd
 import typer
+import scipy
 
 from bayesian_dro.Bayesian_DRO_continuous import main_Bayesian_DRO
 from .bayes_conjugates import (
@@ -29,9 +30,9 @@ from .constants import (
     NUM_CERTIFY,
     MAX_PARAMS_OOM,
 )
-from .dataset import sample_dgp
+from .dataset import sample_dgp, data_generation_regression_test
 from .experiments import ExperimentName, get_experiment
-from .likelihood import sample_likelihood
+from .likelihood import sample_likelihood, sample_likelihood_regression
 from .newsvendor import newsvendor_cost_cvxpy
 from .npl import sample_npl
 from .optimise import get_kl_bdro_problem, DRO_BAS_MMD
@@ -261,9 +262,12 @@ def run_replication(
     data = sample_dgp(
         dgp, num_observations, contamination=contamination, generator=generator
     )
-    data_eval = sample_dgp(
-        dgp, num_test_observations, contamination=0.0, generator=generator
-    )
+    if dgp == "normal_regression":
+        data_eval, price_test = data_generation_regression_test(num_test_observations, random_state=generator)
+    else:
+        data_eval = sample_dgp(
+            dgp, num_test_observations, contamination=0.0, generator=generator
+        )
     dgp_time = (datetime.now() - dgp_start).total_seconds()
 
     # 2. sample from the posterior
@@ -302,14 +306,25 @@ def run_replication(
     # 3. sample from the likelihood
     likelihood_start = datetime.now()
     if inference == "empirical":
-        xi = data
+        if dgp == "normal_regression":
+            xi = data[:,1]
+        else:
+            xi = data
     else:
-        xi = sample_likelihood(
-            likelihood,
-            theta_sample,
-            num_likelihood_samples,
-            generator=generator,
-        )
+        if likelihood == "regression_normal":
+            xi = sample_likelihood_regression(
+                theta_sample, 
+                num_likelihood_samples,
+                price_test,                    # use price at test point to make decisions
+                generator=generator
+            )
+        else:
+            xi = sample_likelihood(
+                likelihood,
+                theta_sample,
+                num_likelihood_samples,
+                generator=generator,
+            )
     likelihood_time = (datetime.now() - likelihood_start).total_seconds()
 
     # 4. run the chosen DRO algorithm
@@ -334,7 +349,7 @@ def run_replication(
         if algorithm == "dro_bas_mmd":
             xi = xi.reshape((num_likelihood_samples*num_posterior_samples,1))
         elif algorithm == "empirical_mmd":
-            xi = data.reshape((num_observations,1))
+            xi = xi.reshape((num_observations,1))
         _, dim_x = xi.shape
         Xcert = np.random.uniform(np.min(xi), np.max(xi), size=[num_certify_points,dim_x])
         zetai = np.concatenate([xi, Xcert])
