@@ -27,6 +27,7 @@ class ExperimentName(StrEnum):
     kl_newsvendor_1d = "kl_newsvendor_1d"
     mmd_newsvendor_1d = "mmd_newsvendor_1d"
     compare_solve = "compare_solve"
+    mmd_regression_newsvendor_1d = "mmd_regression_newsvendor_1d"
 
 
 def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
@@ -35,6 +36,7 @@ def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
         ExperimentName.kl_newsvendor_1d: kl_newsvendor_1d,
         ExperimentName.mmd_newsvendor_1d: mmd_newsvendor_1d,
         ExperimentName.compare_solve: compare_solve,
+        ExperimentName.mmd_regression_newsvendor_1d: mmd_regression_newsvendor_1d
     }
     try:
         return function_lookup[experiment_name]()
@@ -98,6 +100,46 @@ def mmd_newsvendor_1d() -> List[Dict]:
             ("empirical_mmd", "contaminated_exp", "empirical"),            # empirical
             ("dro_bas_mmd", "exponential", "exponential"),          # well specified
             ("empirical_mmd", "exponential", "empirical"),                 # empirical
+        ],
+        BAS_DRO_EPSILON_SET,
+    ):
+        if likelihood == "empirical":
+            inference = "empirical"
+        else:
+            inference = "npl_mmd"
+        contamination = 0.0
+        if dgp == "contaminated_exp":
+            contamination = CONTAMINATION_LEVEL
+        params = {
+            "algorithm": algorithm,
+            "contamination": contamination,
+            "dgp": dgp,
+            "epsilon": epsilon,
+            "inference": inference,
+            "lengthscale": -1.0,        # FIXME?
+            "likelihood": likelihood,
+            "num_certify_points": NUM_CERTIFY,
+            "num_likelihood_samples": num_likelihood_samples,
+            "num_observations": NUM_OBSERVATIONS,
+            "num_posterior_samples": num_posterior_samples,
+            "num_replications": NUM_REPLICATIONS,
+            "num_test_observations": NUM_TEST_OBSERVATIONS,
+            "posterior": "npl",
+            "uuid": str(uuid4()),  # uniquely identify a run
+        }
+        experiment.append(params)
+    return experiment
+
+def mmd_regression_newsvendor_1d() -> List[Dict]:
+    """MMD univariate newsvendor: compare our MMD Bayesian ambiguity set against empirical kernel DRO"""
+    experiment = []
+    num_likelihood_samples = 10     # FIXME?
+    num_posterior_samples = 10      # FIXME?
+    # NOTE when using empirical, set likelihood to 'empirical'
+    for (algorithm, dgp, likelihood), epsilon in itertools.product(
+        [
+            ("dro_bas_mmd", "normal_regression", "regression_normal"),     # regression
+            ("empirical_mmd", "normal_regression", "empirical"),            # empirical
         ],
         BAS_DRO_EPSILON_SET,
     ):
