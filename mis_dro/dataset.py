@@ -2,7 +2,7 @@
 
 from typing import Optional
 import numpy as np
-from scipy.stats import expon, gamma, norm
+from scipy.stats import expon, gamma, norm, uniform, multivariate_normal
 
 from bayesian_dro.Bayesian_DRO_continuous import data_generation, DGP_STD_TRUNCATED_NORMAL
 
@@ -36,8 +36,45 @@ def sample_dgp(
         return expon.rvs(scale=20.0, size=num_observations, random_state=generator)
     if dgp == "gamma":
         return data_generation_gamma(num_observations, a=10, random_state=generator)
+    if dgp == "normal_regression":
+        a = 20
+        b = 6
+        price = uniform.rvs(size=num_observations, random_state=generator)
+        demand = multivariate_normal.rvs(
+                mean=a-b*price,
+                cov=(DGP_STD_TRUNCATED_NORMAL**2)*np.eye(num_observations),
+                # size=(num_observations,1),
+                random_state=generator,
+        )
+        data = np.zeros((num_observations,2))
+        data[:,0] = price
+        data[:,1] = demand
+        return  data
     raise ValueError(f"The data-generating process specified is not supported: {dgp}")
 
+def data_generation_regression_test(
+    num_observations: int,
+    random_state: Optional[np.random.Generator] = None,
+):
+    """Generate test data for the Gaussian regression example
+
+    Args:
+        num_observations (int): number of 
+        random_state (Optional[np.random.Generator], optional): A numpy random generator. Defaults to None.
+    """
+    if not random_state:
+        random_state = np.random.default_rng()
+    a = 20
+    b = 6
+    price_test = uniform.rvs(random_state=random_state)
+    mean = a - b*price_test
+    demand = norm.rvs(
+            loc=mean,
+            scale=DGP_STD_TRUNCATED_NORMAL,
+            size=num_observations,
+            random_state=random_state,
+        )
+    return demand, price_test
 
 def data_generation_outliers(
     num_observations: int,
