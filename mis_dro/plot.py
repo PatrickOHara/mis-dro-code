@@ -10,7 +10,7 @@ class AlgorithmLineStyle(StrEnum):
 
     bdro_grid_search = "dashed"
     kl_bdro = "solid"
-    our_kl_bdro = "dotted"
+    kl_dro_bas = "dotted"
 
 
 class AlgorithmMarkerStyle(StrEnum):
@@ -18,13 +18,13 @@ class AlgorithmMarkerStyle(StrEnum):
 
     bdro_grid_search = "*"
     kl_bdro = "x"
-    our_kl_bdro = "o"
+    kl_dro_bas = "o"
 
 class AlgorithmColor(StrEnum):
     """Colors of algorithm lines"""
     bdro_grid_search = "orange"
     kl_bdro = "black"
-    our_kl_bdro = "blue"
+    kl_dro_bas = "blue"
 
 
 
@@ -33,7 +33,7 @@ class AlgorithmName(StrEnum):
 
     bdro_grid_search = "BDRO grid search"
     kl_bdro = "BDRO"
-    our_kl_bdro = "BAS-DRO"
+    kl_dro_bas = "DRO-BAS"
 
 
 class InferenceLineStyle(StrEnum):

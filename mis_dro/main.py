@@ -15,7 +15,7 @@ from bayesian_dro.Bayesian_DRO_continuous import main_Bayesian_DRO
 from .bayes_conjugates import (
     sample_posterior,
     default_prior_params,
-    get_kl_bdro_constant,
+    get_log_partition_constant,
     get_posterior_params,
     derive_analytical_posterior_params,
 )
@@ -26,6 +26,7 @@ from .constants import (
     NUM_POSTERIOR_SAMPLES,
     NUM_REPLICATIONS,
     NUM_TEST_OBSERVATIONS,
+    NUM_CERTIFY,
     MAX_PARAMS_OOM,
 )
 from .dataset import sample_dgp, portfolio_dataset
@@ -33,7 +34,8 @@ from .experiments import ExperimentName, get_experiment
 from .likelihood import sample_likelihood
 from .newsvendor import newsvendor_cost_cvxpy
 from .npl import sample_npl
-from .optimise import get_kl_bdro_problem
+from .optimise import get_kl_bdro_problem, DRO_BAS_MMD
+from .gaussian_kernel import *
 
 app = typer.Typer(name="misdro")
 
@@ -55,6 +57,7 @@ def setup(
         json.dump(experiment, json_file, indent=4)
 
     # get unique DGPs
+    # TODO add groupby inference
     dgp_algorithm_pairs = set()
     for params in experiment:
         dgp_algorithm_pairs.add((params["dgp"], params["algorithm"]))
@@ -143,6 +146,7 @@ def run(
     num_posterior_samples: int = NUM_POSTERIOR_SAMPLES,
     num_replications: int = NUM_REPLICATIONS,
     num_test_observations: int = NUM_TEST_OBSERVATIONS,
+    num_certify_points: int = NUM_CERTIFY,
     posterior: str = "gamma",
     uuid: str = str(uuid4()),
     verbose: bool = False,
@@ -151,36 +155,33 @@ def run(
     if uuid:
         print(uuid)
     print("DGP:", dgp, " - ALGORITHM:", algorithm, " - NUM LIKELIHOOD SAMPLES:", num_likelihood_samples, " - POSTERIOR:", posterior)
-    if algorithm in ("kl_bdro", "our_kl_bdro"):
+    if algorithm in ("kl_bdro", "kl_dro_bas"):
         problem = get_kl_bdro_problem(
             newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples
         )
-    elif algorithm == "kdro":
-        raise NotImplementedError("Harita's future KDRO code goes here :)")
+    elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
+        dim_theta = 1
+        kdro_class = DRO_BAS_MMD(dim_theta, newsvendor_cost_cvxpy)
+        if algorithm == "dro_bas_mmd":
+            n_samples = num_posterior_samples*num_likelihood_samples
+        elif algorithm == "empirical_mmd":
+            n_samples = num_observations
+        problem = kdro_class.get_problem(n_samples, num_certify_points)
     else:
         raise NotImplementedError(f"Algorithm {algorithm} not implemented.")
-
     # If the number of parameters is small enough, then use Disciplined Parametrized Programming (DPP)
     # to reduce the compilation time in each replication.
-    # However, a large number of parameters uses an enormous amount of RAM in the current cvxpy implementation.
-    ignore_dpp = False
-    if algorithm in ("kl_bdro", "our_kl_bdro", "kdro"):
+    # However, a large number of parameters uses an enormous amout of RAM in the current cvxpy implementation.
+    if algorithm in ("kl_bdro", "kl_dro_bas", "dro_bas_mmd", "empirical_mmd"):
+        ignore_dpp = False
         n_parameters = np.sum(np.prod(param.shape) for param in problem.parameters())
-        # NOTE whilst BAS-DRO can handle at least 5000 params, BDRO cannot.
-        # So, for a fair comparison, we turn off DPP for both BAS-DRO and BDRO.
+        # NOTE whilst DRO-BAS can handle at least 5000 params, BDRO cannot.
+        # So, for a fair comparison, we turn off DPP for both DRO-BAS and BDRO.
         if n_parameters >= cp.settings.PARAM_THRESHOLD:
         # if n_parameters >= 1000:
             ignore_dpp = True
             njobs = 1
 
-    # BDRO n_parameters ~ >= 900  -> OOM
-    # BAS-DRO n_parameters < 10,000 -> still good
-    # n_parameters = 2500 -> both BDRO and BAS-DRO, we turn off dpp and njobs = 1
-
-    # on PARROT, we run n_parameters <= 900
-    # on PARROT, we run n_parameters >=2500, then turn off dpp for everything
-
-    # DPP is good 
     params = {
         "algorithm": algorithm,
         "contamination": contamination,
@@ -190,6 +191,7 @@ def run(
         "inference": inference,
         "lengthscale": lengthscale,
         "likelihood": likelihood,
+        "num_certify_points": num_certify_points,
         "num_likelihood_samples": num_likelihood_samples,
         "num_observations": num_observations,
         "num_posterior_samples": num_posterior_samples,
@@ -244,6 +246,7 @@ def run_replication(
     inference: str = "bayes",
     lengthscale: float = -1.0,
     likelihood: str = "exponential",
+    num_certify_points: int = NUM_CERTIFY,
     num_likelihood_samples: int = NUM_LIKELIHOOD_SAMPLES,
     num_observations: int = NUM_OBSERVATIONS,
     num_posterior_samples: int = NUM_POSTERIOR_SAMPLES,
@@ -274,69 +277,89 @@ def run_replication(
 
     # 2. sample from the posterior
     posterior_start = datetime.now()
-    kl_bdro_constant = 0.0
+    log_partition_constant = 0.0
     if inference == "bayes":
         theta_prior = default_prior_params(posterior)
         theta_posterior = get_posterior_params(posterior, data, theta_prior)
-        if algorithm == "our_kl_bdro":
+        if algorithm == "kl_dro_bas":
             assert num_posterior_samples == 1
-            kl_bdro_constant = get_kl_bdro_constant(posterior, theta_posterior)
+            log_partition_constant = get_log_partition_constant(posterior, theta_posterior)
             theta_sample = derive_analytical_posterior_params(
                 posterior, theta_posterior
             )
         else:
-            theta_sample = sample_posterior(
-                posterior,
-                theta_posterior,
-                num_posterior_samples,
-                generator=generator,
-            )
+            theta_sample = sample_posterior(posterior, theta_posterior, num_likelihood_samples, generator=generator)
     elif inference in ("npl_wlb", "npl_mmd"):
         theta_sample = sample_npl(
             data,
             inference,
-            posterior,
+            likelihood,
             num_posterior_samples,
+            seed=replication,
             lengthscale=lengthscale,
             generator=generator,
         )
+    elif inference == "empirical":
+        # empirical does not have a posterior
+        theta_sample = np.nan * np.ones(num_posterior_samples)
     else:
         raise ValueError(f"Inference procedure '{inference}' is not supported.")
-    assert kl_bdro_constant >= 0
-    # assert kl_bdro_constant < epsilon
+    assert log_partition_constant >= 0
+    # assert log_partition_constant < epsilon
     posterior_time = (datetime.now() - posterior_start).total_seconds()
 
     # 3. sample from the likelihood
     likelihood_start = datetime.now()
-    xi = sample_likelihood(
-        likelihood,
-        posterior,
-        theta_sample,
-        num_likelihood_samples,
-        generator=generator,
-    )
+    if inference == "empirical":
+        xi = data
+    else:
+        xi = sample_likelihood(
+            likelihood,
+            theta_sample,
+            num_likelihood_samples,
+            generator=generator,
+        )
     likelihood_time = (datetime.now() - likelihood_start).total_seconds()
 
     # 4. run the chosen DRO algorithm
     solve_start = datetime.now()
     solution = np.nan
-    if algorithm in ("kl_bdro", "our_kl_bdro"):
-        if epsilon - kl_bdro_constant < 0:
+    if algorithm in ("kl_bdro", "kl_dro_bas"):
+        if epsilon - log_partition_constant < 0:
             # NOTE the optimisation problem is unbounded below
             solution = np.inf
             solve_time = 0.0
             setup_time = 0.0
         else:
             # set parameters then solve
-            problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon - kl_bdro_constant])
+            problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon - log_partition_constant])
             problem.param_dict["xi"].value = xi
             # NOTE the MOSEK 'accept_unknown' argument is needed due to https://github.com/cvxpy/cvxpy/pull/2117
             problem.solve(solver=cp.MOSEK, verbose=verbose, ignore_dpp=ignore_dpp, accept_unknown=True)
             solution = problem.var_dict["x"].value[0]
             # solve_time = problem.solver_stats.solve_time
             setup_time = problem.solver_stats.setup_time
-    elif algorithm == "kdro":
-        raise NotImplementedError("Harita's future code goes here :)")
+    elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
+        if algorithm == "dro_bas_mmd":
+            xi = xi.reshape((num_likelihood_samples*num_posterior_samples,1))
+        elif algorithm == "empirical_mmd":
+            xi = data.reshape((num_observations,1))
+        _, dim_x = xi.shape
+        Xcert = np.random.uniform(np.min(xi), np.max(xi), size=[num_certify_points,dim_x])
+        zetai = np.concatenate([xi, Xcert])
+        l = np.sqrt((1/2)*np.median(distance.cdist(zetai, zetai, 'sqeuclidean')))
+        K = k_jax(zetai, zetai, l)
+        K_decomp = mat_decomp_jax(K)
+        problem.param_dict["Xobs"].value = xi
+        problem.param_dict["Xcert"].value = Xcert
+        problem.param_dict["K"].value = np.asarray(K)
+        problem.param_dict["K_decomposed"].value = np.asarray(K_decomp)
+        problem.param_dict["epsilon"].value = np.array([epsilon])
+        # NOTE the MOSEK 'accept_unknown' argument is needed due to https://github.com/cvxpy/cvxpy/pull/2117
+        problem.solve(cp.MOSEK, verbose=False, ignore_dpp=ignore_dpp, accept_unknown=True)
+        solution = problem.var_dict["theta"].value
+        # solve_time = problem.solver_stats.solve_time
+        setup_time = problem.solver_stats.setup_time
     elif algorithm == "bdro_grid_search":
         solution = main_Bayesian_DRO(xi, epsilon)
         setup_time = 0.0  # can't really measure this easily
@@ -369,6 +392,7 @@ def run_replication(
         "solve_time": solve_time,
         "setup_time": setup_time,
         "sharp_ratio": 0.0,     # TODO add sharp here
+        "log_partition_constant": log_partition_constant,
     }
 
 if __name__ == "__main__":

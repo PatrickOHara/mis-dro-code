@@ -8,7 +8,6 @@ from bayesian_dro.Bayesian_DRO_continuous import xi_generation
 
 def sample_likelihood(
     likelihood: str,
-    posterior: str,
     theta_sample: np.ndarray,
     num_likelihood_samples: int,
     generator: Optional[np.random.Generator],
@@ -29,7 +28,7 @@ def sample_likelihood(
                 size=num_likelihood_samples,
                 random_state=generator,
             )
-    elif likelihood == "normal" and posterior == "normal_gamma":
+    elif likelihood == "normal":
         for i in range(num_posterior_samples):
             # NOTE numpy normal takes standard deviation as scale parameter - not variance or precision!
             # so when we use normal_gamma (which is on the precision), we need to inverse and take sqrt
@@ -40,6 +39,6 @@ def sample_likelihood(
             )
     else:
         raise NotImplementedError(
-            f"Likelihood {likelihood} with posterior {posterior} not implemented."
+            f"Likelihood '{likelihood}' not implemented."
         )
     return xi
