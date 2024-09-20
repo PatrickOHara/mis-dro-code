@@ -174,3 +174,17 @@ def normal_gamma_rvs(
         )
     samples[:, 1] = precision_samples
     return samples
+
+def normal_inverse_wishart_prior(n: int):
+    return np.zeros(n), 1.0, n + 1, np.identity(n)
+
+def normal_inverse_wishart_posterior(xi, mu_prior, kappa_prior, iota_prior, Phi_prior):
+    N = xi.shape[0]
+    print(xi.shape)
+    print(mu_prior.shape)
+    xi_mean = np.mean(xi, axis=0)
+    kappa_post = kappa_prior + N
+    mu_post = (kappa_prior * mu_prior + N * xi_mean) / kappa_post
+    iota_post = iota_prior + N
+    Phi_post = Phi_prior + xi.T @ xi + kappa_prior * np.outer(mu_prior, mu_prior) - kappa_post * np.outer(mu_post, mu_post)
+    return mu_post, kappa_post, iota_post, Phi_post
