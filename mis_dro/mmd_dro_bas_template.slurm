@@ -13,4 +13,4 @@
 
 ## Loop over each batch ##
 start=$(($SLURM_ARRAY_TASK_ID * {batch_size}))
-srun --ntasks=1 misdro batch {experiment_dir} $start {batch_size} --njobs {njobs}
+srun misdro batch {experiment_dir} $start {batch_size}
