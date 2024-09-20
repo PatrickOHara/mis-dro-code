@@ -42,3 +42,18 @@ class multivariate_GaussianModel:
         
         return x
     
+class regression_GaussianModel:
+    def __init__(self, price):
+        self.price = price
+        self.m = len(price)
+        
+    def sample(self, theta, key):
+        a = theta[0]
+        b = theta[1]
+        std = theta[2]
+        mu = a - b*self.price
+        demand = (
+            jax.random.multivariate_normal(key, mean=mu, cov=(std**2)*jnp.eye(self.m), shape=(self.m,1))
+        )
+        return demand
+        
