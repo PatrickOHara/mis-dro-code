@@ -42,3 +42,27 @@ def sample_likelihood(
             f"Likelihood '{likelihood}' not implemented."
         )
     return xi
+
+
+def sample_likelihood_regression(
+    theta_sample: np.ndarray,
+    num_likelihood_samples: int,
+    price: float,
+    generator: Optional[np.random.Generator],
+) -> np.ndarray:
+    """Sample from the likelihood
+
+    Returns:
+        ndarray of shape `(num_posterior_samples, num_likelihood_samples)`
+    """
+    if not generator:
+        generator = np.random.default_rng()
+    num_posterior_samples = theta_sample.shape[0]
+    xi = np.zeros([num_posterior_samples, num_likelihood_samples])
+    for i in range(num_posterior_samples):
+        a = theta_sample[i,0]
+        b = theta_sample[i,1]
+        std = theta_sample[i,2]
+        mu = a - b*price
+        xi[i,:] = generator.normal(loc=mu, scale=std, size=num_likelihood_samples, random_state=generator)
+    return xi
