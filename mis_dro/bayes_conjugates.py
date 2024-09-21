@@ -207,6 +207,9 @@ def normal_inverse_wishart_posterior(data, mu_prior, kappa_prior, iota_prior, Ps
         kappa: Updated belief in posterior mean (positive scalar)
         iota: Updated belief in posterior over covariance (positive scalar)
         Psi: Updated matrix for posterior over covariance. Matrix with shape (D,D).
+
+    Notes:
+        See Section 3.4.4.3 of Murphy (2023) Probabilistic Machine Learning: Advanced Topics.
     """
     N = data.shape[0]
     print(data.shape)
@@ -215,6 +218,7 @@ def normal_inverse_wishart_posterior(data, mu_prior, kappa_prior, iota_prior, Ps
     kappa_post = kappa_prior + N
     mu_post = (kappa_prior * mu_prior + N * xi_mean) / kappa_post
     iota_post = iota_prior + N
+    # Psi update comes from eq. (3.172) of Murphy (see notes above)
     Psi_post = Psi_prior + data.T @ data + kappa_prior * np.outer(mu_prior, mu_prior) - kappa_post * np.outer(mu_post, mu_post)
     return mu_post, kappa_post, iota_post, Psi_post
 
