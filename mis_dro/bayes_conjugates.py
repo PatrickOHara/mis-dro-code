@@ -175,16 +175,81 @@ def normal_gamma_rvs(
     samples[:, 1] = precision_samples
     return samples
 
-def normal_inverse_wishart_prior(n: int):
-    return np.zeros(n), 1.0, n + 1, np.identity(n)
+def normal_inverse_wishart_prior(dim: int):
+    """Default normal-inverse-Wishart prior hyperparameters for D dimensions
+    
+    Args:
+        D: dimension
 
-def normal_inverse_wishart_posterior(xi, mu_prior, kappa_prior, iota_prior, Phi_prior):
-    N = xi.shape[0]
-    print(xi.shape)
+    Returns:
+        mu: Prior mean. Vector with shape (D,)
+        kappa: Reflects belief in prior mean (positive scalar)
+        iota: Reflects belief in prior over covariance (positive scalar)
+        Psi: matrix proportional to prior over covariance. Matrix with shape (D,D).
+    """
+    # since we derived our result via the exponential family, we set kappa = iota + D + 2
+    iota = 1.0
+    kappa = iota + dim + 2
+    return np.zeros(dim), kappa, iota, np.identity(dim)
+
+def normal_inverse_wishart_posterior(data, mu_prior, kappa_prior, iota_prior, Psi_prior):
+    """Normal-inverse-Wishart posterior hyperparameters for D dimensions
+
+    Args:
+        data: Observations with shape (N, D)
+        mu: Prior mean. Vector with shape (D,)
+        kappa: Reflects belief in prior mean (positive scalar)
+        iota: Reflects belief in prior over covariance (positive scalar)
+        Psi: matrix for prior over covariance. Matrix with shape (D,D).
+
+    Returns:
+        mu: Updated posterior mean. Vector with shape (D,)
+        kappa: Updated belief in posterior mean (positive scalar)
+        iota: Updated belief in posterior over covariance (positive scalar)
+        Psi: Updated matrix for posterior over covariance. Matrix with shape (D,D).
+    """
+    N = data.shape[0]
+    print(data.shape)
     print(mu_prior.shape)
-    xi_mean = np.mean(xi, axis=0)
+    xi_mean = np.mean(data, axis=0)
     kappa_post = kappa_prior + N
     mu_post = (kappa_prior * mu_prior + N * xi_mean) / kappa_post
     iota_post = iota_prior + N
-    Phi_post = Phi_prior + xi.T @ xi + kappa_prior * np.outer(mu_prior, mu_prior) - kappa_post * np.outer(mu_post, mu_post)
-    return mu_post, kappa_post, iota_post, Phi_post
+    Psi_post = Psi_prior + data.T @ data + kappa_prior * np.outer(mu_prior, mu_prior) - kappa_post * np.outer(mu_post, mu_post)
+    return mu_post, kappa_post, iota_post, Psi_post
+
+def normal_inverse_wishart_samples(num_samples: int, mu: np.ndarray, kappa: float, iota: float, Psi: np.ndarray, generator: Optional[np.random.Generator] = None) -> tuple[np.ndarray, np.ndarray]:
+    """Get N samples of mean and covariance from the normal-inverse-Wishart distribution.
+
+    Args:
+        num_samples: N for short
+        mu: Mean hyperparameter. Vector with shape (D,)
+        kappa: Positive scalar
+        iota: Positive scalar
+        Psi: Matrix with shape (D,D)
+        generator: Numpy random number generator
+
+    Returns:
+        mu_samples: Matrix with shape (N,D)
+        cov_samples: Tensor with shape (N,D,D)
+    """
+    dim = mu.shape[0]
+    assert dim == Psi.shape[0] and dim == Psi.shape[1]
+
+    # sample from the inverse Wishart
+    iw_post = sp.stats.invwishart(iota, Psi, seed=generator)
+    cov_samples = iw_post.rvs(num_samples)
+
+    # sample from a multivariate normal given the covariance samples
+    mu_samples = np.zeros((num_samples, dim))
+    for i, cov in enumerate(cov_samples):
+        mu_samples[i] = sp.stats.multivariate_normal(mu, 1/kappa * cov, seed=generator).rvs()
+    assert mu_samples.shape == (num_samples, dim)
+    assert cov_samples.shape == (num_samples, dim, dim)
+    return mu_samples, cov_samples
+
+def get_normal_inverse_wishart_G_constant(mu_post: np.ndarray, kappa_post: float, iota_post: float, Psi_post: np.ndarray) -> float:
+    """Returns the constant G(tau, nu) for the normal-inverse-Wishart"""
+    Psi_inv = sp.linalg.inv(Psi_post)
+    x = mu_post.T @ Psi_inv @ mu_post
+    
