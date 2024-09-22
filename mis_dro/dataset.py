@@ -2,7 +2,7 @@
 
 from typing import Optional
 import numpy as np
-from scipy.stats import expon, gamma, norm
+from scipy.stats import expon, gamma, norm, t
 
 from bayesian_dro.Bayesian_DRO_continuous import data_generation, DGP_STD_TRUNCATED_NORMAL
 
@@ -39,6 +39,8 @@ def sample_dgp(
     if dgp == "contaminated_normal":
         return contaminated_normal(
             num_observations, contamination, random_state=generator)
+    if dgp == "student_t":
+        return t.rvs(df=2, loc=25, scale=DGP_STD_TRUNCATED_NORMAL, size=num_observations, random_state=generator)
     raise ValueError(f"The data-generating process specified is not supported: {dgp}")
 
 
