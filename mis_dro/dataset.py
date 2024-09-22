@@ -36,6 +36,9 @@ def sample_dgp(
         return expon.rvs(scale=20.0, size=num_observations, random_state=generator)
     if dgp == "gamma":
         return data_generation_gamma(num_observations, a=10, random_state=generator)
+    if dgp == "contaminated_normal":
+        return contaminated_normal(
+            num_observations, contamination, random_state=generator)
     raise ValueError(f"The data-generating process specified is not supported: {dgp}")
 
 
@@ -79,8 +82,8 @@ def contaminated_normal(num_observations: int, contamination: float, random_stat
         random_state = np.random.default_rng()
     cont_size = int(np.floor(contamination * num_observations))
     n_real = num_observations - cont_size
-    data = norm.rvs(loc=20, scale=10, size=n_real, random_state=random_state) 
-    outl = norm.rvs(loc=50, scale=10, size=cont_size, random_state=random_state) 
+    data = norm.rvs(loc=25, scale=DGP_STD_TRUNCATED_NORMAL, size=n_real, random_state=random_state) 
+    outl = norm.rvs(loc=75, scale=DGP_STD_TRUNCATED_NORMAL, size=cont_size, random_state=random_state) 
     data = np.concatenate((data, outl), axis=0)
     random_state.shuffle(data)  # shuffles the data in-place
     return data
