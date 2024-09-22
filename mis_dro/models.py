@@ -60,6 +60,9 @@ class univariate_GaussianModel_known_variance:
     
     def init_params(self, data):
         return jnp.mean(data).reshape((1,))
+    
+    def parametrise(self, theta):
+        return theta
 
 class multivariate_GaussianModel:
     def __init__(self, m, d):
@@ -77,6 +80,9 @@ class multivariate_GaussianModel:
     
     def init_params(self, data):
         return  jnp.mean(data, axis=0).reshape((self.d,))
+    
+    def parametrise(self, theta):
+        return theta
     
 
         
