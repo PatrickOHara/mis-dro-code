@@ -5,7 +5,7 @@ import numpy as np
 import scipy as sp
 
 
-def default_prior_params(prior: str) -> tuple:
+def default_prior_params(prior: str, dim: int = 1) -> tuple:
     """Get the default prior parameters"""
     prior_params = ()
     if prior == "gamma":
@@ -14,6 +14,8 @@ def default_prior_params(prior: str) -> tuple:
     elif prior == "normal_gamma":
         mu_prior, kappa_prior, alpha_prior, beta_prior = 0.0, 1.0, 1.0, 1.0
         prior_params = (mu_prior, kappa_prior, alpha_prior, beta_prior)
+    elif prior == "normal_inverse_wishart":
+        prior_params = normal_inverse_wishart_prior(dim)
     else:
         raise NotImplementedError(f"Prior '{prior}' not implemented.")
     return prior_params
@@ -38,6 +40,8 @@ def get_posterior_params(
             beta_posterior,
         ) = normal_gamma_posterior(data, mu_prior, kappa_prior, alpha_prior, beta_prior)
         post_params = (mu_posterior, kappa_posterior, alpha_posterior, beta_posterior)
+    elif posterior == "normal_inverse_wishart":
+        post_params = normal_inverse_wishart_posterior(data, *prior_params)
     else:
         raise NotImplementedError(f"Posterior '{posterior}' is not implemented")
     return post_params
@@ -57,6 +61,11 @@ def derive_analytical_posterior_params(
         # we want an analytical form for the precision, which is alpha over beta
         theta[0] = np.array([mu_posterior, alpha_posterior / beta_posterior])
         return theta
+    elif posterior == "normal_inverse_wishart":
+        mu_post, kappa_post, _, Psi_post = posterior_params
+        Sigma_hat = 0.5 * np.linalg.inv(np.outer(mu_post, mu_post) - (1/kappa_post)*Psi_post)
+        mu_hat = Sigma_hat @ mu_post
+        return mu_hat, Sigma_hat
     else:
         raise NotImplementedError(
             f"We haven't derived an analytical posterior expression for a '{posterior}' posterior"
@@ -188,7 +197,7 @@ def normal_inverse_wishart_prior(dim: int):
         Psi: matrix proportional to prior over covariance. Matrix with shape (D,D).
     """
     # since we derived our result via the exponential family, we set kappa = iota + D + 2
-    iota = 1.0
+    iota = 2.0
     kappa = iota + dim + 2
     return np.zeros(dim), kappa, iota, np.identity(dim)
 
@@ -252,8 +261,24 @@ def normal_inverse_wishart_samples(num_samples: int, mu: np.ndarray, kappa: floa
     assert cov_samples.shape == (num_samples, dim, dim)
     return mu_samples, cov_samples
 
-def get_normal_inverse_wishart_G_constant(mu_post: np.ndarray, kappa_post: float, iota_post: float, Psi_post: np.ndarray) -> float:
+def multivariate_digamma_p(a: float, p: int) -> float:
+    """The multivariate digamma function of dimension p
+
+    Notes:
+        [1] https://search.r-project.org/CRAN/refmans/CholWishart/html/mvdigamma.html
+        [2] https://en.wikipedia.org/wiki/Multivariate_gamma_function#Derivatives
+    """
+    return np.sum([sp.special.digamma(a + (1-i)/2) for i in range(p)])
+
+def get_normal_inverse_wishart_G_constant(mu_post: np.ndarray, kappa_post: float, Psi_post: np.ndarray) -> float:
     """Returns the constant G(tau, nu) for the normal-inverse-Wishart"""
+    dim = mu_post.shape[0]
     Psi_inv = sp.linalg.inv(Psi_post)
-    x = mu_post.T @ Psi_inv @ mu_post
-    
+    mu_Psi_inv_mu = mu_post.T @ Psi_inv @ mu_post
+    term1 = 0.5 * np.log(np.linalg.det(np.outer(mu_post, mu_post) - (1 / kappa_post) * Psi_post))
+    term2 = 0.25 * mu_Psi_inv_mu * ((kappa_post**2 * mu_Psi_inv_mu)/(1 - kappa_post * mu_Psi_inv_mu) - kappa_post + 2 * dim + 4)
+    term3 = - 0.5 * multivariate_digamma_p(0.5 * (kappa_post - dim - 2), dim)
+    term4 = dim/(2*kappa_post)
+    term5 = np.log(np.linalg.det(Psi_post))
+    return term1 + term2 + term3 + term4 + term5
+

@@ -2,7 +2,7 @@
 
 from typing import Optional
 import numpy as np
-from scipy.stats import expon, gamma, norm
+from scipy.stats import expon, gamma, norm, multivariate_normal
 
 from bayesian_dro.Bayesian_DRO_continuous import data_generation, DGP_STD_TRUNCATED_NORMAL
 
@@ -11,6 +11,7 @@ def sample_dgp(
     dgp: str,
     num_observations: int,
     contamination: float = 0.0,
+    dim: int = 1,
     generator: Optional[np.random.Generator] = None,
 ) -> np.ndarray:
     """Sample from the DGP"""
@@ -36,6 +37,10 @@ def sample_dgp(
         return expon.rvs(scale=20.0, size=num_observations, random_state=generator)
     if dgp == "gamma":
         return data_generation_gamma(num_observations, a=10, random_state=generator)
+    if dgp == "multivariate_normal":
+        dgp_mean = np.zeros(dim)
+        dgp_cov = np.eye(dim)
+        return multivariate_normal.rvs(dgp_mean, dgp_cov, size=num_observations, random_state=generator)
     raise ValueError(f"The data-generating process specified is not supported: {dgp}")
 
 
