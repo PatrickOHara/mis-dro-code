@@ -37,6 +37,9 @@ def sample_likelihood(
                 np.sqrt(1.0 / theta_sample[i, 1]),
                 size=num_likelihood_samples,
             )
+    elif likelihood == "multivariate_normal":
+        for i in range(num_posterior_samples):
+            xi[i] = generator.multivariate_normal(theta_sample[i][0], theta_sample[i][1], size=num_likelihood_samples)
     else:
         raise NotImplementedError(
             f"Likelihood '{likelihood}' not implemented."

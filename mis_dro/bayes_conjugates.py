@@ -63,9 +63,9 @@ def derive_analytical_posterior_params(
         return theta
     elif posterior == "normal_inverse_wishart":
         mu_post, kappa_post, _, Psi_post = posterior_params
-        Sigma_hat = 0.5 * np.linalg.inv(np.outer(mu_post, mu_post) - (1/kappa_post)*Psi_post)
-        mu_hat = Sigma_hat @ mu_post
-        return mu_hat, Sigma_hat
+        # Sigma_hat = 0.5 * np.linalg.inv(np.outer(mu_post, mu_post) - (1/kappa_post)*Psi_post)
+        # mu_hat = Sigma_hat @ mu_post
+        return mu_post, (1/kappa_post) * Psi_post
     else:
         raise NotImplementedError(
             f"We haven't derived an analytical posterior expression for a '{posterior}' posterior"
@@ -114,6 +114,8 @@ def get_log_partition_constant(posterior: str, posterior_params: list) -> float:
     elif posterior == "normal_gamma":
         _, kappa_posterior, alpha_posterior, _ = posterior_params
         return get_normal_gamma_constant(alpha_posterior, kappa_posterior)
+    elif posterior == "normal_inverse_wishart":
+        return 0.0  # FIXME
     else:
         raise NotImplementedError(f"get_log_partition_constant not implemented for posterior {posterior}")
 
@@ -197,7 +199,7 @@ def normal_inverse_wishart_prior(dim: int):
         Psi: matrix proportional to prior over covariance. Matrix with shape (D,D).
     """
     # since we derived our result via the exponential family, we set kappa = iota + D + 2
-    iota = 2.0
+    iota = float(dim + 1)   # degrees of freedom must be greater than dim
     kappa = iota + dim + 2
     return np.zeros(dim), kappa, iota, np.identity(dim)
 

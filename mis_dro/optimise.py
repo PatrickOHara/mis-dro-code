@@ -10,6 +10,7 @@ def get_kl_bdro_problem(
     decision_objective: Callable[[cp.Variable, cp.Parameter], cp.Expression],
     num_posterior_samples: int,
     num_likelihood_samples: int,
+    dim: int = 1,
 ) -> cp.Problem:
     """Bayesian DRO as a cvxpy optimisaton problem.
 
@@ -20,6 +21,7 @@ def get_kl_bdro_problem(
             The return should be a cvxpy expression.
         num_posterior_samples: Number of posterior samples.
         num_likelihood_samples: Number of likelihood samples for each posterior sample.
+        dim: Dimension of random variable xi.
 
     Returns:
         problem: A cvxpy Problem object
@@ -33,7 +35,7 @@ def get_kl_bdro_problem(
         As l -> 0, then l * LSE(t[i] / l) tends to max(t[i]).
     """
     # declare variables
-    x = cp.Variable(1, name="x")
+    x = cp.Variable(dim, name="x")
     lam = [
         cp.Variable(1, name=f"lam_{i}", nonneg=True)
         for i in range(num_posterior_samples)
@@ -42,7 +44,7 @@ def get_kl_bdro_problem(
 
     # declare parameters
     epsilon_minus_constant = cp.Parameter(1, name="epsilon_minus_constant", nonneg=True)
-    xi = cp.Parameter((num_posterior_samples, num_likelihood_samples), name="xi")
+    xi = cp.Parameter((num_posterior_samples, num_likelihood_samples, dim), name="xi")
 
     # create the objective function for the Bayesian DRO problem
     # NOTE we pass the max function to f_recession because,
@@ -63,7 +65,7 @@ def get_kl_bdro_problem(
     constraints = [
         x >= SMALLEST_X,
         x <= LARGEST_X,
-    ] + [decision_objective(x, xi[i]) <= t[i] for i in range(num_posterior_samples)]
+    ] + [decision_objective(x, xi[i], dim=dim) <= t[i] for i in range(num_posterior_samples)]
 
     return cp.Problem(bdro_obj, constraints)
 
