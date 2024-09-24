@@ -45,11 +45,12 @@ def sample_likelihood(
                     scale=DGP_STD_TRUNCATED_NORMAL,
                     size=num_likelihood_samples,
                 )
+        return xi
     else:
         raise NotImplementedError(
             f"Likelihood '{likelihood}' not implemented."
         )
-    return xi
+    
 
 
 def sample_likelihood_regression(
@@ -72,5 +73,5 @@ def sample_likelihood_regression(
         b = theta_sample[i,1]
         std = theta_sample[i,2]
         mu = a - b*price
-        xi[i,:] = generator.normal(loc=mu, scale=std, size=num_likelihood_samples, random_state=generator)
+        xi[i,:] = generator.normal(loc=mu, scale=std, size=num_likelihood_samples)
     return xi
