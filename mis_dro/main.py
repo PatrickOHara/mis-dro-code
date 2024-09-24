@@ -3,6 +3,7 @@
 import warnings
 from datetime import datetime
 import json
+import math
 from pathlib import Path
 from uuid import uuid4, UUID
 from joblib import Parallel, delayed
@@ -41,8 +42,8 @@ from .gaussian_kernel import *
 app = typer.Typer(name="misdro")
 
 
-@app.command(name="setup")
-def setup(
+@app.command(name="setup-kl")
+def setup_kl_dro_bas(
     experiment_name: ExperimentName, experiment_dir: Path, overwrite: bool = False, njobs: int = -1,
 ):
     """Setup an experiment in a new directory"""
@@ -65,7 +66,7 @@ def setup(
 
     # setup SLURM file
     with open(
-        Path(__file__).parent / "template.slurm", "r", encoding="utf-8"
+        Path(__file__).parent / "kl_dro_bas_template.slurm", "r", encoding="utf-8"
     ) as slurm_file:
         slurm_string = slurm_file.read()
     for dgp, algorithm in dgp_algorithm_pairs:
@@ -75,6 +76,36 @@ def setup(
         (experiment_dir / f"{experiment_name}_{dgp}_{algorithm}.slurm").write_text(
             dgp_string
         )
+
+
+@app.command(name="setup-mmd")
+def setup_mmd_dro_bas(
+    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, overwrite: bool = False, njobs: int = -1,
+):
+    """Setup an experiment in a new directory"""
+    if not experiment_dir.exists() or not overwrite:
+        experiment_dir.mkdir(parents=False, exist_ok=False)
+
+    # get the experiment from the name
+    experiment = get_experiment(experiment_name)
+
+    # write experiment file to JSON
+    filepath = experiment_dir / "experiment.json"
+    with open(filepath, "w", encoding="utf-8") as json_file:
+        json.dump(experiment, json_file, indent=4)
+
+    # for the given batch size, how many batches do we need?
+    num_batches = math.ceil(float(len(experiment)) / float(batch_size))
+
+    # setup SLURM file
+    with open(
+        Path(__file__).parent / "mmd_dro_bas_template.slurm", "r", encoding="utf-8"
+    ) as slurm_file:
+        slurm_string = slurm_file.read()
+    dgp_string = slurm_string.format(
+        experiment_dir=experiment_dir, njobs=njobs, num_batches=num_batches, batch_size=batch_size
+    )
+    (experiment_dir / f"{experiment_name}.slurm").write_text(dgp_string)
 
 
 @app.command(name="csv")
@@ -116,6 +147,18 @@ def run_experiment(
             run(experiment_dir, **params, njobs=njobs)
 
 
+@app.command(name="batch")
+def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool = False, njobs: int = -1):
+    print(datetime.now(), "Running batch from index", start)
+    print()
+    filepath = experiment_dir / "experiment.json"
+    with open(filepath, "r", encoding="utf-8") as json_file:
+        experiment = json.load(json_file)
+    batch_experiment = experiment[start: min(start + batch_size, len(experiment))]
+    for params in batch_experiment:
+        if not ((experiment_dir / params["uuid"]).exists() and only_missing):
+            run(experiment_dir, **params, njobs=njobs)
+
 @app.command(name="uuid")
 def run_uuid(experiment_dir: Path, uuid: UUID, njobs: int = -1, verbose: bool = False) -> None:
     """Run DRO for only one specified uuid parameters"""
@@ -129,6 +172,7 @@ def run_uuid(experiment_dir: Path, uuid: UUID, njobs: int = -1, verbose: bool = 
             run(experiment_dir, verbose=verbose, njobs=njobs, **params)
     if not found:
         raise ValueError(f"UUID {uuid} not found in {filepath}")
+
 
 
 @app.command(name="run")

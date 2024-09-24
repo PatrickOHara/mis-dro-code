@@ -42,13 +42,20 @@ def sample_npl(
     m = data.shape[0]
     if likelihood == "exponential":
         model = ExponentialModel(m)
-    elif likelihood == "normal":
+        p = 1
+    elif likelihood == "gaussian":
         model = univariate_GaussianModel(m)
+        p = 2
+    elif likelihood == "gaussian_known_var":
+        model = univariate_GaussianModel_known_variance(m)
+        p = 1
     elif likelihood == "multivariate_normal":
         d = data.shape[1]
         model = multivariate_GaussianModel(m, d)
+        p = d
     elif likelihood == "regression_normal":
         model = regression_GaussianModel(data[:,0])
+        p = 3
     else:
         raise NotImplementedError(
             f"Posterior '{likelihood}' is not implemented for '{inference}' inference."
@@ -58,7 +65,7 @@ def sample_npl(
             data[:,0].reshape((data.shape[0],1)),
             data[:,1].reshape((data.shape[0],1)),
             num_posterior_samples,
-            3,  # 3 unknown parameters
+            p, 
             m,
             model,
             seed,
@@ -179,9 +186,7 @@ class Npl:
         """Function to minimise the MMD using adam optimisation in JAX"""
 
         key, key1, key2 = jax.random.split(key, num=2 + 1)
-        #FIXME different initialisation for different DGPs!
-        params = jnp.log((1/np.mean(self.X[:,0])))*jnp.ones(self.p) # Initialisation of unknown parameter, here I inistialise at MLE
-
+        params = self.model.init_params(data)
         config.update("jax_enable_x64", True)
         num_batches = self.n // batch_size
 
@@ -270,10 +275,8 @@ class Npl:
                 [value, smallest_loss, best_theta, opt_state],
             )
 
-        return jnp.exp(
-            best_theta
-        )  # rate parameter of expoenential model is re-parametrised to ensure positivity
-
+        best_theta = self.model.parametrise(best_theta)
+        return best_theta 
 
 class Npl_regression:
     """This class contains functions to perform NPL inference (for alpha = 0 in the DP prior) for the Exponential distribution model."""
@@ -451,3 +454,7 @@ class Npl_regression:
         return jnp.exp(
             best_theta
         )  # rate parameter of expoenential model is re-parametrised to ensure positivity
+            
+            
+       
+        
