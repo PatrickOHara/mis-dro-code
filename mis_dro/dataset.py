@@ -40,7 +40,7 @@ def sample_dgp(
         return contaminated_normal(
             num_observations, contamination, random_state=generator)
     if dgp == "student_t":
-        return t.rvs(df=2, loc=25, scale=DGP_STD_TRUNCATED_NORMAL, size=num_observations, random_state=generator)
+        return t.rvs(df=3, loc=25, scale=DGP_STD_TRUNCATED_NORMAL, size=num_observations, random_state=generator)
     raise ValueError(f"The data-generating process specified is not supported: {dgp}")
 
 
