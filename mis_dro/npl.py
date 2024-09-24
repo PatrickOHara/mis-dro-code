@@ -362,7 +362,7 @@ class Npl_regression:
 
         key, key1, key2 = jax.random.split(key, num=2 + 1)
         # params = jnp.log((1/np.mean(self.X[:,0])))*jnp.ones(self.p) # Initialisation of unknown parameter, here I inistialise at MLE
-        params = jnp.array([7.,7.,5.])
+        params = self.model.init_params(data)
         config.update("jax_enable_x64", True)
         num_batches = self.n // batch_size
 
@@ -450,10 +450,8 @@ class Npl_regression:
                 false_func,
                 [value, smallest_loss, best_theta, opt_state],
             )
-
-        return jnp.exp(
-            best_theta
-        )  # rate parameter of expoenential model is re-parametrised to ensure positivity
+        best_theta = self.model.parametrise(best_theta)
+        return best_theta
             
             
        

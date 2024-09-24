@@ -92,12 +92,30 @@ class regression_GaussianModel:
     def sample(self, theta, key):
         a = theta[0]
         b = theta[1]
-        std = theta[2]
+        std = std = jnp.exp(theta[2]) # make sure standard deviation is positive!
         mu = a - b*self.price
         demand = (
             jax.random.multivariate_normal(key, mean=mu, cov=(std**2)*jnp.eye(self.m), shape=(self.m,1))
         )
         return demand
+    
+    def init_params(self, data):
+        # For regression parameters initialise with the OLS estimator 
+        # For the std initialise with the sample std
+        init_theta = jnp.zeros(3)
+        std_init = jnp.log(jnp.std(data))
+        # regression terms
+        X = jnp.column_stack((jnp.ones_like(data[:,0]), -data[:,0]))
+        coeffs, _, _, _ = jnp.linalg.lstsq(X, data[:,1], rcond=None)
+        a_init, b_init = coeffs
+        init_theta = init_theta.at[0].set(a_init)
+        init_theta = init_theta.at[1].set(b_init)
+        init_theta = init_theta.at[2].set(std_init)
+        return init_theta
+    
+    def parametrise(self, theta):
+        theta = theta.at[2].set(jnp.exp(theta[2]))
+        return theta
         
     
     
