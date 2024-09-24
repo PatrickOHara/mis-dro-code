@@ -3,6 +3,7 @@
 from typing import Optional
 import numpy as np
 from scipy.stats import expon, gamma, norm, multivariate_normal
+from sklearn.datasets import make_spd_matrix
 
 from bayesian_dro.Bayesian_DRO_continuous import data_generation, DGP_STD_TRUNCATED_NORMAL
 
@@ -38,8 +39,12 @@ def sample_dgp(
     if dgp == "gamma":
         return data_generation_gamma(num_observations, a=10, random_state=generator)
     if dgp == "multivariate_normal":
-        dgp_mean = np.zeros(dim)
-        dgp_cov = np.eye(dim)
+        dgp_mean = np.array([10.0, 20.0, 30.0, 35.0, 22.0])
+        cov_multiplier = 20.0
+        # NOTE sklearn doesn't seem to accept a Generator
+        sklearn_cov_seed = 1    # NOTE fix the seed, we always want the same covariance
+        sklearn_random_state = np.random.RandomState(seed=sklearn_cov_seed)
+        dgp_cov = cov_multiplier * make_spd_matrix(dim, random_state=sklearn_random_state)
         return multivariate_normal.rvs(dgp_mean, dgp_cov, size=num_observations, random_state=generator)
     raise ValueError(f"The data-generating process specified is not supported: {dgp}")
 

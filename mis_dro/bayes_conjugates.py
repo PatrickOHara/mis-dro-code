@@ -65,7 +65,12 @@ def derive_analytical_posterior_params(
         mu_post, kappa_post, _, Psi_post = posterior_params
         # Sigma_hat = 0.5 * np.linalg.inv(np.outer(mu_post, mu_post) - (1/kappa_post)*Psi_post)
         # mu_hat = Sigma_hat @ mu_post
-        return mu_post, (1/kappa_post) * Psi_post
+        dim = mu_post.shape[0]
+        vec_triu_size = upper_triangular_size(dim)
+        theta = np.zeros((1, dim+int(vec_triu_size)))
+        theta[0, :dim] = mu_post
+        theta[0, dim:] = (1/kappa_post) * Psi_post[np.triu_indices(dim)]
+        return theta
     else:
         raise NotImplementedError(
             f"We haven't derived an analytical posterior expression for a '{posterior}' posterior"
@@ -102,6 +107,8 @@ def sample_posterior(
             beta_posterior,
             generator=generator,
         )
+    if posterior == "normal_inverse_wishart":
+        return normal_inverse_wishart_samples(num_posterior_samples, *posterior_params, generator=generator)
     else:
         raise NotImplementedError(f"Posterior '{posterior}' is not implemented")
 
@@ -170,6 +177,10 @@ def normal_gamma_rvs(
 ) -> np.ndarray:
     """Normal-gamma random variates
 
+    Returns:
+        mu_samples:
+        standard_dev_samples:
+
     Notes:
         1. Sample precision `lambda` from a Gamma(`alpha`, `beta`) distribution
         2. Sample from a normal distribution with mean `mu` and standard deviation `sqrt(1/(kappa * lambda))`
@@ -177,13 +188,15 @@ def normal_gamma_rvs(
     samples = np.zeros((num_samples, 2))
     if not generator:
         generator = np.random.default_rng()
+    # TODO make these standard deviation samples! By taking inverse sqrt
     precision_samples = generator.gamma(alpha, 1.0 / beta, num_samples)
+    standard_devs = 1 / np.sqrt(kappa * precision_samples)
     for i in range(num_samples):
         # NOTE numpy Normal distribution takes standard deviation as a parameter (hence sqrt) - not variance!
         samples[i, 0] = generator.normal(
-            mu, np.sqrt(1.0 / (kappa * precision_samples[i])), 1
+            mu, standard_devs[i], 1
         )
-    samples[:, 1] = precision_samples
+    samples[:, 1] = standard_devs
     return samples
 
 def normal_inverse_wishart_prior(dim: int):
@@ -223,8 +236,6 @@ def normal_inverse_wishart_posterior(data, mu_prior, kappa_prior, iota_prior, Ps
         See Section 3.4.4.3 of Murphy (2023) Probabilistic Machine Learning: Advanced Topics.
     """
     N = data.shape[0]
-    print(data.shape)
-    print(mu_prior.shape)
     xi_mean = np.mean(data, axis=0)
     kappa_post = kappa_prior + N
     mu_post = (kappa_prior * mu_prior + N * xi_mean) / kappa_post
@@ -246,22 +257,24 @@ def normal_inverse_wishart_samples(num_samples: int, mu: np.ndarray, kappa: floa
 
     Returns:
         mu_samples: Matrix with shape (N,D)
-        cov_samples: Tensor with shape (N,D,D)
+        cov_samples: Matrix with shape (N, D + D*(D-1)/2 + D).
+            The covariance samples are stored as a vector in upper triangular format.
     """
     dim = mu.shape[0]
     assert dim == Psi.shape[0] and dim == Psi.shape[1]
+    vec_triu_size = upper_triangular_size(dim)
+    samples = np.zeros((num_samples, dim+vec_triu_size))
 
     # sample from the inverse Wishart
     iw_post = sp.stats.invwishart(iota, Psi, seed=generator)
     cov_samples = iw_post.rvs(num_samples)
 
     # sample from a multivariate normal given the covariance samples
-    mu_samples = np.zeros((num_samples, dim))
+    idx_triu = np.triu_indices(dim)
     for i, cov in enumerate(cov_samples):
-        mu_samples[i] = sp.stats.multivariate_normal(mu, 1/kappa * cov, seed=generator).rvs()
-    assert mu_samples.shape == (num_samples, dim)
-    assert cov_samples.shape == (num_samples, dim, dim)
-    return mu_samples, cov_samples
+        samples[i, :dim] = sp.stats.multivariate_normal(mu, 1/kappa * cov, seed=generator).rvs()
+        samples[i, dim:] = cov[idx_triu]
+    return samples
 
 def multivariate_digamma_p(a: float, p: int) -> float:
     """The multivariate digamma function of dimension p
@@ -284,3 +297,6 @@ def get_normal_inverse_wishart_G_constant(mu_post: np.ndarray, kappa_post: float
     term5 = np.log(np.linalg.det(Psi_post))
     return term1 + term2 + term3 + term4 + term5
 
+def upper_triangular_size(dim: int) -> int:
+    """Includes the diagonal!"""
+    return dim * (dim-1) / 2 + dim

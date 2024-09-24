@@ -44,7 +44,11 @@ def get_kl_bdro_problem(
 
     # declare parameters
     epsilon_minus_constant = cp.Parameter(1, name="epsilon_minus_constant", nonneg=True)
-    xi = cp.Parameter((num_posterior_samples, num_likelihood_samples, dim), name="xi")
+    # TODO write up why we use list?
+    xi = [
+        cp.Parameter((num_likelihood_samples, dim), name=f"xi_{i}")
+        for i in range(num_posterior_samples)
+    ]
 
     # create the objective function for the Bayesian DRO problem
     # NOTE we pass the max function to f_recession because,
@@ -65,7 +69,7 @@ def get_kl_bdro_problem(
     constraints = [
         x >= SMALLEST_X,
         x <= LARGEST_X,
-    ] + [decision_objective(x, xi[i], dim=dim) <= t[i] for i in range(num_posterior_samples)]
+    ] + [decision_objective(x, xi[i]) <= t[i] for i in range(num_posterior_samples)]
 
     return cp.Problem(bdro_obj, constraints)
 
