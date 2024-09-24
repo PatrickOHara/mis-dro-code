@@ -89,15 +89,26 @@ def kl_newsvendor_1d() -> List[Dict]:
 def mmd_newsvendor_1d() -> List[Dict]:
     """MMD univariate newsvendor: compare our MMD Bayesian ambiguity set against empirical kernel DRO"""
     experiment = []
-    num_likelihood_samples = 10     # FIXME?
-    num_posterior_samples = 10      # FIXME?
+    num_likelihood_samples = 20     
+    num_posterior_samples = 20    
     # NOTE when using empirical, set likelihood to 'empirical'
+    # NOTE do not set up all the below combinations in one experiment to preserve memory
     for (algorithm, dgp, likelihood), epsilon in itertools.product(
         [
-            ("dro_bas_mmd", "contaminated_exp", "exponential"),     # misspecified
-            ("empirical_mmd", "contaminated_exp", "empirical"),            # empirical
-            ("dro_bas_mmd", "exponential", "exponential"),          # well specified
-            ("empirical_mmd", "exponential", "empirical"),                 # empirical
+            # ("dro_bas_mmd", "contaminated_exp", "exponential"),     # misspecified
+            # ("empirical_mmd", "contaminated_exp", "empirical"),            # empirical
+            # ("dro_bas_mmd", "exponential", "exponential"),          # well specified
+            # ("empirical_mmd", "exponential", "empirical"),                 # empirical
+            # ("dro_bas_mmd", "contaminated_normal", "gaussian_known_var"),     # misspecified
+            # ("empirical_mmd", "contaminated_normal", "empirical"),            # empirical
+            # ("dro_bas_mmd", "normal", "gaussian_known_var"),          # well specified
+            # ("empirical_mmd", "normal", "empirical"),                 # empirical
+            # ("dro_bas_mmd", "truncated_normal", "gaussian"),     # misspecified
+            # ("empirical_mmd", "truncated_normal", "empirical"),            # empirical
+            # ("dro_bas_mmd", "normal", "gaussian"),          # well specified
+            # ("empirical_mmd", "normal", "empirical"),                 # empirical
+            ("dro_bas_mmd", "student_t", "gaussian_known_var"),     # misspecified
+            ("empirical_mmd", "student_t", "empirical"),            # empirical
         ],
         BAS_DRO_EPSILON_SET,
     ):
@@ -106,7 +117,7 @@ def mmd_newsvendor_1d() -> List[Dict]:
         else:
             inference = "npl_mmd"
         contamination = 0.0
-        if dgp == "contaminated_exp":
+        if dgp == "contaminated_exp" or dgp == "contaminated_normal":
             contamination = CONTAMINATION_LEVEL
         params = {
             "algorithm": algorithm,
