@@ -2,8 +2,10 @@
 
 from typing import Optional
 import numpy as np
-from scipy.stats import expon, gamma, norm, multivariate_normal
+
+from scipy.stats import expon, gamma, norm, t, multivariate_normal
 from sklearn.datasets import make_spd_matrix
+
 
 from bayesian_dro.Bayesian_DRO_continuous import data_generation, DGP_STD_TRUNCATED_NORMAL
 
@@ -46,6 +48,11 @@ def sample_dgp(
         sklearn_random_state = np.random.RandomState(seed=sklearn_cov_seed)
         dgp_cov = cov_multiplier * make_spd_matrix(dim, random_state=sklearn_random_state)
         return multivariate_normal.rvs(dgp_mean, dgp_cov, size=num_observations, random_state=generator)
+    if dgp == "contaminated_normal":
+        return contaminated_normal(
+            num_observations, contamination, random_state=generator)
+    if dgp == "student_t":
+        return t.rvs(df=3, loc=25, scale=DGP_STD_TRUNCATED_NORMAL, size=num_observations, random_state=generator)
     raise ValueError(f"The data-generating process specified is not supported: {dgp}")
 
 
@@ -89,8 +96,8 @@ def contaminated_normal(num_observations: int, contamination: float, random_stat
         random_state = np.random.default_rng()
     cont_size = int(np.floor(contamination * num_observations))
     n_real = num_observations - cont_size
-    data = norm.rvs(loc=20, scale=10, size=n_real, random_state=random_state) 
-    outl = norm.rvs(loc=50, scale=10, size=cont_size, random_state=random_state) 
+    data = norm.rvs(loc=25, scale=DGP_STD_TRUNCATED_NORMAL, size=n_real, random_state=random_state) 
+    outl = norm.rvs(loc=75, scale=DGP_STD_TRUNCATED_NORMAL, size=cont_size, random_state=random_state) 
     data = np.concatenate((data, outl), axis=0)
     random_state.shuffle(data)  # shuffles the data in-place
     return data

@@ -4,6 +4,7 @@ from typing import Optional
 import numpy as np
 import scipy as sp
 from bayesian_dro.Bayesian_DRO_continuous import xi_generation
+from bayesian_dro.Bayesian_DRO_continuous import DGP_STD_TRUNCATED_NORMAL
 
 
 def sample_likelihood(
@@ -43,6 +44,13 @@ def sample_likelihood(
             vec_triu = theta_sample[i,dim:]
             cov = reconstruct_covariance_from_triu(vec_triu, dim)
             xi[i] = generator.multivariate_normal(mu, cov, size=num_likelihood_samples)
+    elif likelihood == "gaussian_known_var":
+        for i in range(num_posterior_samples):
+            xi[i] = generator.normal(
+                    loc=theta_sample[i],
+                    scale=DGP_STD_TRUNCATED_NORMAL,
+                    size=num_likelihood_samples,
+                )
     else:
         raise NotImplementedError(
             f"Likelihood '{likelihood}' not implemented."
