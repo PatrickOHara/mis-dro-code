@@ -25,6 +25,7 @@ class ExperimentName(StrEnum):
     """Names of experiments"""
 
     kl_newsvendor_1d = "kl_newsvendor_1d"
+    kl_newsvendor_5d = "kl_newsvendor_5d"
     mmd_newsvendor_1d = "mmd_newsvendor_1d"
     compare_solve = "compare_solve"
 
@@ -33,6 +34,7 @@ def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
     """Returns the experiment associated with the name"""
     function_lookup = {
         ExperimentName.kl_newsvendor_1d: kl_newsvendor_1d,
+        ExperimentName.kl_newsvendor_5d: kl_newsvendor_5d,
         ExperimentName.mmd_newsvendor_1d: mmd_newsvendor_1d,
         ExperimentName.compare_solve: compare_solve,
     }
@@ -42,6 +44,50 @@ def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
         raise KeyError(
             f"Please add {experiment_name} as a key in the function lookup dictionary"
         ) from e
+
+def kl_newsvendor_5d() -> List[Dict]:
+    """KL univariate newsvendor: compare our Bayesian ambiguity set against Bayesian DRO"""
+    experiment = []
+    for total_model_samples, algorithm, (dgp, likelihood, posterior), epsilon in itertools.product(
+        # [25, 100, 900, 2500],
+        [25],
+        ["kl_dro_bas", "kl_bdro"],
+        [
+            ("multivariate_normal", "multivariate_normal", "normal_inverse_wishart"),
+        ],
+        # BAS_DRO_EPSILON_SET,
+        [0.1, 1.0, 10.0],
+    ):
+        if algorithm == "kl_bdro":
+            num_posterior_samples = int(np.sqrt(total_model_samples))
+            num_likelihood_samples = int(np.sqrt(total_model_samples))
+        if algorithm == "kl_dro_bas":
+            # we calculate the posterior exactly in closed form!
+            num_likelihood_samples = total_model_samples
+            num_posterior_samples = 1
+        contamination = 0.0
+        if dgp == "contaminated_exp":
+            contamination = CONTAMINATION_LEVEL
+        params = {
+            "algorithm": algorithm,
+            "contamination": contamination,
+            "dataset": "newsvendor",
+            "dgp": dgp,
+            "dim": 5,
+            "epsilon": epsilon,
+            "inference": "bayes",
+            "lengthscale": -1.0,
+            "likelihood": likelihood,
+            "num_likelihood_samples": num_likelihood_samples,
+            "num_observations": NUM_OBSERVATIONS,
+            "num_posterior_samples": num_posterior_samples,
+            "num_replications": NUM_REPLICATIONS,
+            "num_test_observations": NUM_TEST_OBSERVATIONS,
+            "posterior": posterior,
+            "uuid": str(uuid4()),  # uniquely identify a run
+        }
+        experiment.append(params)
+    return experiment
 
 def kl_newsvendor_1d() -> List[Dict]:
     """KL univariate newsvendor: compare our Bayesian ambiguity set against Bayesian DRO"""
@@ -70,7 +116,9 @@ def kl_newsvendor_1d() -> List[Dict]:
         params = {
             "algorithm": algorithm,
             "contamination": contamination,
+            "dataset": "newsvendor",
             "dgp": dgp,
+            "dim": 1,
             "epsilon": epsilon,
             "inference": "bayes",
             "lengthscale": -1.0,
@@ -122,7 +170,9 @@ def mmd_newsvendor_1d() -> List[Dict]:
         params = {
             "algorithm": algorithm,
             "contamination": contamination,
+            "dataset": "newsvendor",
             "dgp": dgp,
+            "dim": 1,
             "epsilon": epsilon,
             "inference": inference,
             "lengthscale": -1.0,        # FIXME?
@@ -157,7 +207,9 @@ def compare_solve() -> List[Dict]:
         params = {
             "algorithm": algorithm,
             "contamination": 0.0,
+            "dataset": "newsvendor",
             "dgp": dgp,
+            "dim": 1,
             "epsilon": epsilon,
             "inference": "bayes",
             "lengthscale": -1.0,

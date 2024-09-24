@@ -179,7 +179,9 @@ def run(
     experiment_dir: Path,
     algorithm: str = "kl_bdro",
     contamination: float = CONTAMINATION_LEVEL,
+    dataset: str = "newsvendor",
     dgp: str = "truncated_normal",
+    dim: int = 1,
     epsilon: float = 1.0,
     inference: str = "bayes",
     lengthscale: float = -1.0,
@@ -198,13 +200,14 @@ def run(
     """Run Newsvendor Misspecified Bayesian DRO"""
     if uuid:
         print(uuid)
-    print("DGP:", dgp, " - ALGORITHM:", algorithm, " - NUM LIKELIHOOD SAMPLES:", num_likelihood_samples, " - POSTERIOR:", posterior)
+    print("DGP:", dgp, " - ALGORITHM:", algorithm, " - NUM LIKELIHOOD SAMPLES:", num_likelihood_samples, " - POSTERIOR:", posterior, "- DATASET:", dataset, "- DIM:", dim)
     if algorithm in ("kl_bdro", "kl_dro_bas"):
         problem = get_kl_bdro_problem(
-            newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples
+            newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim,
         )
     elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
         dim_theta = 1
+        # FIXME we will need to pass dim (of xi) into MMD class
         kdro_class = DRO_BAS_MMD(dim_theta, newsvendor_cost_cvxpy)
         if algorithm == "dro_bas_mmd":
             n_samples = num_posterior_samples*num_likelihood_samples
@@ -229,7 +232,9 @@ def run(
     params = {
         "algorithm": algorithm,
         "contamination": contamination,
+        "dataset": dataset,
         "dgp": dgp,
+        "dim": dim,
         "epsilon": epsilon,
         "ignore_dpp": ignore_dpp,
         "inference": inference,
@@ -282,7 +287,9 @@ def run_replication(
     problem: cp.Problem,
     algorithm: str = "kl_bdro",
     contamination: float = CONTAMINATION_LEVEL,
+    dataset: str = "newsvendor",
     dgp: str = "truncated_normal",
+    dim: int = 1,
     epsilon: float = 1.0,
     ignore_dpp: bool = False,
     inference: str = "bayes",
@@ -303,10 +310,10 @@ def run_replication(
     dgp_start = datetime.now()
     # NOTE if contamination is specified, then only contaminate the training samples (not test samples)
     data = sample_dgp(
-        dgp, num_observations, contamination=contamination, generator=generator
+        dgp, num_observations, dim=dim, contamination=contamination, generator=generator
     )
     data_eval = sample_dgp(
-        dgp, num_test_observations, contamination=0.0, generator=generator
+        dgp, num_test_observations, dim=dim, contamination=0.0, generator=generator
     )
     dgp_time = (datetime.now() - dgp_start).total_seconds()
 
@@ -314,7 +321,7 @@ def run_replication(
     posterior_start = datetime.now()
     log_partition_constant = 0.0
     if inference == "bayes":
-        theta_prior = default_prior_params(posterior)
+        theta_prior = default_prior_params(posterior, dim=dim)
         theta_posterior = get_posterior_params(posterior, data, theta_prior)
         if algorithm == "kl_dro_bas":
             assert num_posterior_samples == 1
@@ -351,6 +358,7 @@ def run_replication(
         xi = sample_likelihood(
             likelihood,
             theta_sample,
+            dim,
             num_likelihood_samples,
             generator=generator,
         )
@@ -368,10 +376,11 @@ def run_replication(
         else:
             # set parameters then solve
             problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon - log_partition_constant])
-            problem.param_dict["xi"].value = xi
+            for i in range(num_posterior_samples):
+                problem.param_dict[f"xi_{i}"].value = xi[i]
             # NOTE the MOSEK 'accept_unknown' argument is needed due to https://github.com/cvxpy/cvxpy/pull/2117
             problem.solve(solver=cp.MOSEK, verbose=verbose, ignore_dpp=ignore_dpp, accept_unknown=True)
-            solution = problem.var_dict["x"].value[0]
+            solution = problem.var_dict["x"].value
             # solve_time = problem.solver_stats.solve_time
             setup_time = problem.solver_stats.setup_time
     elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
@@ -403,13 +412,17 @@ def run_replication(
         raise ValueError("Please choose a valid algorithm")
     solve_time = (datetime.now() - solve_start).total_seconds()
     # evaluate the cost
-    if solution == np.inf:
+    if (solution == np.inf).any():
         out_of_sample_mean = np.inf
         out_of_sample_var = 0.0
     else:
         out_of_sample_costs = newsvendor_cost_cvxpy(solution, data_eval).value
         out_of_sample_mean = np.mean(out_of_sample_costs)
         out_of_sample_var = np.var(out_of_sample_costs)
+        if dim == 1:
+            solution = solution[0]
+        else:
+            solution = list(solution)
     return {
         "uuid": uuid,
         "replication": replication,
