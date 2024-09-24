@@ -144,8 +144,8 @@ def mmd_newsvendor_1d() -> List[Dict]:
 def mmd_regression_newsvendor_1d() -> List[Dict]:
     """MMD univariate newsvendor: compare our MMD Bayesian ambiguity set against empirical kernel DRO"""
     experiment = []
-    num_likelihood_samples = 10     # FIXME?
-    num_posterior_samples = 10      # FIXME?
+    num_likelihood_samples = 20     
+    num_posterior_samples = 20      
     # NOTE when using empirical, set likelihood to 'empirical'
     for (algorithm, dgp, likelihood), epsilon in itertools.product(
         [
@@ -167,7 +167,7 @@ def mmd_regression_newsvendor_1d() -> List[Dict]:
             "dgp": dgp,
             "epsilon": epsilon,
             "inference": inference,
-            "lengthscale": -1.0,        # FIXME?
+            "lengthscale": -1.0,       
             "likelihood": likelihood,
             "num_certify_points": NUM_CERTIFY,
             "num_likelihood_samples": num_likelihood_samples,
