@@ -370,7 +370,7 @@ def run_replication(
     if algorithm in ("kl_bdro", "kl_dro_bas"):
         if epsilon - log_partition_constant < 0:
             # NOTE the optimisation problem is unbounded below
-            solution = np.inf
+            solution = np.inf * np.ones(dim)
             solve_time = 0.0
             setup_time = 0.0
         else:
@@ -419,10 +419,7 @@ def run_replication(
         out_of_sample_costs = newsvendor_cost_cvxpy(solution, data_eval).value
         out_of_sample_mean = np.mean(out_of_sample_costs)
         out_of_sample_var = np.var(out_of_sample_costs)
-        if dim == 1:
-            solution = solution[0]
-        else:
-            solution = list(solution)
+        solution = list(solution)
     return {
         "uuid": uuid,
         "replication": replication,
