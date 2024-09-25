@@ -120,7 +120,9 @@ def get_log_partition_constant(posterior: str, posterior_params: list) -> float:
         _, kappa_posterior, alpha_posterior, _ = posterior_params
         return get_normal_gamma_constant(alpha_posterior, kappa_posterior)
     elif posterior == "normal_inverse_wishart":
-        return 0.0  # FIXME
+        mu_post, kappa_post, _, _ = posterior_params
+        dim = mu_post.shape[0]
+        return get_normal_inverse_wishart_G_constant(dim, kappa_post)
     else:
         raise NotImplementedError(f"get_log_partition_constant not implemented for posterior {posterior}")
 
@@ -258,9 +260,9 @@ def normal_inverse_wishart_samples(num_samples: int, mu: np.ndarray, kappa: floa
         cov_samples: Matrix with shape (N, D + D*(D-1)/2 + D).
             The covariance samples are stored as a vector in upper triangular format.
     """
-    dim = mu.shape[0]
+    dim = int(mu.shape[0])
     assert dim == Psi.shape[0] and dim == Psi.shape[1]
-    vec_triu_size = upper_triangular_size(dim)
+    vec_triu_size = int(upper_triangular_size(dim))
     samples = np.zeros((num_samples, dim+vec_triu_size))
 
     # sample from the inverse Wishart
@@ -283,13 +285,12 @@ def multivariate_digamma(a: float, p: int) -> float:
     """
     return np.sum([sp.special.digamma(a + (1-i)/2) for i in range(p)])
 
-def get_normal_inverse_wishart_G_constant(mu_post: np.ndarray, kappa_post: float, Psi_post: np.ndarray) -> float:
+def get_normal_inverse_wishart_G_constant(dim: int, kappa_post: float) -> float:
     """Returns the constant G(tau, nu) for the normal-inverse-Wishart"""
-    dim = mu_post.shape[0]
     term1 = -0.5 * dim * np.log(2)
     term2 = - 0.5 * multivariate_digamma(0.5 * (kappa_post - dim - 2), dim)
-    term3 = dim / (2 * kappa_post)
-    term4 = 0.5 * np.log(kappa_post - dim - 2)
+    term3 = 0.5 * (dim / kappa_post)
+    term4 = 0.5 * dim * np.log(kappa_post - dim - 2)
     return term1 + term2 + term3 + term4
 
 def upper_triangular_size(dim: int) -> int:
