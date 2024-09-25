@@ -132,7 +132,7 @@ def run_experiment(
     experiment_dir: Path,
     dgp: str,
     algorithm: str,
-    only_missing: bool = False,
+    only_missing: bool = False, #NOTE if the experiment runs out of memory set this to true to true 
     njobs: int = -1,
 ):
     """When using SLURM, this function is called to run an experiment"""
@@ -180,6 +180,7 @@ def run(
     algorithm: str = "kl_bdro",
     contamination: float = CONTAMINATION_LEVEL,
     dgp: str = "truncated_normal",
+    dim: int = 1,
     epsilon: float = 1.0,
     inference: str = "bayes",
     lengthscale: float = -1.0,
@@ -204,8 +205,8 @@ def run(
             newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples
         )
     elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
-        dim_theta = 1
-        kdro_class = DRO_BAS_MMD(dim_theta, newsvendor_cost_cvxpy)
+        dim_theta = dim
+        kdro_class = DRO_BAS_MMD(dim_theta, dim, newsvendor_cost_cvxpy)
         if algorithm == "dro_bas_mmd":
             n_samples = num_posterior_samples*num_likelihood_samples
         elif algorithm == "empirical_mmd":
@@ -230,6 +231,7 @@ def run(
         "algorithm": algorithm,
         "contamination": contamination,
         "dgp": dgp,
+        "dim": dim,
         "epsilon": epsilon,
         "ignore_dpp": ignore_dpp,
         "inference": inference,
@@ -283,6 +285,7 @@ def run_replication(
     algorithm: str = "kl_bdro",
     contamination: float = CONTAMINATION_LEVEL,
     dgp: str = "truncated_normal",
+    dim: int = 1,
     epsilon: float = 1.0,
     ignore_dpp: bool = False,
     inference: str = "bayes",
@@ -303,10 +306,10 @@ def run_replication(
     dgp_start = datetime.now()
     # NOTE if contamination is specified, then only contaminate the training samples (not test samples)
     data = sample_dgp(
-        dgp, num_observations, contamination=contamination, generator=generator
+        dgp, num_observations, dim=dim, contamination=contamination, generator=generator
     )
     data_eval = sample_dgp(
-        dgp, num_test_observations, contamination=0.0, generator=generator
+        dgp, num_test_observations, dim=dim, contamination=0.0, generator=generator
     )
     dgp_time = (datetime.now() - dgp_start).total_seconds()
 
@@ -332,6 +335,7 @@ def run_replication(
             num_posterior_samples,
             seed=replication,
             lengthscale=lengthscale,
+            dim=dim,
             generator=generator,
         )
     elif inference == "empirical":
@@ -351,6 +355,7 @@ def run_replication(
         xi = sample_likelihood(
             likelihood,
             theta_sample,
+            dim,
             num_likelihood_samples,
             generator=generator,
         )
@@ -376,12 +381,11 @@ def run_replication(
             setup_time = problem.solver_stats.setup_time
     elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
         if algorithm == "dro_bas_mmd":
-            xi = xi.reshape((num_likelihood_samples*num_posterior_samples,1))
+            xi = xi.reshape((num_likelihood_samples*num_posterior_samples,dim))
         elif algorithm == "empirical_mmd":
-            xi = data.reshape((num_observations,1))
-        _, dim_x = xi.shape
-        Xcert = np.random.uniform(np.min(xi), np.max(xi), size=[num_certify_points,dim_x])
-        zetai = np.concatenate([xi, Xcert])
+            xi = data.reshape((num_observations,dim))
+        Xcert = np.random.uniform(np.min(xi), np.max(xi), size=[num_certify_points,dim])
+        zetai = np.concatenate([xi, Xcert], axis=0)
         l = np.sqrt((1/2)*np.median(distance.cdist(zetai, zetai, 'sqeuclidean')))
         K = k_jax(zetai, zetai, l)
         K_decomp = mat_decomp_jax(K)
@@ -403,13 +407,17 @@ def run_replication(
         raise ValueError("Please choose a valid algorithm")
     solve_time = (datetime.now() - solve_start).total_seconds()
     # evaluate the cost
-    if solution == np.inf:
+    if (solution == np.inf).any():
         out_of_sample_mean = np.inf
         out_of_sample_var = 0.0
     else:
         out_of_sample_costs = newsvendor_cost_cvxpy(solution, data_eval).value
         out_of_sample_mean = np.mean(out_of_sample_costs)
         out_of_sample_var = np.var(out_of_sample_costs)
+        if dim == 1:
+            solution = solution[0]
+        else:
+            solution = list(solution)
     return {
         "uuid": uuid,
         "replication": replication,

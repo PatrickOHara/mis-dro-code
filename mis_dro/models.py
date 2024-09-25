@@ -73,7 +73,7 @@ class multivariate_GaussianModel:
         mu = theta
         sigma = DGP_STD_TRUNCATED_NORMAL
         x = (
-            jax.random.multivariate_normal(key, mean = mu, cov = sigma*jnp.eye(self.d), shape=(self.m,self.d))
+            jax.random.multivariate_normal(key, mean = mu, cov = (sigma**2)*jnp.eye(self.d), shape=(self.m,self.d))
         )
         
         return x

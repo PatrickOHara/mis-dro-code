@@ -22,6 +22,7 @@ def sample_npl(
     num_posterior_samples: int,
     seed: int,
     lengthscale: float = -1.0,
+    dim: int = 1,
     generator: Optional[np.random.Generator] = None,
     p: int = 1,
 ) -> np.ndarray:
@@ -58,7 +59,7 @@ def sample_npl(
             f"Posterior '{likelihood}' is not implemented for '{inference}' inference."
         )
     npl_toy = Npl(
-        data.reshape((data.shape[0], 1)),
+        data.reshape((data.shape[0], dim)),
         num_posterior_samples,
         p,
         m,
