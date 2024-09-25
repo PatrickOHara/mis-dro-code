@@ -93,12 +93,14 @@ def mmd_newsvendor_1d() -> List[Dict]:
     num_posterior_samples = 20    
     # NOTE when using empirical, set likelihood to 'empirical'
     # NOTE do not set up all the below combinations in one experiment to preserve memory
-    for (algorithm, dgp, likelihood), epsilon in itertools.product(
+    for (algorithm, dgp, likelihood, inference), contamination, epsilon in itertools.product(
         [
-            # ("dro_bas_mmd", "contaminated_exp", "exponential"),     # misspecified
-            # ("empirical_mmd", "contaminated_exp", "empirical"),            # empirical
+            ("dro_bas_mmd", "contaminated_exp", "exponential", "npl_mmd"),     # misspecified
+            ("empirical_mmd", "contaminated_exp", "empirical", "empirical"),            # empirical
             # ("dro_bas_mmd", "exponential", "exponential"),          # well specified
             # ("empirical_mmd", "exponential", "empirical"),                 # empirical
+            ("kl_dro_bas", "contaminated_exp", "exponential", "bayes")
+            ("kl_bdro", "contaminated_exp", "exponential", "bayes")
             # ("dro_bas_mmd", "contaminated_normal", "gaussian_known_var"),     # misspecified
             # ("empirical_mmd", "contaminated_normal", "empirical"),            # empirical
             # ("dro_bas_mmd", "normal", "gaussian_known_var"),          # well specified
@@ -107,25 +109,32 @@ def mmd_newsvendor_1d() -> List[Dict]:
             # ("empirical_mmd", "truncated_normal", "empirical"),            # empirical
             # ("dro_bas_mmd", "normal", "gaussian"),          # well specified
             # ("empirical_mmd", "normal", "empirical"),                 # empirical
-            ("dro_bas_mmd", "student_t", "gaussian_known_var"),     # misspecified
-            ("empirical_mmd", "student_t", "empirical"),            # empirical
+            # ("dro_bas_mmd", "student_t", "gaussian_known_var"),     # misspecified
+            # ("empirical_mmd", "student_t", "empirical"),            # empirical
         ],
+        [0.0, 0.05, 0.1],
         BAS_DRO_EPSILON_SET,
     ):
-        if likelihood == "empirical":
-            inference = "empirical"
+        if inference == "bayes":
+            posterior = "gamma"
         else:
-            inference = "npl_mmd"
-        contamination = 0.0
-        if dgp == "contaminated_exp" or dgp == "contaminated_normal":
-            contamination = CONTAMINATION_LEVEL
+            posterior = "npl"
+        if algorithm == "kl_dro_bas":
+            # we calculate the posterior exactly in closed form!
+            num_likelihood_samples = 400
+            num_posterior_samples = 1
+        # else:
+        #     inference = "npl_mmd"
+        # contamination = 0.0
+        # if dgp == "contaminated_exp" or dgp == "contaminated_normal":
+        #     contamination = CONTAMINATION_LEVEL
         params = {
             "algorithm": algorithm,
             "contamination": contamination,
             "dgp": dgp,
             "epsilon": epsilon,
             "inference": inference,
-            "lengthscale": -1.0,        # FIXME?
+            "lengthscale": -1.0,        
             "likelihood": likelihood,
             "num_certify_points": NUM_CERTIFY,
             "num_likelihood_samples": num_likelihood_samples,
@@ -133,7 +142,7 @@ def mmd_newsvendor_1d() -> List[Dict]:
             "num_posterior_samples": num_posterior_samples,
             "num_replications": NUM_REPLICATIONS,
             "num_test_observations": NUM_TEST_OBSERVATIONS,
-            "posterior": "npl",
+            "posterior": posterior,
             "uuid": str(uuid4()),  # uniquely identify a run
         }
         experiment.append(params)
