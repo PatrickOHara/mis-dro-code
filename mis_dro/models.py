@@ -65,6 +65,7 @@ class univariate_GaussianModel_known_variance:
         return theta
 
 class multivariate_GaussianModel:
+    #FIXME for unknown covariance matrix
     def __init__(self, m, d):
         self.m = m
         self.d = d

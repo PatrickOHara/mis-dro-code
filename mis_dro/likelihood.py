@@ -10,6 +10,7 @@ from bayesian_dro.Bayesian_DRO_continuous import DGP_STD_TRUNCATED_NORMAL
 def sample_likelihood(
     likelihood: str,
     theta_sample: np.ndarray,
+    dim: int,
     num_likelihood_samples: int,
     generator: Optional[np.random.Generator],
 ) -> np.ndarray:
@@ -21,7 +22,7 @@ def sample_likelihood(
     if not generator:
         generator = np.random.default_rng()
     num_posterior_samples = theta_sample.shape[0]
-    xi = np.zeros([num_posterior_samples, num_likelihood_samples])
+    xi = np.zeros([num_posterior_samples, num_likelihood_samples, dim])
     if likelihood == "exponential":
         for i in range(num_posterior_samples):
             xi[i] = sp.stats.expon.rvs(
@@ -38,6 +39,21 @@ def sample_likelihood(
                 np.sqrt(1.0 / theta_sample[i, 1]),
                 size=num_likelihood_samples,
             )
+    elif likelihood == "gaussian":
+        for i in range(num_posterior_samples):
+            xi[i] = generator.normal(
+                theta_sample[i, 0],
+                theta_sample[i, 1],
+                size=num_likelihood_samples,
+            )
+    elif likelihood == "multivariate_normal":
+        #FIXME need to generalise to unknown covariance for mmd
+        for i in range(num_posterior_samples):
+            mu = theta_sample[i,:]
+            cov = (DGP_STD_TRUNCATED_NORMAL**2)*np.eye(dim)
+            # vec_triu = theta_sample[i,dim:]
+            # cov = reconstruct_covariance_from_triu(vec_triu, dim)
+            xi[i] = generator.multivariate_normal(mu, cov, size=num_likelihood_samples)
     elif likelihood == "gaussian_known_var":
         for i in range(num_posterior_samples):
             xi[i] = generator.normal(
