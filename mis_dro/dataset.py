@@ -37,8 +37,8 @@ def sample_dgp(
     if dgp == "gamma":
         return data_generation_gamma(num_observations, a=10, random_state=generator)
     if dgp == "normal_regression":
-        a = 20
-        b = 6
+        a = uniform.rvs(loc=1000, scale=1000, random_state=generator) #NOTE scipy generates uniform rvs in [loc, loc+scale]
+        b = uniform.rvs(loc=500, scale=500, random_state=generator)
         price = uniform.rvs(size=num_observations, random_state=generator)
         demand = multivariate_normal.rvs(
                 mean=a-b*price,
