@@ -167,7 +167,7 @@ class Npl:
             + (1 / (self.n * (self.n - 1))) * sum3
         )
 
-    def minimise_MMD(self, data, weights, key, Nstep=1000, eta=0.01, batch_size=10):
+    def minimise_MMD(self, data, weights, key, Nstep=1000, eta=0.1, batch_size=10):
         """Function to minimise the MMD using adam optimisation in JAX"""
 
         key, key1, key2 = jax.random.split(key, num=2 + 1)
