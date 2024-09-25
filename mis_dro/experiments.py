@@ -150,7 +150,7 @@ def mmd_regression_newsvendor_1d() -> List[Dict]:
     for (algorithm, dgp, likelihood), epsilon in itertools.product(
         [
             ("dro_bas_mmd", "normal_regression", "regression_normal"),     # regression
-            ("empirical_mmd", "normal_regression", "empirical"),            # empirical
+            # ("empirical_mmd", "normal_regression", "empirical"),            # empirical
         ],
         BAS_DRO_EPSILON_SET,
     ):
