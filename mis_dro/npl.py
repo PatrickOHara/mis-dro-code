@@ -314,7 +314,7 @@ class Npl_regression:
         """Draws a single sample from the nonparametric posterior specified via
         data X and Dirichlet weights"""
 
-        return self.minimise_MMD(self.demand, weights, key)
+        return self.minimise_MMD(self.demand, self.price, weights, key)
 
     def draw_samples(self, n_jobs: int = -1, random_state=None):
         """Draws B samples in parallel from the nonparametric posterior"""
@@ -357,12 +357,12 @@ class Npl_regression:
             + (1 / (self.n * (self.n - 1))) * sum3
         )
 
-    def minimise_MMD(self, data, weights, key, Nstep=1000, eta=0.01, batch_size=10):
+    def minimise_MMD(self, data, covariates, weights, key, Nstep=1000, eta=0.01, batch_size=10):
         """Function to minimise the MMD using adam optimisation in JAX"""
 
         key, key1, key2 = jax.random.split(key, num=2 + 1)
         # params = jnp.log((1/np.mean(self.X[:,0])))*jnp.ones(self.p) # Initialisation of unknown parameter, here I inistialise at MLE
-        params = self.model.init_params(data)
+        params = self.model.init_params(data, covariates)
         config.update("jax_enable_x64", True)
         num_batches = self.n // batch_size
 
