@@ -90,12 +90,12 @@ class regression_GaussianModel:
         self.m = len(price)
         
     def sample(self, theta, key):
-        a = theta[0]
-        b = theta[1]
-        var = theta[2] # make sure standard deviation is positive!
+        a = jnp.exp(theta[0])
+        b = jnp.exp(theta[1])
+        std = jnp.exp(theta[2]) # make sure standard deviation is positive!
         mu = a - b*self.price
         demand = (
-            jax.random.multivariate_normal(key, mean=mu, cov=var*jnp.eye(self.m), shape=(self.m,1))
+            jax.random.multivariate_normal(key, mean=mu, cov=std**2*jnp.eye(self.m), shape=(self.m,1))
         )
         return demand
     
@@ -107,15 +107,17 @@ class regression_GaussianModel:
         X = jnp.column_stack((jnp.ones_like(covariates), -covariates))
         coeffs, residuals, _, _ = jnp.linalg.lstsq(X, data, rcond=None)
         SSR = residuals[0]
-        var_init = SSR / (len(data) - 2)
+        std_init = jnp.sqrt(SSR / (len(data) - 2))
         a_init, b_init = coeffs
-        init_theta = init_theta.at[0].set(a_init[0])
-        init_theta = init_theta.at[1].set(b_init[0])
-        init_theta = init_theta.at[2].set(var_init)
+        init_theta = init_theta.at[0].set(jnp.log(a_init[0]))
+        init_theta = init_theta.at[1].set(jnp.log(b_init[0]))
+        init_theta = init_theta.at[2].set(jnp.log(std_init))
         return init_theta
     
     def parametrise(self, theta):
-        theta = theta.at[2].set(jnp.sqrt(theta[2])) # return the std
+        theta = theta.at[0].set(jnp.exp(theta[0]))
+        theta = theta.at[1].set(jnp.exp(theta[1]))
+        theta = theta.at[2].set(jnp.exp(theta[2])) # return the std
         return theta
         
     
