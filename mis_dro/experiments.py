@@ -148,22 +148,23 @@ def mmd_newsvendor_5d() -> List[Dict]:
     num_posterior_samples = 20    
     # NOTE when using empirical, set likelihood to 'empirical'
     # NOTE do not set up all the below combinations in one experiment to preserve memory
-    for (algorithm, dgp, likelihood), epsilon in itertools.product(
+    for (algorithm, dgp, likelihood), contamination, epsilon in itertools.product(
         [
             ("dro_bas_mmd", "cont_multivariate_normal", "multivariate_normal"),     # misspecified
             ("empirical_mmd", "cont_multivariate_normal", "empirical"),            # empirical
             # ("dro_bas_mmd", "multivariate_normal", "multivariate_normal"),          # well specified
             # ("empirical_mmd", "multivariate_normal", "empirical"),                 # empirical
         ],
+        [0.05, 0.1],
         BAS_DRO_EPSILON_SET,
     ):
         if likelihood == "empirical":
             inference = "empirical"
         else:
             inference = "npl_mmd"
-        contamination = 0.0
-        if dgp == "contaminated_exp" or dgp == "contaminated_normal" or dgp == "cont_multivariate_normal":
-            contamination = CONTAMINATION_LEVEL
+        # contamination = 0.0
+        # if dgp == "contaminated_exp" or dgp == "contaminated_normal" or dgp == "cont_multivariate_normal":
+            # contamination = CONTAMINATION_LEVEL
         params = {
             "algorithm": algorithm,
             "contamination": contamination,
