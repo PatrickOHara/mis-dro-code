@@ -1,7 +1,7 @@
 """Constants for e.g. number of observations or samples"""
 
 CONTAMINATION_LEVEL = 0.2  # ratio for contamination dataset
-NUM_OBSERVATIONS = 20  # in-sample 'training' observations
+NUM_OBSERVATIONS = 80  # in-sample 'training' observations
 NUM_POSTERIOR_SAMPLES = 100  # theta samples from posterior
 NUM_TEST_OBSERVATIONS = 50  # out-of-sample 'test' observations
 NUM_LIKELIHOOD_SAMPLES = 100  # xi samples from likelihood
