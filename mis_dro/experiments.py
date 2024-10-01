@@ -145,12 +145,13 @@ def mmd_newsvendor_1d() -> List[Dict]:
     # NOTE do not set up all the below combinations in one experiment to preserve memory
     for (algorithm, dgp, likelihood, inference), contamination, epsilon in itertools.product(
         [
-            # ("dro_bas_mmd", "contaminated_exp", "exponential", "npl_mmd"),     # misspecified
-            # ("empirical_mmd", "contaminated_exp", "empirical", "empirical"),            # empirical
+            ("dro_bas_mmd", "contaminated_exp", "exponential", "npl_mmd"),     # misspecified
+            ("empirical_mmd", "contaminated_exp", "empirical", "empirical"),            # empirical
             # ("dro_bas_mmd", "exponential", "exponential", "npl_mmd"),          # well specified
             # ("empirical_mmd", "exponential", "empirical", "empirical"),                 # empirical
-            # ("kl_dro_bas", "contaminated_exp", "exponential", "npl_mmd"),
-            ("kl_bdro", "contaminated_exp", "exponential", "npl_mmd"),
+            ("kl_dro_bas", "contaminated_exp", "exponential", "bayes"),
+            ("kl_bdro", "contaminated_exp", "exponential", "bayes"),
+            ("kl_bdro", "contaminated_exp", "exponential", "npl_mmd")
             # ("kl_dro_bas", "exponential", "exponential", "bayes"),
             # ("kl_bdro", "exponential", "exponential", "bayes")
             # ("dro_bas_mmd", "contaminated_normal", "gaussian_known_var"),     # misspecified
@@ -164,7 +165,7 @@ def mmd_newsvendor_1d() -> List[Dict]:
             # ("dro_bas_mmd", "student_t", "gaussian_known_var"),     # misspecified
             # ("empirical_mmd", "student_t", "empirical"),            # empirical
         ],
-        [0.05, 0.1],
+        [0.1],   #0.05
         BAS_DRO_EPSILON_SET,
     ):
         if inference == "bayes":
@@ -230,10 +231,10 @@ def mmd_newsvendor_1d_missp() -> List[Dict]:
             # ("empirical_mmd", "truncated_normal", "empirical"),            # empirical
             # ("dro_bas_mmd", "normal", "gaussian"),          # well specified
             # ("empirical_mmd", "normal", "empirical"),                 # empirical
-            ("dro_bas_mmd", "student_t", "normal", "npl_mmd"),     # misspecified
+            # ("dro_bas_mmd", "student_t", "normal", "npl_mmd"),     # misspecified
             # ("empirical_mmd", "student_t", "empirical", "empirical"),            # empirical
             # ("kl_dro_bas", "student_t", "normal", "bayes"),
-            # ("kl_bdro", "student_t", "normal", "bayes"),
+            ("kl_bdro", "student_t", "normal", "npl_mmd"),   #bayes
 
         ],
         BAS_DRO_EPSILON_SET,
