@@ -2,6 +2,7 @@
 
 from datetime import datetime
 import json
+import math
 from pathlib import Path
 from typing import Optional
 from uuid import uuid4, UUID
@@ -40,8 +41,8 @@ from .gaussian_kernel import *
 app = typer.Typer(name="misdro")
 
 
-@app.command(name="setup")
-def setup(
+@app.command(name="setup-kl")
+def setup_kl_dro_bas(
     experiment_name: ExperimentName, experiment_dir: Path, overwrite: bool = False, njobs: int = -1,
 ):
     """Setup an experiment in a new directory"""
@@ -64,7 +65,7 @@ def setup(
 
     # setup SLURM file
     with open(
-        Path(__file__).parent / "template.slurm", "r", encoding="utf-8"
+        Path(__file__).parent / "kl_dro_bas_template.slurm", "r", encoding="utf-8"
     ) as slurm_file:
         slurm_string = slurm_file.read()
     for dgp, algorithm in dgp_algorithm_pairs:
@@ -74,6 +75,36 @@ def setup(
         (experiment_dir / f"{experiment_name}_{dgp}_{algorithm}.slurm").write_text(
             dgp_string
         )
+
+
+@app.command(name="setup-mmd")
+def setup_mmd_dro_bas(
+    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, overwrite: bool = False, njobs: int = -1,
+):
+    """Setup an experiment in a new directory"""
+    if not experiment_dir.exists() or not overwrite:
+        experiment_dir.mkdir(parents=False, exist_ok=False)
+
+    # get the experiment from the name
+    experiment = get_experiment(experiment_name)
+
+    # write experiment file to JSON
+    filepath = experiment_dir / "experiment.json"
+    with open(filepath, "w", encoding="utf-8") as json_file:
+        json.dump(experiment, json_file, indent=4)
+
+    # for the given batch size, how many batches do we need?
+    num_batches = math.ceil(float(len(experiment)) / float(batch_size))
+
+    # setup SLURM file
+    with open(
+        Path(__file__).parent / "mmd_dro_bas_template.slurm", "r", encoding="utf-8"
+    ) as slurm_file:
+        slurm_string = slurm_file.read()
+    dgp_string = slurm_string.format(
+        experiment_dir=experiment_dir, njobs=njobs, num_batches=num_batches, batch_size=batch_size
+    )
+    (experiment_dir / f"{experiment_name}.slurm").write_text(dgp_string)
 
 
 @app.command(name="csv")
@@ -115,6 +146,18 @@ def run_experiment(
             run(experiment_dir, **params, njobs=njobs)
 
 
+@app.command(name="batch")
+def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool = False, njobs: int = -1):
+    print(datetime.now(), "Running batch from index", start)
+    print()
+    filepath = experiment_dir / "experiment.json"
+    with open(filepath, "r", encoding="utf-8") as json_file:
+        experiment = json.load(json_file)
+    batch_experiment = experiment[start: min(start + batch_size, len(experiment))]
+    for params in batch_experiment:
+        if not ((experiment_dir / params["uuid"]).exists() and only_missing):
+            run(experiment_dir, **params, njobs=njobs)
+
 @app.command(name="uuid")
 def run_uuid(experiment_dir: Path, uuid: UUID, njobs: int = -1, verbose: bool = False) -> None:
     """Run DRO for only one specified uuid parameters"""
@@ -130,12 +173,15 @@ def run_uuid(experiment_dir: Path, uuid: UUID, njobs: int = -1, verbose: bool = 
         raise ValueError(f"UUID {uuid} not found in {filepath}")
 
 
+
 @app.command(name="run")
 def run(
     experiment_dir: Path,
     algorithm: str = "kl_bdro",
     contamination: float = CONTAMINATION_LEVEL,
+    dataset: str = "newsvendor",
     dgp: str = "truncated_normal",
+    dim: int = 1,
     epsilon: float = 1.0,
     inference: str = "bayes",
     lengthscale: float = -1.0,
@@ -154,13 +200,14 @@ def run(
     """Run Newsvendor Misspecified Bayesian DRO"""
     if uuid:
         print(uuid)
-    print("DGP:", dgp, " - ALGORITHM:", algorithm, " - NUM LIKELIHOOD SAMPLES:", num_likelihood_samples, " - POSTERIOR:", posterior)
+    print("DGP:", dgp, " - ALGORITHM:", algorithm, " - NUM LIKELIHOOD SAMPLES:", num_likelihood_samples, " - POSTERIOR:", posterior, "- DATASET:", dataset, "- DIM:", dim)
     if algorithm in ("kl_bdro", "kl_dro_bas"):
         problem = get_kl_bdro_problem(
-            newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples
+            newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim,
         )
     elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
         dim_theta = 1
+        # FIXME we will need to pass dim (of xi) into MMD class
         kdro_class = DRO_BAS_MMD(dim_theta, newsvendor_cost_cvxpy)
         if algorithm == "dro_bas_mmd":
             n_samples = num_posterior_samples*num_likelihood_samples
@@ -185,7 +232,9 @@ def run(
     params = {
         "algorithm": algorithm,
         "contamination": contamination,
+        "dataset": dataset,
         "dgp": dgp,
+        "dim": dim,
         "epsilon": epsilon,
         "ignore_dpp": ignore_dpp,
         "inference": inference,
@@ -238,9 +287,10 @@ def run_replication(
     problem: cp.Problem,
     algorithm: str = "kl_bdro",
     contamination: float = CONTAMINATION_LEVEL,
-    dataset: str = "newsvendor_1d",
+    dataset: str = "newsvendor",
     dataset_dir: Optional[Path] = None,
     dgp: str = "truncated_normal",
+    dim: int = 1,
     epsilon: float = 1.0,
     ignore_dpp: bool = False,
     inference: str = "bayes",
@@ -262,24 +312,24 @@ def run_replication(
     if dataset in ("newsvendor_1d", "newsvendor_5d"):
         # NOTE if contamination is specified, then only contaminate the training samples (not test samples)
         data = sample_dgp(
-            dgp, num_observations, contamination=contamination, generator=generator
+            dgp, num_observations, dim=dim, contamination=contamination, generator=generator
         )
         data_eval = sample_dgp(
-            dgp, num_test_observations, contamination=0.0, generator=generator
+            dgp, num_test_observations, dim=dim, contamination=0.0, generator=generator
         )
     elif dataset == "portfolio":
         # TODO decide on number of 3-month time windows
         # TODO load portfolio dataset for 1 year of training data and 3 months of test data
         # NOTE shape of data (N, D) where N is number of observations (i.e. number of days)
         # and where D is the number of stocks
-        data, data_eval = portfolio_dataset
+        data, data_eval = portfolio_dataset(dgp, replication, portfolio_dir=dataset_dir)
     dgp_time = (datetime.now() - dgp_start).total_seconds()
 
     # 2. sample from the posterior
     posterior_start = datetime.now()
     log_partition_constant = 0.0
     if inference == "bayes":
-        theta_prior = default_prior_params(posterior)
+        theta_prior = default_prior_params(posterior, dim=dim)
         theta_posterior = get_posterior_params(posterior, data, theta_prior)
         if algorithm == "kl_dro_bas":
             assert num_posterior_samples == 1
@@ -316,6 +366,7 @@ def run_replication(
         xi = sample_likelihood(
             likelihood,
             theta_sample,
+            dim,
             num_likelihood_samples,
             generator=generator,
         )
@@ -327,16 +378,17 @@ def run_replication(
     if algorithm in ("kl_bdro", "kl_dro_bas"):
         if epsilon - log_partition_constant < 0:
             # NOTE the optimisation problem is unbounded below
-            solution = np.inf
+            solution = np.inf * np.ones(dim)
             solve_time = 0.0
             setup_time = 0.0
         else:
             # set parameters then solve
             problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon - log_partition_constant])
-            problem.param_dict["xi"].value = xi
+            for i in range(num_posterior_samples):
+                problem.param_dict[f"xi_{i}"].value = xi[i]
             # NOTE the MOSEK 'accept_unknown' argument is needed due to https://github.com/cvxpy/cvxpy/pull/2117
             problem.solve(solver=cp.MOSEK, verbose=verbose, ignore_dpp=ignore_dpp, accept_unknown=True)
-            solution = problem.var_dict["x"].value[0]
+            solution = problem.var_dict["x"].value
             # solve_time = problem.solver_stats.solve_time
             setup_time = problem.solver_stats.setup_time
     elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
@@ -368,18 +420,17 @@ def run_replication(
         raise ValueError("Please choose a valid algorithm")
     solve_time = (datetime.now() - solve_start).total_seconds()
     # evaluate the cost
-    if solution == np.inf:
+    if (solution == np.inf).any():
         out_of_sample_mean = np.inf
         out_of_sample_var = 0.0
     else:
         out_of_sample_costs = newsvendor_cost_cvxpy(solution, data_eval).value
         out_of_sample_mean = np.mean(out_of_sample_costs)
         out_of_sample_var = np.var(out_of_sample_costs)
-
+        solution = list(solution)
     # TODO calculate the Sharp ratio
     # TODO caclulate the total return,
     # TODO the solution should be a vector
-
     return {
         "uuid": uuid,
         "replication": replication,
