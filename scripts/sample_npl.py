@@ -48,7 +48,7 @@ def run_replication(
         generator=generator,
     )
 
-    experiment_dir = "/dcs/pg23/u1604520/misdro/npl_samples/"
+    experiment_dir = "/dcs/pg23/u1604520/misdro/npl_samples_exp/"
     df = pd.DataFrame(theta_sample)
     df.to_csv(experiment_dir+f"theta_sample_{replication}_cont00.csv", index=False, header=False)
 
@@ -57,9 +57,9 @@ if __name__ == "__main__":
         run_replication(
             j,
             contamination=0.0,
-            dgp = "multivariate_normal",
-            dim = 5,
-            likelihood = "multivariate_normal",
-            num_observations=400,
+            dgp = "exponential",
+            dim = 1,
+            likelihood = "exponential",
+            num_observations=80,
             num_posterior_samples=20
         )

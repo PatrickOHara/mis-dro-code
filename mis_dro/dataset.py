@@ -48,7 +48,7 @@ def sample_dgp(
         # sklearn_random_state = np.random.RandomState(seed=sklearn_cov_seed)
         # dgp_cov = cov_multiplier * make_spd_matrix(dim, random_state=sklearn_random_state)
         # return multivariate_normal.rvs(dgp_mean, dgp_cov, size=num_observations, random_state=generator)
-        dgp_mean = np.array([10.0, 20.0, 30.0, 35.0, 22.0])
+        dgp_mean = np.array([20.0, 20.0, 30.0, 35.0, 22.0])
         dgp_cov = (DGP_STD_TRUNCATED_NORMAL**2)*np.eye(dim)
         # cov_multiplier = 20.0
         # # NOTE sklearn doesn't seem to accept a Generator
@@ -119,8 +119,8 @@ def cont_multivariate_normal(num_observations: int, contamination: float, random
         random_state = np.random.default_rng()
     cont_size = int(np.floor(contamination * num_observations))
     n_real = num_observations - cont_size
-    dgp_mean = np.array([10.0, 20.0, 30.0, 35.0, 22.0])
-    dgp_mean_outl = dgp_mean + 50
+    dgp_mean = np.array([20.0, 20.0, 30.0, 35.0, 22.0]) #10
+    dgp_mean_outl = dgp_mean - 10
     dgp_cov = (DGP_STD_TRUNCATED_NORMAL**2)*np.eye(5)
     data = multivariate_normal.rvs(dgp_mean, dgp_cov, size=n_real, random_state=random_state)
     outl = multivariate_normal.rvs(dgp_mean_outl, dgp_cov, size=cont_size, random_state=random_state)

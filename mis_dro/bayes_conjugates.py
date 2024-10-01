@@ -49,8 +49,8 @@ def get_posterior_params(
         mu_prior, kappa_prior = prior_params
         N = data.shape[0]
         xi_mean = np.mean(data, axis=0)
-        kappa_post = kappa_prior + N
-        mu_posterior = (kappa_prior * mu_prior + N * xi_mean) / kappa_post
+        kappa_posterior = kappa_prior + N
+        mu_posterior = (kappa_prior * mu_prior + N * xi_mean) / kappa_posterior
         post_params = (mu_posterior, kappa_posterior)
     else:
         raise NotImplementedError(f"Posterior '{posterior}' is not implemented")
@@ -83,7 +83,8 @@ def derive_analytical_posterior_params(
         return theta
     elif posterior == "multivariate_normal_known_cov":
         mu_posterior, _ = posterior_params
-        return mu_posterior
+        dim = mu_posterior.shape[0]
+        return mu_posterior.reshape((1,dim))
     else:
         raise NotImplementedError(
             f"We haven't derived an analytical posterior expression for a '{posterior}' posterior"
@@ -124,7 +125,7 @@ def sample_posterior(
         return normal_inverse_wishart_samples(num_posterior_samples, *posterior_params, generator=generator)
     if posterior == "multivariate_normal_known_cov":
         mu_posterior, kappa_posterior = posterior_params
-        return sp.stats.multivariate_normal.rvs(mean=mu_posterior, cov=(DGP_STD_TRUNCATED_NORMAL**2)*np.eye(5), size=num_posterior_samples, generator=generator)
+        return sp.stats.multivariate_normal.rvs(mean=mu_posterior, cov=(DGP_STD_TRUNCATED_NORMAL**2)*np.eye(5), size=num_posterior_samples, random_state=generator)
     else:
         raise NotImplementedError(f"Posterior '{posterior}' is not implemented")
 
