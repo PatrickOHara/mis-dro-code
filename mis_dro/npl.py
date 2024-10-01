@@ -11,7 +11,7 @@ import jax
 from jax import numpy as jnp
 from jax import vmap, value_and_grad, jit, config
 from jax.example_libraries import optimizers
-from .gaussian_kernel import k, k_jax
+from .gaussian_kernel import k, k_jax, k_comp
 from .models import *
 
 
@@ -57,7 +57,7 @@ def sample_npl(
     elif likelihood == "multivariate_normal":
         d = data.shape[1]
         model = multivariate_GaussianModel(m, d, known_cov=False)
-        p = 2*d
+        p = 4*d
     else:
         raise NotImplementedError(
             f"Posterior '{likelihood}' is not implemented for '{inference}' inference."
@@ -186,8 +186,8 @@ class Npl:
             )  # Returnes self.m random samples from the model with parameter theta
 
             # Compute kernel Gram matrices
-            kyy = k_jax(y, y, self.l)
-            kxy = k_jax(y, x, self.l)
+            kyy = k_comp(y, y) #, self.l
+            kxy = k_comp(y, x) #, self.l
 
             # first sum
             diag_elements = jnp.diag_indices_from(kyy)
@@ -232,6 +232,7 @@ class Npl:
             batches = jnp.array(batches)
             # Update loss and gradient
             value, opt_state = step(next(itercount), opt_state, batches, rng_inputs1[i])
+            print(get_params(opt_state))
             # Update smallest loss and best theta value if loss has decreased
             pred = value < smallest_loss  # Prediction that loss (value) has decreased
 

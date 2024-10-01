@@ -80,7 +80,7 @@ class multivariate_GaussianModel:
         else:
             mu = theta[:self.d]
             vec_triu = theta[self.d:]
-            Sigma = self.reconstruct_covariance_from_triu(vec_triu)
+            Sigma = self.cholesky_param_to_covariance(vec_triu)
             x = (
                 jax.random.multivariate_normal(key, mean = mu, cov = Sigma, shape=(self.m,self.d))
             )
@@ -91,14 +91,20 @@ class multivariate_GaussianModel:
             return  jnp.mean(data, axis=0).reshape((self.d,))
         else:
             mu_init = jnp.mean(data, axis=0).reshape((self.d,))
-            vec_triu_init = jnp.ones(self.d)
-            theta_init = jnp.zeros(self.d)
+            cov_matrix = jnp.cov(data, rowvar=False)
+            L = jnp.linalg.cholesky(cov_matrix)
+            diag_idx = jnp.diag_indices(L.shape[0])
+            diag_entries = L[diag_idx]
+            L = L.at[diag_idx].set(jnp.log(diag_entries))
+            vec_triu_init = L[jnp.tril_indices(L.shape[0])]
+            theta_init = jnp.zeros(self.d*4)
             theta_init = theta_init.at[:self.d].set(mu_init)
             theta_init = theta_init.at[self.d:].set(vec_triu_init)
+            print(theta_init)
             return theta_init
     
     def parametrise(self, theta):
-        # Do not reparametrise covariance matrix because this is done inside the likelihood function!
+        # FIXME needs to match what likelihood takes as argument!
         return theta
     
     def reconstruct_covariance_from_triu(self, vec_triu: jnp.array):
@@ -106,6 +112,24 @@ class multivariate_GaussianModel:
         X = jnp.zeros((self.d, self.d))
         X = X.at[jnp.triu_indices(self.d)].set(vec_triu)
         return X + X.T - jnp.diag(jnp.diag(X))
+    
+    def cholesky_param_to_covariance(self, L_flat):
+        """
+        Converts a flattened lower triangular matrix to a covariance matrix.
+
+        L_flat: The flattened lower triangular part of the matrix.
+        dim: The dimensionality of the covariance matrix.
+        """
+        # Reshape the flat array into a lower triangular matrix
+        L = jnp.zeros((self.d, self.d))
+        tril_indices = jnp.tril_indices(self.d)
+        L = L.at[tril_indices].set(L_flat)
+
+        # Diagonal elements of L should be strictly positive to ensure positive definiteness
+        L = L.at[jnp.diag_indices(self.d)].set(jnp.exp(jnp.diag(L)))
+
+        # Return the covariance matrix
+        return L @ L.T
 
         
     
