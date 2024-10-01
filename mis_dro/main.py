@@ -347,7 +347,8 @@ def run_replication(
             c = '00'
         else:
             raise ValueError(f"There are no npl samples for contamination level {contamination}")
-        theta_sample = pd.read_csv(f"./misdro/npl_samples/theta_sample_{replication}_cont{c}.csv", header=None).values
+        path_to_csv = './misdro/npl_samples/'
+        theta_sample = pd.read_csv(path_to_csv + f"theta_sample_{replication}_cont{c}.csv", header=None).values
     elif inference == "empirical":
         # empirical does not have a posterior
         theta_sample = np.nan * np.ones(num_posterior_samples)
