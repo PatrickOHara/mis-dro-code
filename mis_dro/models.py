@@ -65,26 +65,47 @@ class univariate_GaussianModel_known_variance:
         return theta
 
 class multivariate_GaussianModel:
-    #FIXME for unknown covariance matrix
-    def __init__(self, m, d):
+    def __init__(self, m, d, known_cov):
         self.m = m
         self.d = d
+        self.known_cov = known_cov
     
     def sample(self, theta, key):
-        mu = theta
-        sigma = DGP_STD_TRUNCATED_NORMAL
-        x = (
-            jax.random.multivariate_normal(key, mean = mu, cov = (sigma**2)*jnp.eye(self.d), shape=(self.m,self.d))
-        )
-        
+        if self.known_cov == True:
+            mu = theta
+            sigma = DGP_STD_TRUNCATED_NORMAL
+            x = (
+                jax.random.multivariate_normal(key, mean = mu, cov = (sigma**2)*jnp.eye(self.d), shape=(self.m,self.d))
+            )
+        else:
+            mu = theta[:self.d]
+            vec_triu = theta[self.d:]
+            Sigma = self.reconstruct_covariance_from_triu(vec_triu)
+            x = (
+                jax.random.multivariate_normal(key, mean = mu, cov = Sigma, shape=(self.m,self.d))
+            )
         return x
     
     def init_params(self, data):
-        return  jnp.mean(data, axis=0).reshape((self.d,))
+        if self.known_cov == True:
+            return  jnp.mean(data, axis=0).reshape((self.d,))
+        else:
+            mu_init = jnp.mean(data, axis=0).reshape((self.d,))
+            vec_triu_init = jnp.ones(self.d)
+            theta_init = jnp.zeros(self.d)
+            theta_init = theta_init.at[:self.d].set(mu_init)
+            theta_init = theta_init.at[self.d:].set(vec_triu_init)
+            return theta_init
     
     def parametrise(self, theta):
+        # Do not reparametrise covariance matrix because this is done inside the likelihood function!
         return theta
     
+    def reconstruct_covariance_from_triu(self, vec_triu: jnp.array):
+        """Reconstruct the covariance matrix from a upper triangular vector in JAX"""
+        X = jnp.zeros((self.d, self.d))
+        X = X.at[jnp.triu_indices(self.d)].set(vec_triu)
+        return X + X.T - jnp.diag(jnp.diag(X))
 
         
     

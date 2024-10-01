@@ -50,10 +50,14 @@ def sample_npl(
     elif likelihood == "gaussian_known_var":
         model = univariate_GaussianModel_known_variance(m)
         p = 1
+    elif likelihood == "multivariate_normal_known_cov":
+        d = data.shape[1]
+        model = multivariate_GaussianModel(m, d, known_cov=True)
+        p = d
     elif likelihood == "multivariate_normal":
         d = data.shape[1]
-        model = multivariate_GaussianModel(m, d)
-        p = d
+        model = multivariate_GaussianModel(m, d, known_cov=False)
+        p = 2*d
     else:
         raise NotImplementedError(
             f"Posterior '{likelihood}' is not implemented for '{inference}' inference."

@@ -145,17 +145,18 @@ def mmd_newsvendor_5d() -> List[Dict]:
     """MMD univariate newsvendor: compare our MMD Bayesian ambiguity set against empirical kernel DRO"""
     experiment = []
     num_likelihood_samples = 20     
-    num_posterior_samples = 20    
+    num_posterior_samples = 20   
+    num_observations = 400 
     # NOTE when using empirical, set likelihood to 'empirical'
     # NOTE do not set up all the below combinations in one experiment to preserve memory
     for (algorithm, dgp, likelihood, contamination), epsilon in itertools.product(
         [
-            ("dro_bas_mmd", "cont_multivariate_normal", "multivariate_normal", 0.05),     # misspecified
+            ("dro_bas_mmd", "cont_multivariate_normal", "multivariate_normal_known_cov", 0.05),     # misspecified
             ("empirical_mmd", "cont_multivariate_normal", "empirical", 0.05),            # empirical
-            ("dro_bas_mmd", "cont_multivariate_normal", "multivariate_normal", 0.1),     # misspecified
+            ("dro_bas_mmd", "cont_multivariate_normal", "multivariate_normal_known_cov", 0.1),     # misspecified
             ("empirical_mmd", "cont_multivariate_normal", "empirical", 0.1),            # empirical
-            ("dro_bas_mmd", "multivariate_normal", "multivariate_normal", 0.0),          # well specified
-            ("empirical_mmd", "multivariate_normal", "empirical", 0.0),                 # empirical
+            ("dro_bas_mmd", "multivariate_normal_known_cov", "multivariate_normal_known_cov", 0.0),          # well specified
+            ("empirical_mmd", "multivariate_normal_known_cov", "empirical", 0.0),                 # empirical
         ],
         BAS_DRO_EPSILON_SET,
     ):
@@ -177,7 +178,7 @@ def mmd_newsvendor_5d() -> List[Dict]:
             "likelihood": likelihood,
             "num_certify_points": NUM_CERTIFY,
             "num_likelihood_samples": num_likelihood_samples,
-            "num_observations": NUM_OBSERVATIONS,
+            "num_observations": num_observations,
             "num_posterior_samples": num_posterior_samples,
             "num_replications": NUM_REPLICATIONS,
             "num_test_observations": NUM_TEST_OBSERVATIONS,

@@ -46,13 +46,18 @@ def sample_likelihood(
                 theta_sample[i, 1],
                 size=num_likelihood_samples,
             )
-    elif likelihood == "multivariate_normal":
-        #FIXME need to generalise to unknown covariance for mmd
+    elif likelihood == "multivariate_normal_known_cov":
         for i in range(num_posterior_samples):
             mu = theta_sample[i,:]
             cov = (DGP_STD_TRUNCATED_NORMAL**2)*np.eye(dim)
             # vec_triu = theta_sample[i,dim:]
             # cov = reconstruct_covariance_from_triu(vec_triu, dim)
+            xi[i] = generator.multivariate_normal(mu, cov, size=num_likelihood_samples)
+    elif likelihood == "multivariate_normal":
+        for i in range(num_posterior_samples):
+            mu = theta_sample[i,:]
+            vec_triu = theta_sample[i,dim:]
+            cov = reconstruct_covariance_from_triu(vec_triu, dim)
             xi[i] = generator.multivariate_normal(mu, cov, size=num_likelihood_samples)
     elif likelihood == "gaussian_known_var":
         for i in range(num_posterior_samples):
@@ -66,3 +71,10 @@ def sample_likelihood(
             f"Likelihood '{likelihood}' not implemented."
         )
     return xi
+
+
+def reconstruct_covariance_from_triu(vec_triu: np.array, dim: int):
+    """Reconstruct the covariance matrix from a upper triangular vector"""
+    X = np.zeros((dim,dim))
+    X[np.triu_indices(dim)] = vec_triu
+    return X + X.T - np.diag(np.diag(X))
