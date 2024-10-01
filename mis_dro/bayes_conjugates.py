@@ -107,8 +107,17 @@ def sample_posterior(
         )
     if posterior == "normal_inverse_wishart":
         return normal_inverse_wishart_samples(num_posterior_samples, *posterior_params, generator=generator)
-    else:
-        raise NotImplementedError(f"Posterior '{posterior}' is not implemented")
+    if posterior == "inverse_wishart":
+        iota_post, Psi_post = posterior_params
+        dim = Psi_post.shape[0]
+        iw_post = sp.stats.invwishart(iota_post, Psi_post, seed=generator)
+        cov_samples = iw_post.rvs(num_posterior_samples)
+        idx_triu = np.triu_indices(dim)
+        triu_samples = np.zeros((num_posterior_samples, upper_triangular_size(dim)))
+        for i, cov in enumerate(cov_samples):
+            triu_samples[i] = cov[idx_triu]
+        return triu_samples
+    raise NotImplementedError(f"Posterior '{posterior}' is not implemented")
 
 
 def get_log_partition_constant(posterior: str, posterior_params: list) -> float:

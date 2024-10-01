@@ -10,6 +10,7 @@ from joblib import Parallel, delayed
 import cvxpy as cp
 import numpy as np
 import pandas as pd
+import scipy as sp
 import typer
 
 from bayesian_dro.Bayesian_DRO_continuous import main_Bayesian_DRO
@@ -32,10 +33,10 @@ from .constants import (
 )
 from .dataset import sample_dgp, portfolio_dataset
 from .experiments import ExperimentName, get_experiment
-from .likelihood import sample_likelihood
+from .likelihood import sample_likelihood, reconstruct_covariance_from_triu
 from .newsvendor import newsvendor_cost_cvxpy
 from .npl import sample_npl
-from .optimise import get_kl_bdro_problem, DRO_BAS_MMD
+from .optimise import get_kl_bdro_problem, DRO_BAS_MMD, get_portfolio_problem
 from .gaussian_kernel import *
 
 app = typer.Typer(name="misdro")
@@ -43,14 +44,14 @@ app = typer.Typer(name="misdro")
 
 @app.command(name="setup-kl")
 def setup_kl_dro_bas(
-    experiment_name: ExperimentName, experiment_dir: Path, overwrite: bool = False, njobs: int = -1,
+    experiment_name: ExperimentName, experiment_dir: Path, dataset_dir: Optional[Path] = None, overwrite: bool = False, njobs: int = -1,
 ):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
         experiment_dir.mkdir(parents=False, exist_ok=False)
 
     # get the experiment from the name
-    experiment = get_experiment(experiment_name)
+    experiment = get_experiment(experiment_name, dataset_dir=dataset_dir)
 
     # write experiment file to JSON
     filepath = experiment_dir / "experiment.json"
@@ -58,7 +59,6 @@ def setup_kl_dro_bas(
         json.dump(experiment, json_file, indent=4)
 
     # get unique DGPs
-    # TODO add groupby inference
     dgp_algorithm_pairs = set()
     for params in experiment:
         dgp_algorithm_pairs.add((params["dgp"], params["algorithm"]))
@@ -79,14 +79,14 @@ def setup_kl_dro_bas(
 
 @app.command(name="setup-mmd")
 def setup_mmd_dro_bas(
-    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, overwrite: bool = False, njobs: int = -1,
+    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int,  dataset_dir: Optional[Path] = None, overwrite: bool = False, njobs: int = -1,
 ):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
         experiment_dir.mkdir(parents=False, exist_ok=False)
 
     # get the experiment from the name
-    experiment = get_experiment(experiment_name)
+    experiment = get_experiment(experiment_name, dataset_dir=dataset_dir)
 
     # write experiment file to JSON
     filepath = experiment_dir / "experiment.json"
@@ -309,7 +309,7 @@ def run_replication(
     # 1. generate dataset
     dgp_start = datetime.now()
     generator = np.random.default_rng(seed=replication)
-    if dataset in ("newsvendor_1d", "newsvendor_5d"):
+    if dataset == "newsvendor":
         # NOTE if contamination is specified, then only contaminate the training samples (not test samples)
         data = sample_dgp(
             dgp, num_observations, dim=dim, contamination=contamination, generator=generator
@@ -318,11 +318,10 @@ def run_replication(
             dgp, num_test_observations, dim=dim, contamination=0.0, generator=generator
         )
     elif dataset == "portfolio":
-        # TODO decide on number of 3-month time windows
-        # TODO load portfolio dataset for 1 year of training data and 3 months of test data
-        # NOTE shape of data (N, D) where N is number of observations (i.e. number of days)
-        # and where D is the number of stocks
-        data, data_eval = portfolio_dataset(dgp, replication, portfolio_dir=dataset_dir)
+        # NOTE shape of data (N, D) where N is number of weeks and D is the number of stocks
+        data, data_eval = portfolio_dataset(dgp, replication, dataset_dir)
+    else:
+        raise NotImplementedError(f"Dataset not implemented: {dataset}")
     dgp_time = (datetime.now() - dgp_start).total_seconds()
 
     # 2. sample from the posterior
@@ -337,6 +336,12 @@ def run_replication(
             theta_sample = derive_analytical_posterior_params(
                 posterior, theta_posterior
             )
+        elif algorithm == "kl_bdro" and dataset == "portfolio" and posterior == "normal_inverse_wishart":
+            # NOTE we only need to sample the covariance using an inverse Wishart
+            # we don't need to sample the mean because its available in closed form
+            _, _, iota_post, Psi_post = theta_posterior
+            inverse_wishart_params = (iota_post, Psi_post)
+            theta_sample = sample_posterior("inverse_wishart", inverse_wishart_params, num_posterior_samples, generator=generator)
         else:
             theta_sample = sample_posterior(posterior, theta_posterior, num_likelihood_samples, generator=generator)
     elif inference in ("npl_wlb", "npl_mmd"):
@@ -362,6 +367,8 @@ def run_replication(
     likelihood_start = datetime.now()
     if inference == "empirical":
         xi = data
+    elif dataset == "portfolio" and likelihood == "multivariate_normal":
+        pass    # no need to sample from likelihood cause we have closed form
     else:
         xi = sample_likelihood(
             likelihood,
@@ -375,7 +382,24 @@ def run_replication(
     # 4. run the chosen DRO algorithm
     solve_start = datetime.now()
     solution = np.nan
-    if algorithm in ("kl_bdro", "kl_dro_bas"):
+    if dataset == "portfolio" and algorithm in ("kl_bdro", "kl_dro_bas") and likelihood == "multivariate_normal":
+        if epsilon - log_partition_constant < 0:
+            # NOTE the optimisation problem is unbounded below
+            solution = np.inf * np.ones(dim)
+            solve_time = 0.0
+            setup_time = 0.0
+        else:
+            problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon - log_partition_constant])
+            for i in range(num_posterior_samples):
+                # get a PSD covariance from the upper triangular vector
+                cov = reconstruct_covariance_from_triu(theta_sample[i], dim)
+                # then take the square root of the covariance
+                problem.param_dict["sqrt_cov_post_{i}"].value = sp.linalg.sqrtm(cov)
+            # NOTE the MOSEK 'accept_unknown' argument is needed due to https://github.com/cvxpy/cvxpy/pull/2117
+            problem.solve(solver=cp.MOSEK, verbose=verbose, ignore_dpp=ignore_dpp, accept_unknown=True)
+            solution = problem.var_dict["x"].value
+            setup_time = problem.solver_stats.setup_time
+    elif algorithm in ("kl_bdro", "kl_dro_bas"):
         if epsilon - log_partition_constant < 0:
             # NOTE the optimisation problem is unbounded below
             solution = np.inf * np.ones(dim)
@@ -415,7 +439,6 @@ def run_replication(
     elif algorithm == "bdro_grid_search":
         solution = main_Bayesian_DRO(xi, epsilon)
         setup_time = 0.0  # can't really measure this easily
-    # TODO put in other algorithms here, e.g. main_Bayesian_DRO_epsilon1!
     else:
         raise ValueError("Please choose a valid algorithm")
     solve_time = (datetime.now() - solve_start).total_seconds()
@@ -424,13 +447,15 @@ def run_replication(
         out_of_sample_mean = np.inf
         out_of_sample_var = 0.0
     else:
-        out_of_sample_costs = newsvendor_cost_cvxpy(solution, data_eval).value
+        if dataset == "newsvendor":
+            out_of_sample_costs = newsvendor_cost_cvxpy(solution, data_eval).value
+        elif dataset == "portfolio":
+            # cost is interpreted as negative return (we want to maximise return)
+            out_of_sample_costs = - data_eval @ solution
         out_of_sample_mean = np.mean(out_of_sample_costs)
         out_of_sample_var = np.var(out_of_sample_costs)
         solution = list(solution)
-    # TODO calculate the Sharp ratio
-    # TODO caclulate the total return,
-    # TODO the solution should be a vector
+
     return {
         "uuid": uuid,
         "replication": replication,
@@ -442,8 +467,8 @@ def run_replication(
         "posterior_time": posterior_time,
         "solve_time": solve_time,
         "setup_time": setup_time,
-        "sharp_ratio": 0.0,     # TODO add sharp here
         "log_partition_constant": log_partition_constant,
+        "out_of_sample_costs": list(out_of_sample_costs),
     }
 
 if __name__ == "__main__":

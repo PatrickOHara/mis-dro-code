@@ -73,6 +73,34 @@ def get_kl_bdro_problem(
 
     return cp.Problem(bdro_obj, constraints)
 
+def get_portfolio_problem(num_stocks: int, num_cov_samples: int) -> cp.Problem:
+    """Evaluate portfolio cost function with cvxpy assuming a Gaussian likelihood
+
+    Args:
+        num_stocks: Number of stocks in portfolio, i.e. dimension of random variable
+        num_cov_samples: Number of covariance samples from the posterior
+
+    Returns:
+        Cvxpy problem object
+    """
+    # variables
+    x = cp.Variable(num_stocks, name="x")
+
+    # parameters
+    epsilon_minus_constant = cp.Parameter(1, name="epsilon_minus_constant", nonneg=True)
+    mu_post = cp.Parameter(num_stocks, name="mu_post")
+    sqrt_cov_post_samples = [cp.Parameter((num_stocks, num_stocks), name=f"sqrt_cov_post_{i}") for i in range(num_cov_samples)]
+
+    # objective function: maximise return whilst minimising variance
+    portfolio_objective = cp.Minimize(- mu_post @ x + cp.sqrt(2 * epsilon_minus_constant) * (1.0 / float(num_cov_samples)) * cp.sum(
+        [cp.norm(sqrt_cov_post_samples[i] @ x) for i in range(num_cov_samples)]
+    ))
+
+    # constraints
+    constraints = [x >= 0, cp.sum(x) == 1]
+
+    return cp.Problem(portfolio_objective, constraints)
+
 class DRO_BAS_MMD():
     '''
     DRO-BAS problem with the MMD as a KDRO problem in CVXPY 
