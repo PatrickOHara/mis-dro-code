@@ -226,12 +226,13 @@ def kl_portfolio(mmc2_dir: Path) -> List[Dict]:
         for num_posterior_samples in num_posterior_samples_list:
             returns_df = pd.read_excel(mmc2_dir / "Datasets" / dgp / f"{dgp}.xlsx", sheet_name="Assets_Returns", header=None)
             num_time_windows = get_num_time_windows(len(returns_df))
+            num_stocks = len(returns_df.columns)
             params = {
                 "algorithm": algorithm,
                 "contamination": 0.0,
                 "dataset": "portfolio",
                 "dgp": dgp,
-                "dim": 5,
+                "dim": num_stocks,
                 "epsilon": epsilon,
                 "inference": "bayes",
                 "lengthscale": -1.0,

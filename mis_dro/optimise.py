@@ -73,7 +73,7 @@ def get_kl_bdro_problem(
 
     return cp.Problem(bdro_obj, constraints)
 
-def get_portfolio_problem(num_stocks: int, num_cov_samples: int) -> cp.Problem:
+def get_kl_portfolio_problem(num_stocks: int, num_cov_samples: int) -> cp.Problem:
     """Evaluate portfolio cost function with cvxpy assuming a Gaussian likelihood
 
     Args:

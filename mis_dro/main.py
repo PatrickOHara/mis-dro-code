@@ -36,7 +36,7 @@ from .experiments import ExperimentName, get_experiment
 from .likelihood import sample_likelihood, reconstruct_covariance_from_triu
 from .newsvendor import newsvendor_cost_cvxpy
 from .npl import sample_npl
-from .optimise import get_kl_bdro_problem, DRO_BAS_MMD, get_portfolio_problem
+from .optimise import get_kl_bdro_problem, DRO_BAS_MMD, get_kl_portfolio_problem
 from .gaussian_kernel import *
 
 app = typer.Typer(name="misdro")
@@ -201,10 +201,12 @@ def run(
     if uuid:
         print(uuid)
     print("DGP:", dgp, " - ALGORITHM:", algorithm, " - NUM LIKELIHOOD SAMPLES:", num_likelihood_samples, " - POSTERIOR:", posterior, "- DATASET:", dataset, "- DIM:", dim)
-    if algorithm in ("kl_bdro", "kl_dro_bas"):
+    if algorithm in ("kl_bdro", "kl_dro_bas") and dataset == "newsvendor":
         problem = get_kl_bdro_problem(
             newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim,
         )
+    elif algorithm in ("kl_bdro", "kl_dro_bas") and dataset == "portfolio" and likelihood == "multivariate_normal":
+        problem = get_kl_portfolio_problem(dim, num_posterior_samples)
     elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
         dim_theta = 1
         # FIXME we will need to pass dim (of xi) into MMD class
