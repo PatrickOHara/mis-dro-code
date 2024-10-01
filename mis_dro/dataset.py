@@ -41,13 +41,24 @@ def sample_dgp(
     if dgp == "gamma":
         return data_generation_gamma(num_observations, a=10, random_state=generator)
     if dgp == "multivariate_normal":
+        # dgp_mean = np.array([10.0, 20.0, 30.0, 35.0, 22.0])
+        # cov_multiplier = 20.0
+        # # NOTE sklearn doesn't seem to accept a Generator
+        # sklearn_cov_seed = 1    # NOTE fix the seed, we always want the same covariance
+        # sklearn_random_state = np.random.RandomState(seed=sklearn_cov_seed)
+        # dgp_cov = cov_multiplier * make_spd_matrix(dim, random_state=sklearn_random_state)
+        # return multivariate_normal.rvs(dgp_mean, dgp_cov, size=num_observations, random_state=generator)
         dgp_mean = np.array([10.0, 20.0, 30.0, 35.0, 22.0])
-        cov_multiplier = 20.0
-        # NOTE sklearn doesn't seem to accept a Generator
-        sklearn_cov_seed = 1    # NOTE fix the seed, we always want the same covariance
-        sklearn_random_state = np.random.RandomState(seed=sklearn_cov_seed)
-        dgp_cov = cov_multiplier * make_spd_matrix(dim, random_state=sklearn_random_state)
+        dgp_cov = (DGP_STD_TRUNCATED_NORMAL**2)*np.eye(dim)
+        # cov_multiplier = 20.0
+        # # NOTE sklearn doesn't seem to accept a Generator
+        # sklearn_cov_seed = 1    # NOTE fix the seed, we always want the same covariance
+        # sklearn_random_state = np.random.RandomState(seed=sklearn_cov_seed)
+        # dgp_cov = cov_multiplier * make_spd_matrix(dim, random_state=sklearn_random_state)
         return multivariate_normal.rvs(dgp_mean, dgp_cov, size=num_observations, random_state=generator)
+    if dgp == "cont_multivariate_normal":
+        return cont_multivariate_normal(
+            num_observations, contamination, random_state=generator)
     if dgp == "contaminated_normal":
         return contaminated_normal(
             num_observations, contamination, random_state=generator)
@@ -75,8 +86,8 @@ def data_generation_outliers(
         random_state = np.random.default_rng()
     cont_size = int(np.floor(contamination * num_observations))
     n_real = num_observations - cont_size
-    data = expon.rvs(scale=10, size=n_real, random_state=random_state)
-    outl = expon.rvs(scale=70, size=cont_size, random_state=random_state)
+    data = expon.rvs(scale=2, size=n_real, random_state=random_state)
+    outl = expon.rvs(scale=10, size=cont_size, random_state=random_state)
     data = np.concatenate((data, outl), axis=0)
     random_state.shuffle(data)  # shuffles the data in-place
     return data
@@ -102,6 +113,20 @@ def contaminated_normal(num_observations: int, contamination: float, random_stat
     random_state.shuffle(data)  # shuffles the data in-place
     return data
     
+def cont_multivariate_normal(num_observations: int, contamination: float, random_state: Optional[np.random.Generator] = None):
+    
+    if not random_state:
+        random_state = np.random.default_rng()
+    cont_size = int(np.floor(contamination * num_observations))
+    n_real = num_observations - cont_size
+    dgp_mean = np.array([10.0, 20.0, 30.0, 35.0, 22.0])
+    dgp_mean_outl = dgp_mean + 50
+    dgp_cov = (DGP_STD_TRUNCATED_NORMAL**2)*np.eye(5)
+    data = multivariate_normal.rvs(dgp_mean, dgp_cov, size=n_real, random_state=random_state)
+    outl = multivariate_normal.rvs(dgp_mean_outl, dgp_cov, size=cont_size, random_state=random_state)
+    data = np.concatenate((data, outl), axis=0)
+    random_state.shuffle(data)  # shuffles the data in-place
+    return data
 
 def data_generation_gamma(num_observations: int, a: float, random_state: Optional[np.random.Generator] = None):
     """A Gamma data-generating process (DGP)
