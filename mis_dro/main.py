@@ -33,7 +33,7 @@ from .constants import (
 from .dataset import sample_dgp
 from .experiments import ExperimentName, get_experiment
 from .likelihood import sample_likelihood
-from .newsvendor import newsvendor_cost_cvxpy
+from .newsvendor import newsvendor_cost_cvxpy, newsvendor_cost_cvxpy_kl
 from .npl import sample_npl
 from .optimise import get_kl_bdro_problem, DRO_BAS_MMD
 from .gaussian_kernel import *
@@ -203,7 +203,7 @@ def run(
     print("DGP:", dgp, " - ALGORITHM:", algorithm, " - NUM LIKELIHOOD SAMPLES:", num_likelihood_samples, " - POSTERIOR:", posterior, "- DATASET:", dataset, "- DIM:", dim)
     if algorithm in ("kl_bdro", "kl_dro_bas"):
         problem = get_kl_bdro_problem(
-            newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim,
+            newsvendor_cost_cvxpy_kl, num_posterior_samples, num_likelihood_samples, dim=dim,
         )
     elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
         dim_theta = 1
@@ -370,7 +370,7 @@ def run_replication(
     if algorithm in ("kl_bdro", "kl_dro_bas"):
         if epsilon - log_partition_constant < 0:
             # NOTE the optimisation problem is unbounded below
-            solution = np.inf
+            solution = np.inf * np.ones(dim)
             solve_time = 0.0
             setup_time = 0.0
         else:
@@ -419,10 +419,7 @@ def run_replication(
         out_of_sample_costs = newsvendor_cost_cvxpy(solution, data_eval).value
         out_of_sample_mean = np.mean(out_of_sample_costs)
         out_of_sample_var = np.var(out_of_sample_costs)
-        if dim == 1:
-            solution = solution[0]
-        else:
-            solution = list(solution)
+        solution = list(solution)
     return {
         "uuid": uuid,
         "replication": replication,

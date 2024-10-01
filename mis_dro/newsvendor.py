@@ -11,6 +11,15 @@ def newsvendor_cost_cvxpy(x, xi):
     """Evaluate Newsvendor cost function with cvxpy
 
     Args:
+        x: Demand decision variable
+        xi: Realised random demand
+    """
+    return HOLDING_COST * cp.maximum(0, x - xi) + BACKORDER_COST * cp.maximum(0, xi - x)
+
+def newsvendor_cost_cvxpy_kl(x, xi):
+    """Evaluate Newsvendor cost function with cvxpy
+
+    Args:
         x: Demand decision variable of dimension dim. Shape (dim,)
         xi: N samples of D-dimension random demand. Shape (N,dim).
     
@@ -25,3 +34,5 @@ def newsvendor_cost_cvxpy(x, xi):
     b = BACKORDER_COST * np.ones(dim)
     X = cp.vstack([x for _ in range(xi.shape[0])])
     return cp.maximum(0, X - xi) @ h + cp.maximum(0, xi - X) @ b
+
+
