@@ -9,7 +9,7 @@ class AlgorithmLineStyle(StrEnum):
     """Consistent algorithm line styles"""
 
     bdro_grid_search = "dashed"
-    kl_bdro = "solid"
+    kl_bdro = "dotted"
     kl_dro_bas = "dotted"
 
 
@@ -17,14 +17,14 @@ class AlgorithmMarkerStyle(StrEnum):
     """Consistent algorithm marker styles"""
 
     bdro_grid_search = "*"
-    kl_bdro = "x"
+    kl_bdro = "^"
     kl_dro_bas = "o"
 
 class AlgorithmColor(StrEnum):
     """Colors of algorithm lines"""
-    bdro_grid_search = "orange"
-    kl_bdro = "black"
-    kl_dro_bas = "blue"
+    bdro_grid_search = "#ABABAB"
+    kl_bdro = "#FF800E"
+    kl_dro_bas = "#006BA4"
 
 
 
