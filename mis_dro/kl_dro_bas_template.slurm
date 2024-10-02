@@ -12,4 +12,4 @@
 #SBATCH --error=joboutput_%j.err  # Standard error from your job
 
 ## Execute your program(s) ##
-srun misdro experiment {experiment_dir} {dgp} {algorithm} --njobs {njobs}
+srun misdro experiment {experiment_dir} {dgp} {algorithm}

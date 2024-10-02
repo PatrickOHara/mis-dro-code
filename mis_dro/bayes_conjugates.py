@@ -113,7 +113,7 @@ def sample_posterior(
         iw_post = sp.stats.invwishart(iota_post, Psi_post, seed=generator)
         cov_samples = iw_post.rvs(num_posterior_samples)
         idx_triu = np.triu_indices(dim)
-        triu_samples = np.zeros((num_posterior_samples, upper_triangular_size(dim)))
+        triu_samples = np.zeros((int(num_posterior_samples), upper_triangular_size(dim)))
         for i, cov in enumerate(cov_samples):
             triu_samples[i] = cov[idx_triu]
         return triu_samples
@@ -304,4 +304,4 @@ def get_normal_inverse_wishart_G_constant(dim: int, kappa_post: float) -> float:
 
 def upper_triangular_size(dim: int) -> int:
     """Includes the diagonal!"""
-    return dim * (dim-1) / 2 + dim
+    return int(dim * (dim-1) / 2 + dim)

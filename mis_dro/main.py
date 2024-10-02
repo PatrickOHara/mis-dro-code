@@ -36,7 +36,8 @@ from .experiments import ExperimentName, get_experiment
 from .likelihood import sample_likelihood, reconstruct_covariance_from_triu
 from .newsvendor import newsvendor_cost_cvxpy
 from .npl import sample_npl
-from .optimise import get_kl_bdro_problem, DRO_BAS_MMD, get_kl_portfolio_problem
+from .optimise import get_kl_bdro_problem, DRO_BAS_MMD
+from .portfolio import get_kl_portfolio_problem, bdro_portfolio_posterior_samples
 from .gaussian_kernel import *
 
 app = typer.Typer(name="misdro")
@@ -44,7 +45,7 @@ app = typer.Typer(name="misdro")
 
 @app.command(name="setup-kl")
 def setup_kl_dro_bas(
-    experiment_name: ExperimentName, experiment_dir: Path, dataset_dir: Optional[Path] = None, overwrite: bool = False, njobs: int = -1,
+    experiment_name: ExperimentName, experiment_dir: Path, dataset_dir: Optional[Path] = None, overwrite: bool = False
 ):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
@@ -70,7 +71,7 @@ def setup_kl_dro_bas(
         slurm_string = slurm_file.read()
     for dgp, algorithm in dgp_algorithm_pairs:
         dgp_string = slurm_string.format(
-            experiment_dir=experiment_dir, dgp=dgp, algorithm=algorithm, njobs=njobs,
+            experiment_dir=experiment_dir, dgp=dgp, algorithm=algorithm,
         )
         (experiment_dir / f"{experiment_name}_{dgp}_{algorithm}.slurm").write_text(
             dgp_string
@@ -147,7 +148,7 @@ def run_experiment(
 
 
 @app.command(name="batch")
-def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool = False, njobs: int = -1):
+def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool = False, dataset_dir: Optional[Path] = None):
     print(datetime.now(), "Running batch from index", start)
     print()
     filepath = experiment_dir / "experiment.json"
@@ -156,7 +157,7 @@ def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool 
     batch_experiment = experiment[start: min(start + batch_size, len(experiment))]
     for params in batch_experiment:
         if not ((experiment_dir / params["uuid"]).exists() and only_missing):
-            run(experiment_dir, **params, njobs=njobs)
+            run(experiment_dir, dataset_dir=dataset_dir, **params)
 
 @app.command(name="uuid")
 def run_uuid(experiment_dir: Path, uuid: UUID, njobs: int = -1, verbose: bool = False) -> None:
@@ -180,9 +181,11 @@ def run(
     algorithm: str = "kl_bdro",
     contamination: float = CONTAMINATION_LEVEL,
     dataset: str = "newsvendor",
+    dataset_dir: Optional[Path] = None,
     dgp: str = "truncated_normal",
     dim: int = 1,
     epsilon: float = 1.0,
+    ignore_dpp: bool = False,
     inference: str = "bayes",
     lengthscale: float = -1.0,
     likelihood: str = "exponential",
@@ -221,8 +224,7 @@ def run(
     # If the number of parameters is small enough, then use Disciplined Parametrized Programming (DPP)
     # to reduce the compilation time in each replication.
     # However, a large number of parameters uses an enormous amout of RAM in the current cvxpy implementation.
-    if algorithm in ("kl_bdro", "kl_dro_bas", "dro_bas_mmd", "empirical_mmd"):
-        ignore_dpp = False
+    if not ignore_dpp and algorithm in ("kl_bdro", "kl_dro_bas", "dro_bas_mmd", "empirical_mmd"):
         n_parameters = np.sum(np.prod(param.shape) for param in problem.parameters())
         # NOTE whilst DRO-BAS can handle at least 5000 params, BDRO cannot.
         # So, for a fair comparison, we turn off DPP for both DRO-BAS and BDRO.
@@ -235,6 +237,7 @@ def run(
         "algorithm": algorithm,
         "contamination": contamination,
         "dataset": dataset,
+        "dataset_dir": dataset_dir,
         "dgp": dgp,
         "dim": dim,
         "epsilon": epsilon,
@@ -339,11 +342,8 @@ def run_replication(
                 posterior, theta_posterior
             )
         elif algorithm == "kl_bdro" and dataset == "portfolio" and posterior == "normal_inverse_wishart":
-            # NOTE we only need to sample the covariance using an inverse Wishart
-            # we don't need to sample the mean because its available in closed form
-            _, _, iota_post, Psi_post = theta_posterior
-            inverse_wishart_params = (iota_post, Psi_post)
-            theta_sample = sample_posterior("inverse_wishart", inverse_wishart_params, num_posterior_samples, generator=generator)
+            mu_post, _, iota_post, Psi_post = theta_posterior
+            theta_sample = bdro_portfolio_posterior_samples(num_posterior_samples, mu_post, iota_post, Psi_post, generator=generator)
         else:
             theta_sample = sample_posterior(posterior, theta_posterior, num_likelihood_samples, generator=generator)
     elif inference in ("npl_wlb", "npl_mmd"):
@@ -392,11 +392,13 @@ def run_replication(
             setup_time = 0.0
         else:
             problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon - log_partition_constant])
+            problem.param_dict["mu_post"].value = theta_sample[0, :dim]
             for i in range(num_posterior_samples):
                 # get a PSD covariance from the upper triangular vector
-                cov = reconstruct_covariance_from_triu(theta_sample[i], dim)
-                # then take the square root of the covariance
-                problem.param_dict["sqrt_cov_post_{i}"].value = sp.linalg.sqrtm(cov)
+                cov = reconstruct_covariance_from_triu(theta_sample[i, dim:], dim)
+                # then take the square root of the covariance and set to parameter value
+                problem.param_dict[f"sqrt_cov_post_{i}"].value = sp.linalg.sqrtm(cov)
+
             # NOTE the MOSEK 'accept_unknown' argument is needed due to https://github.com/cvxpy/cvxpy/pull/2117
             problem.solve(solver=cp.MOSEK, verbose=verbose, ignore_dpp=ignore_dpp, accept_unknown=True)
             solution = problem.var_dict["x"].value
@@ -448,12 +450,13 @@ def run_replication(
     if (solution == np.inf).any():
         out_of_sample_mean = np.inf
         out_of_sample_var = 0.0
+        out_of_sample_costs = np.inf * np.ones(num_test_observations)
     else:
         if dataset == "newsvendor":
             out_of_sample_costs = newsvendor_cost_cvxpy(solution, data_eval).value
         elif dataset == "portfolio":
             # cost is interpreted as negative return (we want to maximise return)
-            out_of_sample_costs = - data_eval @ solution
+            out_of_sample_costs = data_eval @ solution
         out_of_sample_mean = np.mean(out_of_sample_costs)
         out_of_sample_var = np.var(out_of_sample_costs)
         solution = list(solution)

@@ -47,6 +47,7 @@ def get_experiment(experiment_name: ExperimentName, dataset_dir: Optional[Path] 
         ExperimentName.kl_newsvendor_5d: kl_newsvendor_5d,
         ExperimentName.mmd_newsvendor_1d: mmd_newsvendor_1d,
         ExperimentName.compare_solve: compare_solve,
+        ExperimentName.kl_portfolio: kl_portfolio,
     }
     try:
         if experiment_name.is_portfolio():
@@ -234,9 +235,11 @@ def kl_portfolio(mmc2_dir: Path) -> List[Dict]:
                 "dgp": dgp,
                 "dim": num_stocks,
                 "epsilon": epsilon,
+                "ignore_dpp": True,
                 "inference": "bayes",
                 "lengthscale": -1.0,
                 "likelihood": "multivariate_normal",
+                "njobs": 1,
                 "num_likelihood_samples": num_likelihood_samples,
                 "num_observations": IN_SAMPLE_TIME_WINDOW,
                 "num_posterior_samples": num_posterior_samples,
