@@ -6,7 +6,6 @@ import numpy as np
 BACKORDER_COST = 8  # denoted b
 HOLDING_COST = 3  # denoted h
 
-
 def newsvendor_cost_cvxpy(x, xi):
     """Evaluate Newsvendor cost function with cvxpy
 
@@ -25,3 +24,5 @@ def newsvendor_cost_cvxpy(x, xi):
     b = BACKORDER_COST * np.ones(dim)
     X = cp.vstack([x for _ in range(xi.shape[0])])
     return cp.maximum(0, X - xi) @ h + cp.maximum(0, xi - X) @ b
+
+
