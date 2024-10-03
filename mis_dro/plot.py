@@ -44,6 +44,13 @@ class InferenceLineStyle(StrEnum):
     npl_mmd = "dotted"
 
 
+class NiceNameDGP(StrEnum):
+    exponential = "Exponential DGP"
+    normal = "Normal DGP"
+    multivariate_normal = "5D Multivariate Normal DGP"
+    truncated_normal = "Truncated Normal DGP"
+    DowJones = "DowJones"
+
 class InferenceMarker(StrEnum):
     """Consistent marker styles"""
 
@@ -198,22 +205,91 @@ def mean_variance_plot(
     axis: mpl.axis.Axis,
     df: pd.DataFrame,
     is_labelled: bool = True,
+    pareto_front_col: str = "is_minimise_pareto_front",
+    offset: float = 1.0,
     **kwargs,
 ) -> None:
-    posterior_var = df["var_cost"]["mean"] + df["mean_cost"]["var"]
-
     # plot mean-variance trade-off
-    axis.plot(posterior_var, df["mean_cost"]["mean"], **kwargs)
-    axis.set_xlabel("out-of-sample variance")
-    axis.set_ylabel("out-of-sample mean")
+    epsilon_list = list(df.index.get_level_values("epsilon"))
+    fillstyles = ["full" if is_pareto else "none" for is_pareto in df[pareto_front_col].tolist() ] 
+    out_of_sample_var = df["out_of_sample_var"].to_list()
+    out_of_sample_mean = df["out_of_sample_mean"].to_list()
+    label=kwargs.pop("label")
+    for i in range(len(out_of_sample_var)):
+        if i == 0 and is_labelled:
+            local_label = label
+        else:
+            local_label='_nolegend_'
+        axis.plot(out_of_sample_var[i], out_of_sample_mean[i], markersize=4, fillstyle=fillstyles[i], **kwargs, label=local_label)
+
+    axis.plot(df["out_of_sample_var"], df["out_of_sample_mean"], linestyle=kwargs["linestyle"], markersize=0, color=kwargs["color"], label='_nolegend_', alpha=kwargs["alpha"])
+    # axis.scatter(posterior_var, df["mean_cost"]["mean"], s=100*np.sqrt(np.array(epsilon_list)), **kwargs)
     if is_labelled:
-        epsilon_list = list(df.index.get_level_values("epsilon"))
+        
         for i, epsilon in enumerate(epsilon_list):
-            if i % 4 == 0:
+            # if i % 4 == 0:
+
+            if i == 0 or i == len(epsilon_list) - 1 or epsilon in (0.1, 0.5):
+                # if line is blue then put text on bottom left
+                if kwargs["color"] == AlgorithmColor.kl_dro_bas:
+                    ha = "right"
+                    va = "top"
+                    # offset = -1 if i==0 or i == len(epsilon_list) else -5
+                    local_offset = -offset
+
+                # else if line is black then put text on top right
+                elif kwargs["color"] == AlgorithmColor.kl_bdro:
+                    ha = "left"
+                    va = "bottom"
+                    # offset = 1 if i==0 or i == len(epsilon_list) else 5
+                    local_offset = offset
+
                 axis.text(
-                    posterior_var[:, :, epsilon, :].iloc[0],
-                    df["mean_cost"]["mean"][:, :, epsilon, :].iloc[0],
+                    # df["out_of_sample_var"][:, :, epsilon, :].iloc[0] + local_offset,
+                    # df["out_of_sample_mean"][:, :, epsilon, :].iloc[0],
+                    df["out_of_sample_var"].iloc[i] + local_offset,
+                    df["out_of_sample_mean"].iloc[i] + local_offset,
                     epsilon,
-                    ha="left",
-                    va="bottom",
+                    ha=ha,
+                    va=va,
+                    color=kwargs["color"],
                 )
+
+def is_minimise_pareto_front(out_of_sample_var, out_of_sample_mean):
+    """Returns true if the point lies on the Pareto front of a minimisation problem"""
+    assert out_of_sample_var.shape == out_of_sample_mean.shape
+    pareto = []
+    for i in range(out_of_sample_var.shape[0]):
+        point_is_pareto = True
+        for j in range(out_of_sample_var.shape[0]):
+            if out_of_sample_var[j] < out_of_sample_var[i] and out_of_sample_mean[j] < out_of_sample_mean[i]:
+                point_is_pareto = False
+                break
+        pareto.append(point_is_pareto)
+    return pareto
+
+def is_maximise_pareto_front(out_of_sample_var, out_of_sample_mean):
+    """Returns true if the point lies on the Pareto front of a maximisation problem"""
+    assert out_of_sample_var.shape == out_of_sample_mean.shape
+    pareto = []
+    for i in range(out_of_sample_var.shape[0]):
+        point_is_pareto = True
+        for j in range(out_of_sample_var.shape[0]):
+            if out_of_sample_var[j] < out_of_sample_var[i] and out_of_sample_mean[j] > out_of_sample_mean[i]:
+                point_is_pareto = False
+                break
+        pareto.append(point_is_pareto)
+    return pareto
+
+def get_agg_df(results_df: pd.DataFrame, gb_cols: list[str]):
+
+    gb = results_df.groupby(by=gb_cols)
+    agg_df = gb.agg(
+        out_of_sample_mean = pd.NamedAgg(column="mean_cost", aggfunc=np.mean),
+        out_of_sample_mean_of_vars = pd.NamedAgg(column="var_cost", aggfunc=np.mean),
+        out_of_sample_var_of_means = pd.NamedAgg(column="mean_cost", aggfunc=np.var),
+        mean_solve_time = pd.NamedAgg(column="solve_time", aggfunc=np.mean),
+        std_solve_time = pd.NamedAgg(column="solve_time", aggfunc=np.std),
+    )
+    agg_df["out_of_sample_var"] = agg_df["out_of_sample_mean_of_vars"] + agg_df["out_of_sample_var_of_means"]
+    return agg_df

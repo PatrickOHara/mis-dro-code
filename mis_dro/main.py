@@ -385,24 +385,24 @@ def run_replication(
     solve_start = datetime.now()
     solution = np.nan
     if dataset == "portfolio" and algorithm in ("kl_bdro", "kl_dro_bas") and likelihood == "multivariate_normal":
-        if epsilon - log_partition_constant < 0:
-            # NOTE the optimisation problem is unbounded below
-            solution = np.inf * np.ones(dim)
-            solve_time = 0.0
-            setup_time = 0.0
-        else:
-            problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon - log_partition_constant])
-            problem.param_dict["mu_post"].value = theta_sample[0, :dim]
-            for i in range(num_posterior_samples):
-                # get a PSD covariance from the upper triangular vector
-                cov = reconstruct_covariance_from_triu(theta_sample[i, dim:], dim)
-                # then take the square root of the covariance and set to parameter value
-                problem.param_dict[f"sqrt_cov_post_{i}"].value = sp.linalg.sqrtm(cov)
+        # if epsilon - log_partition_constant < 0:
+        #     # NOTE the optimisation problem is unbounded below
+        #     solution = np.inf * np.ones(dim)
+        #     solve_time = 0.0
+        #     setup_time = 0.0
+        # else:
+        problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon])
+        problem.param_dict["mu_post"].value = theta_sample[0, :dim]
+        for i in range(num_posterior_samples):
+            # get a PSD covariance from the upper triangular vector
+            cov = reconstruct_covariance_from_triu(theta_sample[i, dim:], dim)
+            # then take the square root of the covariance and set to parameter value
+            problem.param_dict[f"sqrt_cov_post_{i}"].value = sp.linalg.sqrtm(cov)
 
-            # NOTE the MOSEK 'accept_unknown' argument is needed due to https://github.com/cvxpy/cvxpy/pull/2117
-            problem.solve(solver=cp.MOSEK, verbose=verbose, ignore_dpp=ignore_dpp, accept_unknown=True)
-            solution = problem.var_dict["x"].value
-            setup_time = problem.solver_stats.setup_time
+        # NOTE the MOSEK 'accept_unknown' argument is needed due to https://github.com/cvxpy/cvxpy/pull/2117
+        problem.solve(solver=cp.MOSEK, verbose=verbose, ignore_dpp=ignore_dpp, accept_unknown=True)
+        solution = problem.var_dict["x"].value
+        setup_time = problem.solver_stats.setup_time
     elif algorithm in ("kl_bdro", "kl_dro_bas"):
         if epsilon - log_partition_constant < 0:
             # NOTE the optimisation problem is unbounded below
