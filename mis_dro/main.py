@@ -33,7 +33,7 @@ from .constants import (
 from .dataset import sample_dgp
 from .experiments import ExperimentName, get_experiment
 from .likelihood import sample_likelihood
-from .newsvendor import newsvendor_cost_cvxpy, newsvendor_cost_cvxpy_kl
+from .newsvendor import newsvendor_cost_cvxpy_kl
 from .npl import sample_npl
 from .optimise import get_kl_bdro_problem, DRO_BAS_MMD
 from .gaussian_kernel import *
@@ -208,7 +208,7 @@ def run(
     elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
         dim_theta = 1
         # FIXME we will need to pass dim (of xi) into MMD class
-        kdro_class = DRO_BAS_MMD(dim_theta, newsvendor_cost_cvxpy)
+        kdro_class = DRO_BAS_MMD(dim_theta, newsvendor_cost_cvxpy_kl)
         if algorithm == "dro_bas_mmd":
             n_samples = num_posterior_samples*num_likelihood_samples
         elif algorithm == "empirical_mmd":
@@ -426,7 +426,7 @@ def run_replication(
         out_of_sample_mean = np.inf
         out_of_sample_var = 0.0
     else:
-        out_of_sample_costs = newsvendor_cost_cvxpy(solution, data_eval).value
+        out_of_sample_costs = newsvendor_cost_cvxpy_kl(solution, data_eval).value
         out_of_sample_mean = np.mean(out_of_sample_costs)
         out_of_sample_var = np.var(out_of_sample_costs)
         solution = list(solution)

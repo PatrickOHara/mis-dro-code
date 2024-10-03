@@ -35,7 +35,7 @@ def sample_dgp(
         # specify contamination level
         return data_generation_outliers(
             num_observations, contamination, random_state=generator
-        )
+        ).reshape((num_observations, 1))
     if dgp == "exponential":
         return expon.rvs(scale=20.0, size=num_observations, random_state=generator)
     if dgp == "gamma":

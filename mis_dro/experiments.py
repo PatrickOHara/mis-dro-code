@@ -30,6 +30,7 @@ class ExperimentName(StrEnum):
     mmd_newsvendor_1d = "mmd_newsvendor_1d"
     mmd_newsvendor_1d_missp = "mmd_newsvendor_1d_missp"
     compare_solve = "compare_solve"
+    kl_newsvendor_exp_1d = "kl_newsvendor_exp_1d"
 
 
 def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
@@ -40,6 +41,7 @@ def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
         ExperimentName.mmd_newsvendor_1d: mmd_newsvendor_1d,
         ExperimentName.mmd_newsvendor_1d_missp: mmd_newsvendor_1d_missp,
         ExperimentName.compare_solve: compare_solve,
+        ExperimentName.kl_newsvendor_exp_1d: kl_newsvendor_exp_1d
     }
     try:
         return function_lookup[experiment_name]()
@@ -130,6 +132,46 @@ def kl_newsvendor_1d() -> List[Dict]:
             "likelihood": likelihood,
             "num_likelihood_samples": num_likelihood_samples,
             "num_observations": NUM_OBSERVATIONS,
+            "num_posterior_samples": num_posterior_samples,
+            "num_replications": NUM_REPLICATIONS,
+            "num_test_observations": NUM_TEST_OBSERVATIONS,
+            "posterior": posterior,
+            "uuid": str(uuid4()),  # uniquely identify a run
+        }
+        experiment.append(params)
+    return experiment
+
+def kl_newsvendor_exp_1d() -> List[Dict]:
+    experiment = []
+    total_model_samples = 900
+    for contamination, num_observations, algorithm, (dgp, likelihood, posterior), epsilon in itertools.product(
+        [0.0, 0.1, 0.2],
+        [20],
+        ["kl_dro_bas", "kl_bdro"],
+        [
+            ("contaminated_exp", "exponential", "gamma"),
+        ],
+        BAS_DRO_EPSILON_SET,
+    ):
+        if algorithm == "kl_bdro":
+            num_posterior_samples = int(np.sqrt(total_model_samples))
+            num_likelihood_samples = int(np.sqrt(total_model_samples))
+        if algorithm == "kl_dro_bas":
+            # we calculate the posterior exactly in closed form!
+            num_likelihood_samples = total_model_samples
+            num_posterior_samples = 1
+        params = {
+            "algorithm": algorithm,
+            "contamination": contamination,
+            "dataset": "newsvendor",
+            "dgp": dgp,
+            "dim": 1,
+            "epsilon": epsilon,
+            "inference": "bayes",
+            "lengthscale": -1.0,
+            "likelihood": likelihood,
+            "num_likelihood_samples": num_likelihood_samples,
+            "num_observations": num_observations,
             "num_posterior_samples": num_posterior_samples,
             "num_replications": NUM_REPLICATIONS,
             "num_test_observations": NUM_TEST_OBSERVATIONS,
