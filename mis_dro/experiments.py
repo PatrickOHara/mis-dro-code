@@ -18,6 +18,7 @@ from .constants import (
     NUM_POSTERIOR_SAMPLES,
     NUM_REPLICATIONS,
     NUM_TEST_OBSERVATIONS,
+    ROBAS_DRO_EPSILON_SET
 )
 
 
@@ -141,19 +142,19 @@ def kl_newsvendor_1d() -> List[Dict]:
 def mmd_newsvendor_1d() -> List[Dict]:
     """MMD univariate newsvendor: compare our MMD Bayesian ambiguity set against empirical kernel DRO"""
     experiment = []
-    num_likelihood_samples = 20     
-    num_posterior_samples = 20    
+    num_likelihood_samples = 30     
+    num_posterior_samples = 30    
     # NOTE when using empirical, set likelihood to 'empirical'
     # NOTE do not set up all the below combinations in one experiment to preserve memory
     for (algorithm, dgp, likelihood, inference), contamination, epsilon in itertools.product(
         [
             ("dro_bas_mmd", "contaminated_exp", "exponential", "npl_mmd"),     # misspecified
-            ("empirical_mmd", "contaminated_exp", "empirical", "empirical"),            # empirical
+            # ("empirical_mmd", "contaminated_exp", "empirical", "empirical"),            # empirical
             # ("dro_bas_mmd", "exponential", "exponential", "npl_mmd"),          # well specified
             # ("empirical_mmd", "exponential", "empirical", "empirical"),                 # empirical
-            ("kl_dro_bas", "contaminated_exp", "exponential", "bayes"),
-            ("kl_bdro", "contaminated_exp", "exponential", "bayes"),
-            ("kl_bdro", "contaminated_exp", "exponential", "npl_mmd")
+            # ("kl_dro_bas", "contaminated_exp", "exponential", "bayes"),
+            # ("kl_bdro", "contaminated_exp", "exponential", "bayes"),
+            # ("kl_bdro", "contaminated_exp", "exponential", "npl_mmd")
             # ("kl_dro_bas", "exponential", "exponential", "bayes"),
             # ("kl_bdro", "exponential", "exponential", "bayes")
             # ("dro_bas_mmd", "contaminated_normal", "gaussian_known_var"),     # misspecified
@@ -167,8 +168,8 @@ def mmd_newsvendor_1d() -> List[Dict]:
             # ("dro_bas_mmd", "student_t", "gaussian_known_var"),     # misspecified
             # ("empirical_mmd", "student_t", "empirical"),            # empirical
         ],
-        [0.1],   #0.05
-        BAS_DRO_EPSILON_SET,
+        [0.2],#[0.0, 0.1, 0.2],   #
+        ROBAS_DRO_EPSILON_SET,
     ):
         if inference == "bayes":
             posterior = "gamma"
@@ -179,7 +180,7 @@ def mmd_newsvendor_1d() -> List[Dict]:
         #     contamination = 0.05
         if algorithm == "kl_dro_bas":
             # we calculate the posterior exactly in closed form!
-            num_likelihood_samples = 400
+            num_likelihood_samples = 900
             num_posterior_samples = 1
         # else:
         #     inference = "npl_mmd"
@@ -196,7 +197,7 @@ def mmd_newsvendor_1d() -> List[Dict]:
             "inference": inference,
             "lengthscale": -1.0,        
             "likelihood": likelihood,
-            "num_certify_points": NUM_CERTIFY,
+            "num_certify_points": 200,
             "num_likelihood_samples": num_likelihood_samples,
             "num_observations": NUM_OBSERVATIONS,
             "num_posterior_samples": num_posterior_samples,

@@ -1,7 +1,7 @@
 """Constants for e.g. number of observations or samples"""
 
 CONTAMINATION_LEVEL = 0.2  # ratio for contamination dataset
-NUM_OBSERVATIONS = 400  # in-sample 'training' observations
+NUM_OBSERVATIONS = 80  # in-sample 'training' observations
 NUM_POSTERIOR_SAMPLES = 100  # theta samples from posterior
 NUM_TEST_OBSERVATIONS = 50  # out-of-sample 'test' observations
 NUM_LIKELIHOOD_SAMPLES = 100  # xi samples from likelihood
@@ -38,4 +38,18 @@ BAS_DRO_EPSILON_SET = [
     2,
     2.5,
     3,
+]
+
+ROBAS_DRO_EPSILON_SET = [
+    0.001,
+    0.005,
+    0.01,
+    0.05,
+    0.1,
+    0.15,
+    0.2,
+    0.25,
+    0.3,
+    0.4,
+    0.5,
 ]

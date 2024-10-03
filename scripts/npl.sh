@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#SBATCH --job-name=npl_00 # Job name for tracking
+#SBATCH --job-name=npl_exp # Job name for tracking
 #SBATCH --partition=gecko  # Partition you wish to use (see above for list)
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=40     # Number of CPU threads used by your job, set this upto 40 as required.
