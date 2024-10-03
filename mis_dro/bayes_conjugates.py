@@ -73,13 +73,11 @@ def derive_analytical_posterior_params(
         return theta
     elif posterior == "normal_inverse_wishart":
         mu_post, kappa_post, _, Psi_post = posterior_params
-        # Sigma_hat = 0.5 * np.linalg.inv(np.outer(mu_post, mu_post) - (1/kappa_post)*Psi_post)
-        # mu_hat = Sigma_hat @ mu_post
         dim = mu_post.shape[0]
         vec_triu_size = upper_triangular_size(dim)
         theta = np.zeros((1, dim+int(vec_triu_size)))
         theta[0, :dim] = mu_post
-        theta[0, dim:] = (1/kappa_post) * Psi_post[np.triu_indices(dim)]
+        theta[0, dim:] = (1/(kappa_post - dim - 2)) * Psi_post[np.triu_indices(dim)]
         return theta
     elif posterior == "multivariate_normal_known_cov":
         mu_posterior, _ = posterior_params
@@ -139,7 +137,9 @@ def get_log_partition_constant(posterior: str, posterior_params: list) -> float:
         _, kappa_posterior, alpha_posterior, _ = posterior_params
         return get_normal_gamma_constant(alpha_posterior, kappa_posterior)
     elif posterior == "normal_inverse_wishart":
-        return 0.0  # FIXME
+        mu_post, kappa_post, _, _ = posterior_params
+        dim = mu_post.shape[0]
+        return get_normal_inverse_wishart_G_constant(dim, kappa_post)
     elif posterior == "multivariate_normal_known_cov":
         mu_posterior, kappa_posterior = posterior_params
         dim = mu_posterior.shape[0]
@@ -281,9 +281,9 @@ def normal_inverse_wishart_samples(num_samples: int, mu: np.ndarray, kappa: floa
         cov_samples: Matrix with shape (N, D + D*(D-1)/2 + D).
             The covariance samples are stored as a vector in upper triangular format.
     """
-    dim = mu.shape[0]
+    dim = int(mu.shape[0])
     assert dim == Psi.shape[0] and dim == Psi.shape[1]
-    vec_triu_size = upper_triangular_size(dim)
+    vec_triu_size = int(upper_triangular_size(dim))
     samples = np.zeros((num_samples, dim+vec_triu_size))
 
     # sample from the inverse Wishart
@@ -297,7 +297,7 @@ def normal_inverse_wishart_samples(num_samples: int, mu: np.ndarray, kappa: floa
         samples[i, dim:] = cov[idx_triu]
     return samples
 
-def multivariate_digamma_p(a: float, p: int) -> float:
+def multivariate_digamma(a: float, p: int) -> float:
     """The multivariate digamma function of dimension p
 
     Notes:
@@ -306,17 +306,13 @@ def multivariate_digamma_p(a: float, p: int) -> float:
     """
     return np.sum([sp.special.digamma(a + (1-i)/2) for i in range(p)])
 
-def get_normal_inverse_wishart_G_constant(mu_post: np.ndarray, kappa_post: float, Psi_post: np.ndarray) -> float:
+def get_normal_inverse_wishart_G_constant(dim: int, kappa_post: float) -> float:
     """Returns the constant G(tau, nu) for the normal-inverse-Wishart"""
-    dim = mu_post.shape[0]
-    Psi_inv = sp.linalg.inv(Psi_post)
-    mu_Psi_inv_mu = mu_post.T @ Psi_inv @ mu_post
-    term1 = 0.5 * np.log(np.linalg.det(np.outer(mu_post, mu_post) - (1 / kappa_post) * Psi_post))
-    term2 = 0.25 * mu_Psi_inv_mu * ((kappa_post**2 * mu_Psi_inv_mu)/(1 - kappa_post * mu_Psi_inv_mu) - kappa_post + 2 * dim + 4)
-    term3 = - 0.5 * multivariate_digamma_p(0.5 * (kappa_post - dim - 2), dim)
-    term4 = dim/(2*kappa_post)
-    term5 = np.log(np.linalg.det(Psi_post))
-    return term1 + term2 + term3 + term4 + term5
+    term1 = -0.5 * dim * np.log(2)
+    term2 = - 0.5 * multivariate_digamma(0.5 * (kappa_post - dim - 2), dim)
+    term3 = 0.5 * (dim / kappa_post)
+    term4 = 0.5 * dim * np.log(kappa_post - dim - 2)
+    return term1 + term2 + term3 + term4
 
 def upper_triangular_size(dim: int) -> int:
     """Includes the diagonal!"""

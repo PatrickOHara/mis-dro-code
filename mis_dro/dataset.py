@@ -26,20 +26,20 @@ def sample_dgp(
             scale=DGP_STD_TRUNCATED_NORMAL,
             size=num_observations,
             random_state=generator,
-        )
+        ).reshape((num_observations, 1))
     if dgp == "truncated_normal":
         return data_generation(
             num_observations, random_state=generator
-        )  # generate new observations
+        ).reshape((num_observations, 1))  # generate new observations
     if dgp == "contaminated_exp":
         # specify contamination level
         return data_generation_outliers(
             num_observations, contamination, random_state=generator
         ).reshape((num_observations, 1))
     if dgp == "exponential":
-        return expon.rvs(scale=20.0, size=num_observations, random_state=generator)
+        return expon.rvs(scale=20.0, size=num_observations, random_state=generator).reshape((num_observations, 1))
     if dgp == "gamma":
-        return data_generation_gamma(num_observations, a=10, random_state=generator)
+        return data_generation_gamma(num_observations, a=10, random_state=generator).reshape((num_observations, 1))
     if dgp == "multivariate_normal":
         # dgp_mean = np.array([10.0, 20.0, 30.0, 35.0, 22.0])
         # cov_multiplier = 20.0
@@ -63,7 +63,7 @@ def sample_dgp(
         return contaminated_normal(
             num_observations, contamination, random_state=generator)
     if dgp == "student_t":
-        return t.rvs(df=3, loc=25, scale=DGP_STD_TRUNCATED_NORMAL, size=num_observations, random_state=generator)
+        return t.rvs(df=3, loc=25, scale=DGP_STD_TRUNCATED_NORMAL, size=num_observations, random_state=generator).reshape((num_observations, 1))
     raise ValueError(f"The data-generating process specified is not supported: {dgp}")
 
 
@@ -87,7 +87,6 @@ def data_generation_outliers(
     cont_size = int(np.floor(contamination * num_observations))
     n_real = num_observations - cont_size
     data = expon.rvs(scale=20, size=n_real, random_state=random_state)
-    # noise = norm.rvs(loc=1, scale=5, size=cont_size, random_state=random_state)
     outl = norm.rvs(loc=100, scale=0.5, size=cont_size, random_state=random_state) 
     data = np.concatenate((data, outl), axis=0)
     random_state.shuffle(data)  # shuffle the data in-place

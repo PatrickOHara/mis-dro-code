@@ -53,17 +53,13 @@ def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
 def kl_newsvendor_5d() -> List[Dict]:
     """KL univariate newsvendor: compare our Bayesian ambiguity set against Bayesian DRO"""
     experiment = []
-    for total_model_samples, algorithm, (dgp, likelihood, posterior, contamination), epsilon in itertools.product(
-        # [25, 100, 900, 2500],
-        [400],
+    for total_model_samples, algorithm, (dgp, likelihood, posterior), epsilon in itertools.product(
+        [25, 100, 900, 2500],
         ["kl_dro_bas", "kl_bdro"],
         [
-            ("cont_multivariate_normal", "multivariate_normal_known_cov", "multivariate_normal_known_cov", 0.05),
-            ("cont_multivariate_normal", "multivariate_normal_known_cov", "multivariate_normal_known_cov", 0.1),
-            ("cont_multivariate_normal", "multivariate_normal_known_cov", "multivariate_normal_known_cov", 0.0)
+            ("multivariate_normal", "multivariate_normal", "normal_inverse_wishart"),
         ],
         BAS_DRO_EPSILON_SET,
-        # [0.1, 1.0, 10.0],
     ):
         if algorithm == "kl_bdro":
             num_posterior_samples = int(np.sqrt(total_model_samples))
@@ -72,9 +68,9 @@ def kl_newsvendor_5d() -> List[Dict]:
             # we calculate the posterior exactly in closed form!
             num_likelihood_samples = total_model_samples
             num_posterior_samples = 1
-        # contamination = 0.0
-        # if dgp == "contaminated_exp":
-            # contamination = CONTAMINATION_LEVEL
+        contamination = 0.0
+        if dgp == "contaminated_exp":
+            contamination = CONTAMINATION_LEVEL
         params = {
             "algorithm": algorithm,
             "contamination": contamination,
@@ -146,7 +142,7 @@ def kl_newsvendor_exp_1d() -> List[Dict]:
     total_model_samples = 900
     for contamination, num_observations, algorithm, (dgp, likelihood, posterior), epsilon in itertools.product(
         [0.0, 0.1, 0.2],
-        [20],
+        [80],
         ["kl_dro_bas", "kl_bdro"],
         [
             ("contaminated_exp", "exponential", "gamma"),
