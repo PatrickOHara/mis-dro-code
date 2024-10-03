@@ -45,6 +45,7 @@ class InferenceLineStyle(StrEnum):
 
 
 class NiceNameDGP(StrEnum):
+    contaminated_exp = "Contaminated Exponential DGP"
     exponential = "Exponential DGP"
     normal = "Normal DGP"
     multivariate_normal = "5D Multivariate Normal DGP"
