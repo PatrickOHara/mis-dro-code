@@ -75,7 +75,7 @@ def data_generation_outliers(
         random_state = np.random.default_rng()
     cont_size = int(np.floor(contamination * num_observations))
     n_real = num_observations - cont_size
-    data = expon.rvs(scale=10, size=n_real, random_state=random_state)
+    data = expon.rvs(scale=20, size=n_real, random_state=random_state)
     # outl = expon.rvs(scale=70, size=cont_size, random_state=random_state)
     outl = norm.rvs(loc=100, scale=0.5, size=cont_size, random_state=random_state) 
     data = np.concatenate((data, outl), axis=0)
