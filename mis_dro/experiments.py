@@ -136,7 +136,7 @@ def kl_newsvendor_1d() -> List[Dict]:
 
 def kl_newsvendor_exp_1d() -> List[Dict]:
     experiment = []
-    total_model_samples = 30
+    total_model_samples = 900
     for contamination, num_observations, algorithm, (dgp, likelihood, posterior), epsilon in itertools.product(
         [0.0, 0.1, 0.2],
         [20, 80],
