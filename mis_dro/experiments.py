@@ -49,14 +49,12 @@ def kl_newsvendor_5d() -> List[Dict]:
     """KL univariate newsvendor: compare our Bayesian ambiguity set against Bayesian DRO"""
     experiment = []
     for total_model_samples, algorithm, (dgp, likelihood, posterior), epsilon in itertools.product(
-        # [25, 100, 900, 2500],
-        [25],
+        [25, 100, 900, 2500],
         ["kl_dro_bas", "kl_bdro"],
         [
             ("multivariate_normal", "multivariate_normal", "normal_inverse_wishart"),
         ],
-        # BAS_DRO_EPSILON_SET,
-        [0.1, 1.0, 10.0],
+        BAS_DRO_EPSILON_SET,
     ):
         if algorithm == "kl_bdro":
             num_posterior_samples = int(np.sqrt(total_model_samples))
