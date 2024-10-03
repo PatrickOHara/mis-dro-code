@@ -130,15 +130,17 @@ class DRO_BAS_MMD():
         loss_call = self.loss_call
         # always certify the observations
         for i in range(n_sample):
-            constraints += [loss_call(theta, Xobs[i]) 
+            #FIXME when we merge with multivariate the Xobs.shape[1] should just be dim
+            constraints += [loss_call(theta, Xobs[i,:].reshape((1, Xobs.shape[1]))) 
             <= f0 + fvals[i] ]
 
         # certify the certifying points
         for i in range(n_certify):
-            xcert_i = Xcert[i]
+            #FIXME when we merge with multivariate the Xcert.shape[1] should just be dim
+            xcert_i = Xcert[i,:].reshape((1, Xcert.shape[1]))
             constraints += [loss_call(theta, xcert_i) <= f0 +
             fvals[i+n_sample]]
-        constraints += [theta >= SMALLEST_X, theta <= LARGEST_X]
+        constraints += [theta >= SMALLEST_X]  #, theta <= LARGEST_X
         
         emp = f0 + cp.sum(fvals[:n_sample]) / n_sample
         rkhs_norm = cp.norm(beta.T @ K_decomposed) # pass decomposed kernel directly
