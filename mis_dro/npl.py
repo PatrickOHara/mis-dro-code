@@ -43,22 +43,26 @@ def sample_npl(
     if likelihood == "exponential":
         model = ExponentialModel(m)
         p = 1
-    elif likelihood == "gaussian":
+        dim = 1
+    elif likelihood == "normal":
         model = univariate_GaussianModel(m)
         p = 2
+        dim = 1
     elif likelihood == "gaussian_known_var":
         model = univariate_GaussianModel_known_variance(m)
         p = 1
+        dim = 1
     elif likelihood == "multivariate_normal":
         d = data.shape[1]
         model = multivariate_GaussianModel(m, d)
         p = d
+        dim = d
     else:
         raise NotImplementedError(
             f"Posterior '{likelihood}' is not implemented for '{inference}' inference."
         )
     npl_toy = Npl(
-        data.reshape((data.shape[0], 1)),
+        data.reshape((data.shape[0], dim)),
         num_posterior_samples,
         p,
         m,

@@ -3,6 +3,7 @@
 from typing import Optional
 import numpy as np
 import scipy as sp
+from bayesian_dro.Bayesian_DRO_continuous import DGP_STD_TRUNCATED_NORMAL
 
 
 def default_prior_params(prior: str, dim: int = 1) -> tuple:
@@ -16,6 +17,8 @@ def default_prior_params(prior: str, dim: int = 1) -> tuple:
         prior_params = (mu_prior, kappa_prior, alpha_prior, beta_prior)
     elif prior == "normal_inverse_wishart":
         prior_params = normal_inverse_wishart_prior(dim)
+    elif prior == "multivariate_normal_known_cov":
+        prior_params = (np.zeros(dim), dim+2)
     else:
         raise NotImplementedError(f"Prior '{prior}' not implemented.")
     return prior_params
@@ -42,6 +45,13 @@ def get_posterior_params(
         post_params = (mu_posterior, kappa_posterior, alpha_posterior, beta_posterior)
     elif posterior == "normal_inverse_wishart":
         post_params = normal_inverse_wishart_posterior(data, *prior_params)
+    elif posterior == "multivariate_normal_known_cov":
+        mu_prior, kappa_prior = prior_params
+        N = data.shape[0]
+        xi_mean = np.mean(data, axis=0)
+        kappa_posterior = kappa_prior + N
+        mu_posterior = (kappa_prior * mu_prior + N * xi_mean) / kappa_posterior
+        post_params = (mu_posterior, kappa_posterior)
     else:
         raise NotImplementedError(f"Posterior '{posterior}' is not implemented")
     return post_params
@@ -69,6 +79,10 @@ def derive_analytical_posterior_params(
         theta[0, :dim] = mu_post
         theta[0, dim:] = (1/(kappa_post - dim - 2)) * Psi_post[np.triu_indices(dim)]
         return theta
+    elif posterior == "multivariate_normal_known_cov":
+        mu_posterior, _ = posterior_params
+        dim = mu_posterior.shape[0]
+        return mu_posterior.reshape((1,dim))
     else:
         raise NotImplementedError(
             f"We haven't derived an analytical posterior expression for a '{posterior}' posterior"
@@ -118,6 +132,11 @@ def sample_posterior(
             triu_samples[i] = cov[idx_triu]
         return triu_samples
     raise NotImplementedError(f"Posterior '{posterior}' is not implemented")
+    if posterior == "multivariate_normal_known_cov":
+        mu_posterior, kappa_posterior = posterior_params
+        return sp.stats.multivariate_normal.rvs(mean=mu_posterior, cov=(DGP_STD_TRUNCATED_NORMAL**2)*np.eye(5), size=num_posterior_samples, random_state=generator)
+    else:
+        raise NotImplementedError(f"Posterior '{posterior}' is not implemented")
 
 
 def get_log_partition_constant(posterior: str, posterior_params: list) -> float:
@@ -132,6 +151,10 @@ def get_log_partition_constant(posterior: str, posterior_params: list) -> float:
         mu_post, kappa_post, _, _ = posterior_params
         dim = mu_post.shape[0]
         return get_normal_inverse_wishart_G_constant(dim, kappa_post)
+    elif posterior == "multivariate_normal_known_cov":
+        mu_posterior, kappa_posterior = posterior_params
+        dim = mu_posterior.shape[0]
+        return dim/(2*kappa_posterior)
     else:
         raise NotImplementedError(f"get_log_partition_constant not implemented for posterior {posterior}")
 

@@ -347,15 +347,25 @@ def run_replication(
         else:
             theta_sample = sample_posterior(posterior, theta_posterior, num_likelihood_samples, generator=generator)
     elif inference in ("npl_wlb", "npl_mmd"):
-        theta_sample = sample_npl(
-            data,
-            inference,
-            likelihood,
-            num_posterior_samples,
-            seed=replication,
-            lengthscale=lengthscale,
-            generator=generator,
-        )
+        # theta_sample = sample_npl(
+        #     data,
+        #     inference,
+        #     likelihood,
+        #     num_posterior_samples,
+        #     seed=replication,
+        #     lengthscale=lengthscale,
+        #     generator=generator,
+        # )
+        if contamination == 0.2:
+            c = '02'
+        elif contamination == 0.1:
+            c = '01'
+        elif contamination == 0.0:
+            c = '00'
+        else:
+            raise ValueError(f"There are no npl samples for contamination level {contamination}")
+        path_to_csv = Path("/dcs/pg23/u1604520/misdro/npl_samples_N30_exp")
+        theta_sample = pd.read_csv(path_to_csv / f"theta_sample_{replication}_cont{c}.csv", header=None).values
     elif inference == "empirical":
         # empirical does not have a posterior
         theta_sample = np.nan * np.ones(num_posterior_samples)
