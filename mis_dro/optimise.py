@@ -10,6 +10,7 @@ def get_kl_bdro_problem(
     decision_objective: Callable[[cp.Variable, cp.Parameter], cp.Expression],
     num_posterior_samples: int,
     num_likelihood_samples: int,
+    dim: int = 1,
 ) -> cp.Problem:
     """Bayesian DRO as a cvxpy optimisaton problem.
 
@@ -20,6 +21,7 @@ def get_kl_bdro_problem(
             The return should be a cvxpy expression.
         num_posterior_samples: Number of posterior samples.
         num_likelihood_samples: Number of likelihood samples for each posterior sample.
+        dim: Dimension of random variable xi.
 
     Returns:
         problem: A cvxpy Problem object
@@ -33,7 +35,7 @@ def get_kl_bdro_problem(
         As l -> 0, then l * LSE(t[i] / l) tends to max(t[i]).
     """
     # declare variables
-    x = cp.Variable(1, name="x")
+    x = cp.Variable(dim, name="x")
     lam = [
         cp.Variable(1, name=f"lam_{i}", nonneg=True)
         for i in range(num_posterior_samples)
@@ -42,7 +44,11 @@ def get_kl_bdro_problem(
 
     # declare parameters
     epsilon_minus_constant = cp.Parameter(1, name="epsilon_minus_constant", nonneg=True)
-    xi = cp.Parameter((num_posterior_samples, num_likelihood_samples), name="xi")
+    # TODO write up why we use list?
+    xi = [
+        cp.Parameter((num_likelihood_samples, dim), name=f"xi_{i}")
+        for i in range(num_posterior_samples)
+    ]
 
     # create the objective function for the Bayesian DRO problem
     # NOTE we pass the max function to f_recession because,
@@ -62,10 +68,12 @@ def get_kl_bdro_problem(
     # examples of decision objectives are the newsvendor objective
     constraints = [
         x >= SMALLEST_X,
-        x <= LARGEST_X,
+        # x <= LARGEST_X,
     ] + [decision_objective(x, xi[i]) <= t[i] for i in range(num_posterior_samples)]
 
     return cp.Problem(bdro_obj, constraints)
+
+
 
 class DRO_BAS_MMD():
     '''
@@ -126,15 +134,17 @@ class DRO_BAS_MMD():
         loss_call = self.loss_call
         # always certify the observations
         for i in range(n_sample):
-            constraints += [loss_call(theta, Xobs[i,:]) 
+            #FIXME when we merge with multivariate the Xobs.shape[1] should just be dim
+            constraints += [loss_call(theta, Xobs[i,:].reshape((1, Xobs.shape[1]))) 
             <= f0 + fvals[i] ]
 
         # certify the certifying points
         for i in range(n_certify):
-            xcert_i = Xcert[i,:]
+            #FIXME when we merge with multivariate the Xcert.shape[1] should just be dim
+            xcert_i = Xcert[i,:].reshape((1, Xcert.shape[1]))
             constraints += [loss_call(theta, xcert_i) <= f0 +
             fvals[i+n_sample]]
-        constraints += [theta >= SMALLEST_X, theta <= LARGEST_X]
+        constraints += [theta >= SMALLEST_X]  #, theta <= LARGEST_X
         
         emp = f0 + cp.sum(fvals[:n_sample]) / n_sample
         rkhs_norm = cp.norm(beta.T @ K_decomposed) # pass decomposed kernel directly

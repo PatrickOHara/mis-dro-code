@@ -1,9 +1,10 @@
 #!/bin/bash
 #
-#SBATCH --job-name=newsvendor  # Job name for tracking
-#SBATCH --partition=parrot     # Partition you wish to use (see above for list)
-#SBATCH --cpus-per-task=24     # Number of CPU threads used by your job, set this upto 40 as required.
-#SBATCH --mem=120000            # 60GB RAM
+#SBATCH --job-name=npl_exp # Job name for tracking
+#SBATCH --partition=gecko  # Partition you wish to use (see above for list)
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=40     # Number of CPU threads used by your job, set this upto 40 as required.
+#SBATCH --mem=60000            # 60GB RAM
 #SBATCH --exclusive=mcs        # Exclusive mode, only this job will run
 #SBATCH --time=2-00:00:00      # Job time limit set to 2 days (48 hours)
 #
@@ -12,4 +13,4 @@
 #SBATCH --error=joboutput_%j.err  # Standard error from your job
 
 ## Execute your program(s) ##
-srun misdro experiment {experiment_dir} {dgp} {algorithm}
+srun python /dcs/pg23/u1604520/mis-dro-code/scripts/sample_npl.py

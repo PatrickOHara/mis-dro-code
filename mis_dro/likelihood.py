@@ -27,37 +27,29 @@ def sample_likelihood(
         for i in range(num_posterior_samples):
             xi[i] = sp.stats.expon.rvs(
                 scale=1 / theta_sample[i],
-                size=num_likelihood_samples,
+                size=(num_likelihood_samples, dim),
                 random_state=generator,
             )
     elif likelihood == "normal":
         for i in range(num_posterior_samples):
             # NOTE numpy normal takes standard deviation as scale parameter - not variance or precision!
-            # so when we use normal_gamma (which is on the precision), we need to inverse and take sqrt
-            xi[i] = generator.normal(
-                theta_sample[i, 0],
-                np.sqrt(1.0 / theta_sample[i, 1]),
-                size=num_likelihood_samples,
-            )
-    elif likelihood == "gaussian":
-        for i in range(num_posterior_samples):
             xi[i] = generator.normal(
                 theta_sample[i, 0],
                 theta_sample[i, 1],
-                size=num_likelihood_samples,
+                size=(num_likelihood_samples, dim),
             )
+    elif likelihood == "multivariate_normal":
+        for i in range(num_posterior_samples):
+            mu = theta_sample[i,:dim]
+            vec_triu = theta_sample[i,dim:]
+            cov = reconstruct_covariance_from_triu(vec_triu, dim)
+            xi[i] = generator.multivariate_normal(mu, cov, size=num_likelihood_samples)
     elif likelihood == "multivariate_normal_known_cov":
         for i in range(num_posterior_samples):
             mu = theta_sample[i,:]
             cov = (DGP_STD_TRUNCATED_NORMAL**2)*np.eye(dim)
             # vec_triu = theta_sample[i,dim:]
             # cov = reconstruct_covariance_from_triu(vec_triu, dim)
-            xi[i] = generator.multivariate_normal(mu, cov, size=num_likelihood_samples)
-    elif likelihood == "multivariate_normal":
-        for i in range(num_posterior_samples):
-            mu = theta_sample[i,:]
-            vec_triu = theta_sample[i,dim:]
-            cov = reconstruct_covariance_from_triu(vec_triu, dim)
             xi[i] = generator.multivariate_normal(mu, cov, size=num_likelihood_samples)
     elif likelihood == "gaussian_known_var":
         for i in range(num_posterior_samples):
@@ -66,12 +58,12 @@ def sample_likelihood(
                     scale=DGP_STD_TRUNCATED_NORMAL,
                     size=num_likelihood_samples,
                 )
+    
     else:
         raise NotImplementedError(
             f"Likelihood '{likelihood}' not implemented."
         )
     return xi
-
 
 def reconstruct_covariance_from_triu(vec_triu: np.array, dim: int):
     """Reconstruct the covariance matrix from a upper triangular vector"""

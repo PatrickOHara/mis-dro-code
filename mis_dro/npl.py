@@ -44,9 +44,11 @@ def sample_npl(
     if likelihood == "exponential":
         model = ExponentialModel(m)
         p = 1
-    elif likelihood == "gaussian":
+        dim = 1
+    elif likelihood == "normal":
         model = univariate_GaussianModel(m)
         p = 2
+        dim = 1
     elif likelihood == "gaussian_known_var":
         model = univariate_GaussianModel_known_variance(m)
         p = 1
