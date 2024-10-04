@@ -1,8 +1,12 @@
+import typer
 from mis_dro.npl import *
 from mis_dro.constants import NUM_POSTERIOR_SAMPLES
 from datetime import datetime
 from mis_dro.dataset import *
 import pandas as pd
+
+app = typer.Typer(name="portfolio_sample_npl")
+
 
 def portfolio_sample_npl(
     replication: int,
@@ -30,15 +34,23 @@ def portfolio_sample_npl(
         seed=replication,
         lengthscale=lengthscale,
         generator=generator,
+        dim=data.shape[1],
     )
 
     df = pd.DataFrame(theta_sample)
     df.to_csv(experiment_dir / f"portfolio_theta_sample_{dgp}_{replication}.csv", index=False, header=False)
 
+@app.command()
+def main_sample(dataset_dir: Path, experiment_dir: Path, dgp: str = "DowJones"):
+    for j in range(200):
+        portfolio_sample_npl(
+            j,
+            dataset_dir,
+            experiment_dir,
+            dgp=dgp,
+            num_posterior_samples=30    # FIXME is this correct?
+        )
+
 if __name__ == "__main__":
-    for cont in [0.1, 0.2, 0.0]:
-        for j in range(200):
-            portfolio_sample_npl(
-                j,
-                num_posterior_samples=30    # FIXME is this correct?
-            )
+    app()
+

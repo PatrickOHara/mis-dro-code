@@ -13,6 +13,7 @@ from jax import vmap, value_and_grad, jit, config
 from jax.example_libraries import optimizers
 from .gaussian_kernel import k, k_jax, k_comp
 from .models import *
+from .constants import upper_triangular_size
 
 
 def sample_npl(
@@ -59,7 +60,7 @@ def sample_npl(
     elif likelihood == "multivariate_normal":
         d = data.shape[1]
         model = multivariate_GaussianModel(m, d, known_cov=False)
-        p = 4*d
+        p = d + upper_triangular_size(d)
     else:
         raise NotImplementedError(
             f"Posterior '{likelihood}' is not implemented for '{inference}' inference."
@@ -187,9 +188,13 @@ class Npl:
                 theta, key
             )  # Returnes self.m random samples from the model with parameter theta
 
-            # Compute kernel Gram matrices
-            kyy = k_comp(y, y) #, self.l
-            kxy = k_comp(y, x) #, self.l
+            if self.d > 1:
+                # Compute kernel Gram matrices
+                kyy = k_comp(y, y) #, self.l
+                kxy = k_comp(y, x) #, self.l
+            else:
+                kyy = k_jax(y, y, self.l)
+                kxy = k_jax(y, x, self.l)
 
             # first sum
             diag_elements = jnp.diag_indices_from(kyy)

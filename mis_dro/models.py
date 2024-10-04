@@ -3,7 +3,7 @@
 import jax
 import jax.numpy as jnp
 from bayesian_dro.Bayesian_DRO_continuous import DGP_STD_TRUNCATED_NORMAL
-
+from .constants import upper_triangular_size
 
 class ExponentialModel:
     def __init__(self, m):
@@ -97,10 +97,10 @@ class multivariate_GaussianModel:
             diag_entries = L[diag_idx]
             L = L.at[diag_idx].set(jnp.log(diag_entries))
             vec_triu_init = L[jnp.tril_indices(L.shape[0])]
-            theta_init = jnp.zeros(self.d*4)
+            triu_size = upper_triangular_size(self.d)
+            theta_init = jnp.zeros(self.d + triu_size)
             theta_init = theta_init.at[:self.d].set(mu_init)
             theta_init = theta_init.at[self.d:].set(vec_triu_init)
-            print(theta_init)
             return theta_init
     
     def parametrise(self, theta):

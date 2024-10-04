@@ -4,7 +4,7 @@ from typing import Optional
 import numpy as np
 import scipy as sp
 from bayesian_dro.Bayesian_DRO_continuous import DGP_STD_TRUNCATED_NORMAL
-
+from mis_dro.constants import upper_triangular_size
 
 def default_prior_params(prior: str, dim: int = 1) -> tuple:
     """Get the default prior parameters"""
@@ -325,6 +325,3 @@ def get_normal_inverse_wishart_G_constant(dim: int, kappa_post: float) -> float:
     term4 = 0.5 * dim * np.log(kappa_post - dim - 2)
     return term1 + term2 + term3 + term4
 
-def upper_triangular_size(dim: int) -> int:
-    """Includes the diagonal!"""
-    return int(dim * (dim-1) / 2 + dim)

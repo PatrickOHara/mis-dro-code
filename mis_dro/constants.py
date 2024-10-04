@@ -74,3 +74,7 @@ ROBAS_DRO_EPSILON_SET = [
     0.4,
     0.5,
 ]
+
+def upper_triangular_size(dim: int) -> int:
+    """Includes the diagonal!"""
+    return int(dim * (dim-1) / 2 + dim)
