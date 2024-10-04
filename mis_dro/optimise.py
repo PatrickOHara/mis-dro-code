@@ -73,6 +73,8 @@ def get_kl_bdro_problem(
 
     return cp.Problem(bdro_obj, constraints)
 
+
+
 class DRO_BAS_MMD():
     '''
     DRO-BAS problem with the MMD as a KDRO problem in CVXPY 

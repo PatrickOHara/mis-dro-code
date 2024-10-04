@@ -1,15 +1,16 @@
 """Entrypoint app functions"""
 
-import warnings
 from datetime import datetime
 import json
 import math
 from pathlib import Path
+from typing import Optional
 from uuid import uuid4, UUID
 from joblib import Parallel, delayed
 import cvxpy as cp
 import numpy as np
 import pandas as pd
+import scipy as sp
 import typer
 
 from bayesian_dro.Bayesian_DRO_continuous import main_Bayesian_DRO
@@ -30,12 +31,13 @@ from .constants import (
     NUM_CERTIFY,
     MAX_PARAMS_OOM,
 )
-from .dataset import sample_dgp
+from .dataset import sample_dgp, portfolio_dataset
 from .experiments import ExperimentName, get_experiment
-from .likelihood import sample_likelihood
+from .likelihood import sample_likelihood, reconstruct_covariance_from_triu
 from .newsvendor import newsvendor_cost_cvxpy
 from .npl import sample_npl
 from .optimise import get_kl_bdro_problem, DRO_BAS_MMD
+from .portfolio import get_kl_portfolio_problem, bdro_portfolio_posterior_samples
 from .gaussian_kernel import *
 
 app = typer.Typer(name="misdro")
@@ -43,14 +45,14 @@ app = typer.Typer(name="misdro")
 
 @app.command(name="setup-kl")
 def setup_kl_dro_bas(
-    experiment_name: ExperimentName, experiment_dir: Path, overwrite: bool = False, njobs: int = -1,
+    experiment_name: ExperimentName, experiment_dir: Path, dataset_dir: Optional[Path] = None, overwrite: bool = False
 ):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
         experiment_dir.mkdir(parents=False, exist_ok=False)
 
     # get the experiment from the name
-    experiment = get_experiment(experiment_name)
+    experiment = get_experiment(experiment_name, dataset_dir=dataset_dir)
 
     # write experiment file to JSON
     filepath = experiment_dir / "experiment.json"
@@ -58,7 +60,6 @@ def setup_kl_dro_bas(
         json.dump(experiment, json_file, indent=4)
 
     # get unique DGPs
-    # TODO add groupby inference
     dgp_algorithm_pairs = set()
     for params in experiment:
         dgp_algorithm_pairs.add((params["dgp"], params["algorithm"]))
@@ -70,7 +71,7 @@ def setup_kl_dro_bas(
         slurm_string = slurm_file.read()
     for dgp, algorithm in dgp_algorithm_pairs:
         dgp_string = slurm_string.format(
-            experiment_dir=experiment_dir, dgp=dgp, algorithm=algorithm, njobs=njobs,
+            experiment_dir=experiment_dir, dgp=dgp, algorithm=algorithm,
         )
         (experiment_dir / f"{experiment_name}_{dgp}_{algorithm}.slurm").write_text(
             dgp_string
@@ -79,14 +80,14 @@ def setup_kl_dro_bas(
 
 @app.command(name="setup-mmd")
 def setup_mmd_dro_bas(
-    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, overwrite: bool = False, njobs: int = -1,
+    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int,  dataset_dir: Optional[Path] = None, overwrite: bool = False, njobs: int = -1,
 ):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
         experiment_dir.mkdir(parents=False, exist_ok=False)
 
     # get the experiment from the name
-    experiment = get_experiment(experiment_name)
+    experiment = get_experiment(experiment_name, dataset_dir=dataset_dir)
 
     # write experiment file to JSON
     filepath = experiment_dir / "experiment.json"
@@ -147,7 +148,7 @@ def run_experiment(
 
 
 @app.command(name="batch")
-def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool = False, njobs: int = -1):
+def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool = False, dataset_dir: Optional[Path] = None):
     print(datetime.now(), "Running batch from index", start)
     print()
     filepath = experiment_dir / "experiment.json"
@@ -156,7 +157,7 @@ def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool 
     batch_experiment = experiment[start: min(start + batch_size, len(experiment))]
     for params in batch_experiment:
         if not ((experiment_dir / params["uuid"]).exists() and only_missing):
-            run(experiment_dir, **params, njobs=njobs)
+            run(experiment_dir, dataset_dir=dataset_dir, **params)
 
 @app.command(name="uuid")
 def run_uuid(experiment_dir: Path, uuid: UUID, njobs: int = -1, verbose: bool = False) -> None:
@@ -180,9 +181,11 @@ def run(
     algorithm: str = "kl_bdro",
     contamination: float = CONTAMINATION_LEVEL,
     dataset: str = "newsvendor",
+    dataset_dir: Optional[Path] = None,
     dgp: str = "truncated_normal",
     dim: int = 1,
     epsilon: float = 1.0,
+    ignore_dpp: bool = False,
     inference: str = "bayes",
     lengthscale: float = -1.0,
     likelihood: str = "exponential",
@@ -201,10 +204,12 @@ def run(
     if uuid:
         print(uuid)
     print("DGP:", dgp, " - ALGORITHM:", algorithm, " - NUM LIKELIHOOD SAMPLES:", num_likelihood_samples, " - POSTERIOR:", posterior, "- DATASET:", dataset, "- DIM:", dim)
-    if algorithm in ("kl_bdro", "kl_dro_bas"):
+    if algorithm in ("kl_bdro", "kl_dro_bas") and dataset == "newsvendor":
         problem = get_kl_bdro_problem(
             newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim,
         )
+    elif algorithm in ("kl_bdro", "kl_dro_bas") and dataset == "portfolio" and likelihood == "multivariate_normal":
+        problem = get_kl_portfolio_problem(dim, num_posterior_samples)
     elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
         dim_theta = 1
         # FIXME we will need to pass dim (of xi) into MMD class
@@ -219,8 +224,7 @@ def run(
     # If the number of parameters is small enough, then use Disciplined Parametrized Programming (DPP)
     # to reduce the compilation time in each replication.
     # However, a large number of parameters uses an enormous amout of RAM in the current cvxpy implementation.
-    if algorithm in ("kl_bdro", "kl_dro_bas", "dro_bas_mmd", "empirical_mmd"):
-        ignore_dpp = False
+    if not ignore_dpp and algorithm in ("kl_bdro", "kl_dro_bas", "dro_bas_mmd", "empirical_mmd"):
         n_parameters = np.sum(np.prod(param.shape) for param in problem.parameters())
         # NOTE whilst DRO-BAS can handle at least 5000 params, BDRO cannot.
         # So, for a fair comparison, we turn off DPP for both DRO-BAS and BDRO.
@@ -233,6 +237,7 @@ def run(
         "algorithm": algorithm,
         "contamination": contamination,
         "dataset": dataset,
+        "dataset_dir": dataset_dir,
         "dgp": dgp,
         "dim": dim,
         "epsilon": epsilon,
@@ -288,6 +293,7 @@ def run_replication(
     algorithm: str = "kl_bdro",
     contamination: float = CONTAMINATION_LEVEL,
     dataset: str = "newsvendor",
+    dataset_dir: Optional[Path] = None,
     dgp: str = "truncated_normal",
     dim: int = 1,
     epsilon: float = 1.0,
@@ -306,15 +312,21 @@ def run_replication(
 ):
     """Run a single replication where the seed is given by the replication number"""
     # 1. generate dataset
-    generator = np.random.default_rng(seed=replication)
     dgp_start = datetime.now()
-    # NOTE if contamination is specified, then only contaminate the training samples (not test samples)
-    data = sample_dgp(
-        dgp, num_observations, dim=dim, contamination=contamination, generator=generator
-    )
-    data_eval = sample_dgp(
-        dgp, num_test_observations, dim=dim, contamination=0.0, generator=generator
-    )
+    generator = np.random.default_rng(seed=replication)
+    if dataset == "newsvendor":
+        # NOTE if contamination is specified, then only contaminate the training samples (not test samples)
+        data = sample_dgp(
+            dgp, num_observations, dim=dim, contamination=contamination, generator=generator
+        )
+        data_eval = sample_dgp(
+            dgp, num_test_observations, dim=dim, contamination=0.0, generator=generator
+        )
+    elif dataset == "portfolio":
+        # NOTE shape of data (N, D) where N is number of weeks and D is the number of stocks
+        data, data_eval = portfolio_dataset(dgp, replication, dataset_dir)
+    else:
+        raise NotImplementedError(f"Dataset not implemented: {dataset}")
     dgp_time = (datetime.now() - dgp_start).total_seconds()
 
     # 2. sample from the posterior
@@ -329,6 +341,9 @@ def run_replication(
             theta_sample = derive_analytical_posterior_params(
                 posterior, theta_posterior
             )
+        elif algorithm == "kl_bdro" and dataset == "portfolio" and posterior == "normal_inverse_wishart":
+            mu_post, _, iota_post, Psi_post = theta_posterior
+            theta_sample = bdro_portfolio_posterior_samples(num_posterior_samples, mu_post, iota_post, Psi_post, generator=generator)
         else:
             theta_sample = sample_posterior(posterior, theta_posterior, num_likelihood_samples, generator=generator)
     elif inference in ("npl_wlb", "npl_mmd"):
@@ -364,6 +379,8 @@ def run_replication(
     likelihood_start = datetime.now()
     if inference == "empirical":
         xi = data
+    elif dataset == "portfolio" and likelihood == "multivariate_normal":
+        pass    # no need to sample from likelihood cause we have closed form
     else:
         xi = sample_likelihood(
             likelihood,
@@ -377,7 +394,26 @@ def run_replication(
     # 4. run the chosen DRO algorithm
     solve_start = datetime.now()
     solution = np.nan
-    if algorithm in ("kl_bdro", "kl_dro_bas"):
+    if dataset == "portfolio" and algorithm in ("kl_bdro", "kl_dro_bas") and likelihood == "multivariate_normal":
+        # if epsilon - log_partition_constant < 0:
+        #     # NOTE the optimisation problem is unbounded below
+        #     solution = np.inf * np.ones(dim)
+        #     solve_time = 0.0
+        #     setup_time = 0.0
+        # else:
+        problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon])
+        problem.param_dict["mu_post"].value = theta_sample[0, :dim]
+        for i in range(num_posterior_samples):
+            # get a PSD covariance from the upper triangular vector
+            cov = reconstruct_covariance_from_triu(theta_sample[i, dim:], dim)
+            # then take the square root of the covariance and set to parameter value
+            problem.param_dict[f"sqrt_cov_post_{i}"].value = sp.linalg.sqrtm(cov)
+
+        # NOTE the MOSEK 'accept_unknown' argument is needed due to https://github.com/cvxpy/cvxpy/pull/2117
+        problem.solve(solver=cp.MOSEK, verbose=verbose, ignore_dpp=ignore_dpp, accept_unknown=True)
+        solution = problem.var_dict["x"].value
+        setup_time = problem.solver_stats.setup_time
+    elif algorithm in ("kl_bdro", "kl_dro_bas"):
         if epsilon - log_partition_constant < 0:
             # NOTE the optimisation problem is unbounded below
             solution = np.inf * np.ones(dim)
@@ -417,7 +453,6 @@ def run_replication(
     elif algorithm == "bdro_grid_search":
         solution = main_Bayesian_DRO(xi, epsilon)
         setup_time = 0.0  # can't really measure this easily
-    # TODO put in other algorithms here, e.g. main_Bayesian_DRO_epsilon1!
     else:
         raise ValueError("Please choose a valid algorithm")
     solve_time = (datetime.now() - solve_start).total_seconds()
@@ -425,11 +460,17 @@ def run_replication(
     if (solution == np.inf).any():
         out_of_sample_mean = np.inf
         out_of_sample_var = 0.0
+        out_of_sample_costs = np.inf * np.ones(num_test_observations)
     else:
-        out_of_sample_costs = newsvendor_cost_cvxpy(solution, data_eval).value
+        if dataset == "newsvendor":
+            out_of_sample_costs = newsvendor_cost_cvxpy(solution, data_eval).value
+        elif dataset == "portfolio":
+            # cost is interpreted as negative return (we want to maximise return)
+            out_of_sample_costs = data_eval @ solution
         out_of_sample_mean = np.mean(out_of_sample_costs)
         out_of_sample_var = np.var(out_of_sample_costs)
         solution = list(solution)
+
     return {
         "uuid": uuid,
         "replication": replication,
@@ -442,6 +483,7 @@ def run_replication(
         "solve_time": solve_time,
         "setup_time": setup_time,
         "log_partition_constant": log_partition_constant,
+        "out_of_sample_costs": list(out_of_sample_costs),
     }
 
 if __name__ == "__main__":

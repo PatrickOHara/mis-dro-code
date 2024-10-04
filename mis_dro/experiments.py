@@ -6,9 +6,11 @@ Use the `get_experiment()` function to get the list of dictionaries associated w
 
 from enum import StrEnum
 import itertools
-from typing import Dict, List
+from pathlib import Path
+from typing import Dict, List, Optional
 from uuid import uuid4
 import numpy as np
+import pandas as pd
 from .constants import (
     BAS_DRO_EPSILON_SET,
     CONTAMINATION_LEVEL,
@@ -18,8 +20,12 @@ from .constants import (
     NUM_POSTERIOR_SAMPLES,
     NUM_REPLICATIONS,
     NUM_TEST_OBSERVATIONS,
+    PORTFOLIO_EPSILON_SET,
+    IN_SAMPLE_TIME_WINDOW,
+    OUT_OF_SAMPLE_TIME_WINDOW,
     ROBAS_DRO_EPSILON_SET
 )
+from .dataset import get_num_time_windows
 
 
 class ExperimentName(StrEnum):
@@ -30,11 +36,16 @@ class ExperimentName(StrEnum):
     mmd_newsvendor_1d = "mmd_newsvendor_1d"
     mmd_newsvendor_1d_missp = "mmd_newsvendor_1d_missp"
     compare_solve = "compare_solve"
+    kl_portfolio = "kl_portfolio"
     kl_newsvendor_exp_1d = "kl_newsvendor_exp_1d"
     mmd_newsvendor_exp_1d = "mmd_newsvendor_exp_1d"
 
+    def is_portfolio(self) -> bool:
+        return self in (ExperimentName.kl_portfolio)
 
-def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
+
+
+def get_experiment(experiment_name: ExperimentName, dataset_dir: Optional[Path] = None) -> List[Dict]:
     """Returns the experiment associated with the name"""
     function_lookup = {
         ExperimentName.kl_newsvendor_1d: kl_newsvendor_1d,
@@ -42,10 +53,14 @@ def get_experiment(experiment_name: ExperimentName) -> List[Dict]:
         ExperimentName.mmd_newsvendor_1d: mmd_newsvendor_1d,
         ExperimentName.mmd_newsvendor_1d_missp: mmd_newsvendor_1d_missp,
         ExperimentName.compare_solve: compare_solve,
+        ExperimentName.kl_portfolio: kl_portfolio,
         ExperimentName.kl_newsvendor_exp_1d: kl_newsvendor_exp_1d,
         ExperimentName.mmd_newsvendor_exp_1d: mmd_newsvendor_exp_1d
     }
     try:
+        if experiment_name.is_portfolio():
+            # NOTE portfolio setup requires a dataset_dir argument
+            return function_lookup[experiment_name](dataset_dir)
         return function_lookup[experiment_name]()
     except KeyError as e:
         raise KeyError(
@@ -364,6 +379,47 @@ def mmd_newsvendor_1d_missp() -> List[Dict]:
             "uuid": str(uuid4()),  # uniquely identify a run
         }
         experiment.append(params)
+    return experiment
+
+def kl_portfolio(mmc2_dir: Path) -> List[Dict]:
+    """KL Portfolio experiment with DRO-BAS vs BDRO"""
+    experiment = []
+    for algorithm, dgp, epsilon in itertools.product(
+        ["kl_dro_bas", "kl_bdro"],
+        ["DowJones"],
+        PORTFOLIO_EPSILON_SET,
+    ):
+        num_likelihood_samples = 1
+        num_posterior_samples_list = [1]
+        if algorithm == "kl_bdro":
+            # likelihood in closed form
+            num_posterior_samples_list = [5, 10, 30]
+
+        for num_posterior_samples in num_posterior_samples_list:
+            returns_df = pd.read_excel(mmc2_dir / "Datasets" / dgp / f"{dgp}.xlsx", sheet_name="Assets_Returns", header=None)
+            num_time_windows = get_num_time_windows(len(returns_df))
+            num_stocks = len(returns_df.columns)
+            params = {
+                "algorithm": algorithm,
+                "contamination": 0.0,
+                "dataset": "portfolio",
+                "dgp": dgp,
+                "dim": num_stocks,
+                "epsilon": epsilon,
+                "ignore_dpp": True,
+                "inference": "bayes",
+                "lengthscale": -1.0,
+                "likelihood": "multivariate_normal",
+                "njobs": 1,
+                "num_likelihood_samples": num_likelihood_samples,
+                "num_observations": IN_SAMPLE_TIME_WINDOW,
+                "num_posterior_samples": num_posterior_samples,
+                "num_replications": num_time_windows,
+                "num_test_observations": OUT_OF_SAMPLE_TIME_WINDOW,
+                "posterior": "normal_inverse_wishart",
+                "uuid": str(uuid4()),  # uniquely identify a run
+            }
+            experiment.append(params)
     return experiment
 
 def compare_solve() -> List[Dict]:
