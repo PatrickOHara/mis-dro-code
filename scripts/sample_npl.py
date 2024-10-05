@@ -48,7 +48,8 @@ def run_replication(
         generator=generator,
     )
 
-    experiment_dir = "/dcs/pg23/u1604520/misdro/npl_samples_N30_mvn/"
+    # experiment_dir = "/dcs/pg23/u1604520/misdro/npl_samples_N30_mvn/"
+    experiment_dir = "/dcs/pg23/u1604520/misdro/npl_samples_N90_n20_mvn_bimodal_known_cov/"
     df = pd.DataFrame(theta_sample)
     if contamination == 0.1:
         c = '01'
@@ -60,13 +61,15 @@ def run_replication(
 
 if __name__ == "__main__":
     for cont in [0.1, 0.2, 0.0]:
-        for j in range(200):
+        for j in range(100):
             run_replication(
                 j,
                 contamination=cont,
-                dgp = "cont_multivariate_normal",
-                dim = 5,
-                likelihood = "multivariate_normal",
-                num_observations=80,
-                num_posterior_samples=30
+                dgp = "bimodal_multivariate_gaussian",
+                # dgp = "contaminated_exp_old",
+                dim = 5, # dim = 5,
+                likelihood = "multivariate_normal_known_cov",
+                # likelihood="exponential",
+                num_observations=20,
+                num_posterior_samples=90
             )

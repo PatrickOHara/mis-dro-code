@@ -47,17 +47,18 @@ def sample_likelihood(
     elif likelihood == "multivariate_normal_known_cov":
         for i in range(num_posterior_samples):
             mu = theta_sample[i,:]
-            cov = (DGP_STD_TRUNCATED_NORMAL**2)*np.eye(dim)
+            cov = (5**2)*np.eye(dim)
             # vec_triu = theta_sample[i,dim:]
             # cov = reconstruct_covariance_from_triu(vec_triu, dim)
             xi[i] = generator.multivariate_normal(mu, cov, size=num_likelihood_samples)
-    elif likelihood == "gaussian_known_var":
+    elif likelihood == "normal_known_var":
         for i in range(num_posterior_samples):
             xi[i] = generator.normal(
                     loc=theta_sample[i],
-                    scale=DGP_STD_TRUNCATED_NORMAL,
+                    # scale=DGP_STD_TRUNCATED_NORMAL,
+                    scale=5,
                     size=num_likelihood_samples,
-                )
+                ).reshape((num_likelihood_samples,dim))
     
     else:
         raise NotImplementedError(

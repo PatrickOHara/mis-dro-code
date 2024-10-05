@@ -23,7 +23,8 @@ def sample_dgp(
     if dgp == "normal":
         return norm.rvs(
             loc=25,
-            scale=DGP_STD_TRUNCATED_NORMAL,
+            # scale=DGP_STD_TRUNCATED_NORMAL,
+            scale=5,
             size=num_observations,
             random_state=generator,
         ).reshape((num_observations, 1))
@@ -56,6 +57,32 @@ def sample_dgp(
             num_observations, contamination, random_state=generator)
     if dgp == "student_t":
         return t.rvs(df=3, loc=25, scale=DGP_STD_TRUNCATED_NORMAL, size=num_observations, random_state=generator).reshape((num_observations, 1))
+    if dgp == "contaminated_exp_old":
+        cont_size = int(np.floor(contamination * num_observations))
+        n_real = num_observations - cont_size
+        data = expon.rvs(scale=10, size=n_real, random_state=generator)
+        outl = expon.rvs(scale=70, size=cont_size, random_state=generator)
+        data = np.concatenate((data, outl), axis=0)
+        generator.shuffle(data)  # shuffles the data in-place
+        return data.reshape((num_observations,1))
+    if dgp == "bimodal_multivariate_gaussian":
+        cont_size = int(np.floor(contamination * num_observations))
+        n_real = num_observations - cont_size
+        data_mode1 = multivariate_normal.rvs(mean=np.array([10,20,33,22,25]), cov=5*np.eye(5), size=int(n_real/2), random_state=generator)
+        data_mode2 = multivariate_normal.rvs(mean=60*np.ones(5), cov=5*np.eye(5), size=int(n_real/2), random_state=generator)
+        outl = multivariate_normal.rvs(mean=90*np.ones(5), cov=5*np.eye(5), size=cont_size, random_state=generator)
+        data = np.concatenate((data_mode1, data_mode2, outl), axis=0)
+        generator.shuffle(data)  # shuffles the data in-place
+        return data
+    if dgp == "bimodal_univariate_gaussian":
+        cont_size = int(np.floor(contamination * num_observations))
+        n_real = num_observations - cont_size
+        data_mode1 = norm.rvs(loc=10, scale=5, size=int(n_real/2), random_state=generator)
+        data_mode2 = norm.rvs(loc=60, scale=5, size=int(n_real/2), random_state=generator)
+        outl = norm.rvs(loc=90, scale=5, size=cont_size, random_state=generator)
+        data = np.concatenate((data_mode1, data_mode2, outl), axis=0)
+        generator.shuffle(data)  # shuffles the data in-place
+        return data.reshape((num_observations,1))
     raise ValueError(f"The data-generating process specified is not supported: {dgp}")
 
 

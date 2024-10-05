@@ -142,16 +142,20 @@ def kl_newsvendor_1d() -> List[Dict]:
 def kl_newsvendor_exp_1d() -> List[Dict]:
     experiment = []
     total_model_samples = 900
-    for contamination, num_observations, algorithm, (dgp, likelihood, posterior), epsilon in itertools.product(
+    num_replications = 100
+    num_test_observations = 200
+    num_certify_points = 200
+    for contamination, num_observations, (algorithm, dgp, likelihood, inference, posterior), epsilon in itertools.product(
         [0.0, 0.1, 0.2],
-        [80],
-        ["kl_dro_bas", "kl_bdro"],
+        [20],
         [
-            ("contaminated_exp", "exponential", "gamma"),
+            ("kl_dro_bas", "contaminated_exp_old", "exponential", "bayes", "gamma"),
+            ("kl_bdro", "contaminated_exp_old", "exponential", "bayes", "gamma"),
+            ("empirical_mmd", "contaminated_exp_old", "empirical", "empirical", "npl")
         ],
         BAS_DRO_EPSILON_SET,
     ):
-        if algorithm == "kl_bdro":
+        if algorithm in ["kl_bdro", "empirical_mmd"]:
             num_posterior_samples = int(np.sqrt(total_model_samples))
             num_likelihood_samples = int(np.sqrt(total_model_samples))
         if algorithm == "kl_dro_bas":
@@ -165,14 +169,15 @@ def kl_newsvendor_exp_1d() -> List[Dict]:
             "dgp": dgp,
             "dim": 1,
             "epsilon": epsilon,
-            "inference": "bayes",
+            "inference": inference,
             "lengthscale": -1.0,
             "likelihood": likelihood,
             "num_likelihood_samples": num_likelihood_samples,
             "num_observations": num_observations,
             "num_posterior_samples": num_posterior_samples,
-            "num_replications": NUM_REPLICATIONS,
-            "num_test_observations": NUM_TEST_OBSERVATIONS,
+            "num_replications": num_replications,
+            "num_test_observations": num_test_observations,
+            "num_certify_points": num_certify_points,
             "posterior": posterior,
             "uuid": str(uuid4()),  # uniquely identify a run
         }
@@ -182,17 +187,17 @@ def kl_newsvendor_exp_1d() -> List[Dict]:
 def mmd_newsvendor_exp_1d() -> List[Dict]:
     """MMD univariate newsvendor: compare our MMD Bayesian ambiguity set against empirical kernel DRO"""
     experiment = []
-    num_likelihood_samples = 30     
-    num_posterior_samples = 30  
-    num_observations = 80  
+    num_likelihood_samples = 10     
+    num_posterior_samples = 90  
+    num_observations = 20  
     # NOTE when using empirical, set likelihood to 'empirical'
     # NOTE do not set up all the below combinations in one experiment to preserve memory
-    for (algorithm, dgp, likelihood, inference), contamination, epsilon in itertools.product(
+    for (algorithm, dgp, likelihood, inference, posterior), contamination, epsilon in itertools.product(
         [
-            ("dro_bas_mmd", "contaminated_exp", "exponential", "npl_mmd"),     # misspecified
-            ("empirical_mmd", "contaminated_exp", "empirical", "empirical"),            # empirical
+            ("dro_bas_mmd", "bimodal_univariate_gaussian", "normal_known_cov", "npl_mmd", "npl"), 
+            ("empirical_mmd", "bimodal_univariate_gaussian", "empirical", "empirical", "npl")
         ],
-        [0.0, 0.1, 0.2],
+        [0.1, 0.2, 0.0],
         ROBAS_DRO_EPSILON_SET,
     ):
         if inference == "bayes":
@@ -217,8 +222,8 @@ def mmd_newsvendor_exp_1d() -> List[Dict]:
             "num_likelihood_samples": num_likelihood_samples,
             "num_observations": num_observations,
             "num_posterior_samples": num_posterior_samples,
-            "num_replications": NUM_REPLICATIONS,
-            "num_test_observations": NUM_TEST_OBSERVATIONS,
+            "num_replications": 100,
+            "num_test_observations": 200,
             "posterior": posterior,
             "uuid": str(uuid4()),  # uniquely identify a run
         }

@@ -349,7 +349,7 @@ def run_replication(
             c = '00'
         else:
             raise ValueError(f"There are no npl samples for contamination level {contamination}")
-        path_to_csv = Path("/dcs/pg23/u1604520/misdro/npl_samples_N30_exp")
+        path_to_csv = Path("/dcs/pg23/u1604520/misdro/npl_samples_N90_exp")
         theta_sample = pd.read_csv(path_to_csv / f"theta_sample_{replication}_cont{c}.csv", header=None).values
     elif inference == "empirical":
         # empirical does not have a posterior

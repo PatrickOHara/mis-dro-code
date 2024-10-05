@@ -48,11 +48,11 @@ def sample_npl(
         model = univariate_GaussianModel(m)
         p = 2
         dim = 1
-    elif likelihood == "gaussian_known_var":
+    elif likelihood == "normal_known_var":
         model = univariate_GaussianModel_known_variance(m)
         p = 1
         dim = 1
-    elif likelihood == "multivariate_normal":
+    elif likelihood == "multivariate_normal_known_cov":
         d = data.shape[1]
         model = multivariate_GaussianModel(m, d)
         p = d
@@ -170,7 +170,7 @@ class Npl:
             + (1 / (self.n * (self.n - 1))) * sum3
         )
 
-    def minimise_MMD(self, data, weights, key, Nstep=1000, eta=0.01, batch_size=10):
+    def minimise_MMD(self, data, weights, key, Nstep=1000, eta=0.1, batch_size=10):
         """Function to minimise the MMD using adam optimisation in JAX"""
 
         key, key1, key2 = jax.random.split(key, num=2 + 1)

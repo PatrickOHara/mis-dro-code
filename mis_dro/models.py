@@ -51,7 +51,8 @@ class univariate_GaussianModel_known_variance:
     
     def sample(self, theta, key):
         mu = theta[0]
-        std = DGP_STD_TRUNCATED_NORMAL
+        # std = DGP_STD_TRUNCATED_NORMAL
+        std = 5
         x = (
             mu + std*jax.random.normal(key, shape=(self.m,1))
         )
@@ -71,9 +72,9 @@ class multivariate_GaussianModel:
     
     def sample(self, theta, key):
         mu = theta
-        sigma = DGP_STD_TRUNCATED_NORMAL
+        sigma = 5
         x = (
-            jax.random.multivariate_normal(key, mean = mu, cov = sigma*jnp.eye(self.d), shape=(self.m,self.d))
+            jax.random.multivariate_normal(key, mean = mu, cov = (sigma**2)*jnp.eye(self.d), shape=(self.m,self.d))
         )
         
         return x

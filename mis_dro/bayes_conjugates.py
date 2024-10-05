@@ -19,6 +19,9 @@ def default_prior_params(prior: str, dim: int = 1) -> tuple:
         prior_params = normal_inverse_wishart_prior(dim)
     elif prior == "multivariate_normal_known_cov":
         prior_params = (np.zeros(dim), dim+2)
+    elif prior == "normal_known_cov":
+        mu_prior, sigma_prior = 0.0, 5.0
+        prior_params = (mu_prior, sigma_prior)
     else:
         raise NotImplementedError(f"Prior '{prior}' not implemented.")
     return prior_params
@@ -52,6 +55,14 @@ def get_posterior_params(
         kappa_posterior = kappa_prior + N
         mu_posterior = (kappa_prior * mu_prior + N * xi_mean) / kappa_posterior
         post_params = (mu_posterior, kappa_posterior)
+    elif posterior == "normal_known_cov":
+        mu_prior, sigma_prior = prior_params
+        data_mean = np.mean(data, axis=0)
+        N = data.shape[0]
+        true_var = 5**2
+        mu_posterior = (true_var * mu_prior + N * sigma_prior**2 * data_mean) / (N * sigma_prior**2 + true_var)
+        sigma_posterior = np.sqrt(sigma_prior**2*true_var/(true_var+N*sigma_prior**2))
+        post_params = (mu_posterior, sigma_posterior)
     else:
         raise NotImplementedError(f"Posterior '{posterior}' is not implemented")
     return post_params
@@ -80,6 +91,10 @@ def derive_analytical_posterior_params(
         theta[0, dim:] = (1/(kappa_post - dim - 2)) * Psi_post[np.triu_indices(dim)]
         return theta
     elif posterior == "multivariate_normal_known_cov":
+        mu_posterior, _ = posterior_params
+        dim = mu_posterior.shape[0]
+        return mu_posterior.reshape((1,dim))
+    elif posterior == "normal_known_cov":
         mu_posterior, _ = posterior_params
         dim = mu_posterior.shape[0]
         return mu_posterior.reshape((1,dim))
@@ -123,7 +138,10 @@ def sample_posterior(
         return normal_inverse_wishart_samples(num_posterior_samples, *posterior_params, generator=generator)
     if posterior == "multivariate_normal_known_cov":
         mu_posterior, kappa_posterior = posterior_params
-        return sp.stats.multivariate_normal.rvs(mean=mu_posterior, cov=(DGP_STD_TRUNCATED_NORMAL**2)*np.eye(5), size=num_posterior_samples, random_state=generator)
+        return sp.stats.multivariate_normal.rvs(mean=mu_posterior, cov=(5**2)*np.eye(5), size=num_posterior_samples, random_state=generator)
+    if posterior == "normal_known_cov":
+        mu_posterior, sigma_posterior = posterior_params
+        return sp.stats.multivariate_normal.rvs(loc=mu_posterior, scale=5, size=num_posterior_samples, random_state=generator)
     else:
         raise NotImplementedError(f"Posterior '{posterior}' is not implemented")
 
@@ -144,6 +162,9 @@ def get_log_partition_constant(posterior: str, posterior_params: list) -> float:
         mu_posterior, kappa_posterior = posterior_params
         dim = mu_posterior.shape[0]
         return dim/(2*kappa_posterior)
+    elif posterior == "normal_known_cov":
+        _, sigma_posterior = posterior_params
+        return sigma_posterior/(2*5**2)
     else:
         raise NotImplementedError(f"get_log_partition_constant not implemented for posterior {posterior}")
 
