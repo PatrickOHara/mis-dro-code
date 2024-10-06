@@ -145,19 +145,23 @@ def kl_newsvendor_exp_1d() -> List[Dict]:
     num_replications = 100
     num_test_observations = 200
     num_certify_points = 200
-    for contamination, num_observations, (algorithm, dgp, likelihood, inference, posterior), epsilon in itertools.product(
+    for contamination, num_observations, (algorithm, dgp, likelihood, inference, posterior, dim), epsilon in itertools.product(
         [0.0, 0.1, 0.2],
         [20],
-        [
-            ("kl_dro_bas", "contaminated_exp_old", "exponential", "bayes", "gamma"),
-            ("kl_bdro", "contaminated_exp_old", "exponential", "bayes", "gamma"),
-            ("empirical_mmd", "contaminated_exp_old", "empirical", "empirical", "npl")
+        [   
+
+            ("kl_dro_bas", "bimodal_multivariate_gaussian", "multivariate_normal_known_cov", "bayes", "multivariate_normal_known_cov", 5),
+            ("kl_bdro", "bimodal_multivariate_gaussian", "multivariate_normal_known_cov", "bayes", "multivariate_normal_known_cov", 5),
+            ("kl_bdro", "bimodal_multivariate_gaussian", "multivariate_normal_known_cov", "npl_mmd", "npl", 5),
+            ("kl_dro_bas", "bimodal_univariate_gaussian", "normal_known_cov", "bayes", "normal_known_cov", 1),
+            ("kl_bdro", "bimodal_univariate_gaussian", "normal_known_var", "bayes", "normal_known_cov", 1),
+            ("kl_bdro", "bimodal_univariate_gaussian", "_normal_known_var", "npl_mmd", "npl", 1),
         ],
         BAS_DRO_EPSILON_SET,
     ):
         if algorithm in ["kl_bdro", "empirical_mmd"]:
-            num_posterior_samples = int(np.sqrt(total_model_samples))
-            num_likelihood_samples = int(np.sqrt(total_model_samples))
+            num_posterior_samples = 90 #int(np.sqrt(total_model_samples))
+            num_likelihood_samples = 10 #int(np.sqrt(total_model_samples))
         if algorithm == "kl_dro_bas":
             # we calculate the posterior exactly in closed form!
             num_likelihood_samples = total_model_samples
@@ -167,7 +171,7 @@ def kl_newsvendor_exp_1d() -> List[Dict]:
             "contamination": contamination,
             "dataset": "newsvendor",
             "dgp": dgp,
-            "dim": 1,
+            "dim": dim,
             "epsilon": epsilon,
             "inference": inference,
             "lengthscale": -1.0,
@@ -192,10 +196,13 @@ def mmd_newsvendor_exp_1d() -> List[Dict]:
     num_observations = 20  
     # NOTE when using empirical, set likelihood to 'empirical'
     # NOTE do not set up all the below combinations in one experiment to preserve memory
-    for (algorithm, dgp, likelihood, inference, posterior), contamination, epsilon in itertools.product(
+    for (algorithm, dgp, likelihood, inference, posterior, dim), contamination, epsilon in itertools.product(
         [
-            ("dro_bas_mmd", "bimodal_univariate_gaussian", "normal_known_cov", "npl_mmd", "npl"), 
-            ("empirical_mmd", "bimodal_univariate_gaussian", "empirical", "empirical", "npl")
+            ("dro_bas_mmd", "bimodal_univariate_gaussian", "normal_known_var", "npl_mmd", "npl", 1), 
+            ("empirical_mmd", "bimodal_univariate_gaussian", "empirical", "empirical", "npl", 1),
+            ("dro_bas_mmd", "bimodal_multivariate_gaussian", "multivariate_normal_known_cov", "npl_mmd", "npl", 5), 
+            ("empirical_mmd", "bimodal_multivariate_gaussian", "empirical", "empirical", "npl", 5),
+
         ],
         [0.1, 0.2, 0.0],
         ROBAS_DRO_EPSILON_SET,
@@ -213,7 +220,7 @@ def mmd_newsvendor_exp_1d() -> List[Dict]:
             "contamination": contamination,
             "dataset": "newsvendor",
             "dgp": dgp,
-            "dim": 1,
+            "dim": dim,
             "epsilon": epsilon,
             "inference": inference,
             "lengthscale": -1.0,        

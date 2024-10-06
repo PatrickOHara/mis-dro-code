@@ -54,7 +54,7 @@ def sample_likelihood(
     elif likelihood == "normal_known_var":
         for i in range(num_posterior_samples):
             xi[i] = generator.normal(
-                    loc=theta_sample[i],
+                    loc=theta_sample[i,:],
                     # scale=DGP_STD_TRUNCATED_NORMAL,
                     scale=5,
                     size=num_likelihood_samples,
