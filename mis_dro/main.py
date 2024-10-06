@@ -440,7 +440,8 @@ def run_replication(
         Xcert = np.random.uniform(np.min(xi), np.max(xi), size=[num_certify_points,dim])
         zetai = np.concatenate([xi, Xcert], axis=0)
         l = np.sqrt((1/2)*np.median(distance.cdist(zetai, zetai, 'sqeuclidean')))
-        K = k_jax(zetai, zetai, l)
+        # K = k_jax(zetai, zetai, l)
+        K = k_comp(zetai, zetai)
         K_decomp = mat_decomp_jax(K)
         problem.param_dict["Xobs"].value = xi
         problem.param_dict["Xcert"].value = Xcert
