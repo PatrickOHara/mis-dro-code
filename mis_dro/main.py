@@ -390,12 +390,8 @@ def run_replication(
         else:
             # set parameters then solve
             problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon - log_partition_constant])
-            if algorithm == "kl_bdro":
-                for i in range(num_likelihood_samples):
-                    problem.param_dict[f"xi_{i}"].value = xi[i]
-            elif algorithm == "kl_dro_bas":
-                 for i in range(num_posterior_samples):
-                    problem.param_dict[f"xi_{i}"].value = xi[i]
+            for i in range(num_posterior_samples):
+                problem.param_dict[f"xi_{i}"].value = xi[i]
             # NOTE the MOSEK 'accept_unknown' argument is needed due to https://github.com/cvxpy/cvxpy/pull/2117
             problem.solve(solver=cp.MOSEK, verbose=verbose, ignore_dpp=ignore_dpp, accept_unknown=True)
             solution = problem.var_dict["x"].value

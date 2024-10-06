@@ -160,8 +160,8 @@ def kl_newsvendor_exp_1d() -> List[Dict]:
         BAS_DRO_EPSILON_SET,
     ):
         if algorithm in ["kl_bdro", "empirical_mmd"]:
-            num_posterior_samples = 90 #int(np.sqrt(total_model_samples))
-            num_likelihood_samples = 10 #int(np.sqrt(total_model_samples))
+            num_posterior_samples = int(np.sqrt(total_model_samples))
+            num_likelihood_samples = int(np.sqrt(total_model_samples))
         if algorithm == "kl_dro_bas":
             # we calculate the posterior exactly in closed form!
             num_likelihood_samples = total_model_samples
