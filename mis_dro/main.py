@@ -37,7 +37,7 @@ from .likelihood import sample_likelihood, reconstruct_covariance_from_triu
 from .newsvendor import newsvendor_cost_cvxpy
 from .npl import sample_npl
 from .optimise import get_kl_bdro_problem, DRO_BAS_MMD
-from .portfolio import get_kl_portfolio_problem, bdro_portfolio_posterior_samples
+from .portfolio import get_kl_portfolio_problem, bdro_portfolio_posterior_samples, portfolio_objective_cvxpy
 from .gaussian_kernel import *
 
 app = typer.Typer(name="misdro")
@@ -45,7 +45,7 @@ app = typer.Typer(name="misdro")
 
 @app.command(name="setup-kl")
 def setup_kl_dro_bas(
-    experiment_name: ExperimentName, experiment_dir: Path, dataset_dir: Optional[Path] = None, overwrite: bool = False
+    experiment_name: ExperimentName, experiment_dir: Path, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), overwrite: bool = False
 ):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
@@ -80,7 +80,7 @@ def setup_kl_dro_bas(
 
 @app.command(name="setup-mmd")
 def setup_mmd_dro_bas(
-    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int,  dataset_dir: Optional[Path] = None, overwrite: bool = False, njobs: int = -1,
+    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), overwrite: bool = False, njobs: int = -1,
 ):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
@@ -135,6 +135,7 @@ def run_experiment(
     algorithm: str,
     only_missing: bool = False, #NOTE if the experiment runs out of memory set this to true to true 
     njobs: int = -1,
+    dataset_dir: Path = Path("~/datasets/misdro/mmc2"),
 ):
     """When using SLURM, this function is called to run an experiment"""
     print(datetime.now(), "- Running algorithm", algorithm, "with DGP", dgp, "from experiment directory", experiment_dir)
@@ -148,7 +149,7 @@ def run_experiment(
 
 
 @app.command(name="batch")
-def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool = False, dataset_dir: Optional[Path] = None):
+def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool = False, dataset_dir: Path = Path("~/datasets/misdro/mmc2")):
     print(datetime.now(), "Running batch from index", start)
     print()
     filepath = experiment_dir / "experiment.json"
@@ -160,7 +161,7 @@ def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool 
             run(experiment_dir, dataset_dir=dataset_dir, **params)
 
 @app.command(name="uuid")
-def run_uuid(experiment_dir: Path, uuid: UUID, njobs: int = -1, verbose: bool = False) -> None:
+def run_uuid(experiment_dir: Path, uuid: UUID, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), njobs: int = -1, verbose: bool = False) -> None:
     """Run DRO for only one specified uuid parameters"""
     filepath = experiment_dir / "experiment.json"
     with open(filepath, "r", encoding="utf-8") as json_file:
@@ -169,7 +170,7 @@ def run_uuid(experiment_dir: Path, uuid: UUID, njobs: int = -1, verbose: bool = 
     for params in experiment:
         if params["uuid"] == str(uuid):
             found = True
-            run(experiment_dir, verbose=verbose, njobs=njobs, **params)
+            run(experiment_dir, verbose=verbose, njobs=njobs, dataset_dir=dataset_dir, **params)
     if not found:
         raise ValueError(f"UUID {uuid} not found in {filepath}")
 
@@ -212,12 +213,18 @@ def run(
         problem = get_kl_portfolio_problem(dim, num_posterior_samples)
     elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
         dim_theta = dim
-        kdro_class = DRO_BAS_MMD(dim_theta, dim, newsvendor_cost_cvxpy)
         if algorithm == "dro_bas_mmd":
             n_samples = num_posterior_samples*num_likelihood_samples
         elif algorithm == "empirical_mmd":
             n_samples = num_observations
-        problem = kdro_class.get_problem(n_samples, num_certify_points)
+        if dataset == "newsvendor":
+            kdro_class = DRO_BAS_MMD(dim_theta, dim, newsvendor_cost_cvxpy)
+            problem = kdro_class.get_newsvendor_problem(n_samples, num_certify_points)
+        elif dataset == "portfolio":
+            kdro_class = DRO_BAS_MMD(dim_theta, dim, portfolio_objective_cvxpy)
+            problem = kdro_class.get_portfolio_problem(n_samples, num_certify_points)
+        else:
+            raise ValueError(f"Objective not implemented for dataset '{dataset}'")
     else:
         raise NotImplementedError(f"Algorithm {algorithm} not implemented.")
     # If the number of parameters is small enough, then use Disciplined Parametrized Programming (DPP)
@@ -240,6 +247,7 @@ def run(
         "dgp": dgp,
         "dim": dim,
         "epsilon": epsilon,
+        "experiment_dir": experiment_dir,
         "ignore_dpp": ignore_dpp,
         "inference": inference,
         "lengthscale": lengthscale,
@@ -296,6 +304,7 @@ def run_replication(
     dgp: str = "truncated_normal",
     dim: int = 1,
     epsilon: float = 1.0,
+    experiment_dir: Optional[Path] = None,
     ignore_dpp: bool = False,
     inference: str = "bayes",
     lengthscale: float = -1.0,
@@ -357,18 +366,24 @@ def run_replication(
         #     generator=generator,
         # )
         # load theta sample from csv files
-        if contamination == 0.05:
-            c = '005'
-        if contamination == 0.2:
-            c = '02'
-        elif contamination == 0.1:
-            c = '01'
-        elif contamination == 0.0:
-            c = '00'
-        else:
-            raise ValueError(f"There are no npl samples for contamination level {contamination}")
-        path_to_csv = Path("/dcs/pg23/u1604520/misdro/npl_samples_N30_exp")
-        theta_sample = pd.read_csv(path_to_csv / f"theta_sample_{replication}_cont{c}.csv", header=None).values
+        if dataset == "newsvendor":
+            if contamination == 0.05:
+                c = '005'
+            if contamination == 0.2:
+                c = '02'
+            elif contamination == 0.1:
+                c = '01'
+            elif contamination == 0.0:
+                c = '00'
+            else:
+                raise ValueError(f"There are no npl samples for contamination level {contamination}")
+            path_to_csv = Path("/dcs/pg23/u1604520/misdro/npl_samples_N30_exp")
+            theta_sample = pd.read_csv(path_to_csv / f"theta_sample_{replication}_cont{c}.csv", header=None).values
+        elif dataset == "portfolio":
+            path_to_csv = experiment_dir / f"portfolio_theta_sample_{dgp}_{replication}.csv"
+            npl_df = pd.read_csv(path_to_csv, index_col=False, header=None)
+            theta_sample = npl_df.values
+            assert num_posterior_samples == theta_sample.shape[0]
     elif inference == "empirical":
         # empirical does not have a posterior
         theta_sample = np.nan * np.ones(num_posterior_samples)
@@ -382,7 +397,7 @@ def run_replication(
     likelihood_start = datetime.now()
     if inference == "empirical":
         xi = data
-    elif dataset == "portfolio" and likelihood == "multivariate_normal":
+    elif inference == "bayes" and dataset == "portfolio" and likelihood == "multivariate_normal":
         pass    # no need to sample from likelihood cause we have closed form
     else:
         xi = sample_likelihood(

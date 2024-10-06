@@ -37,12 +37,13 @@ class ExperimentName(StrEnum):
     mmd_newsvendor_1d_missp = "mmd_newsvendor_1d_missp"
     compare_solve = "compare_solve"
     mmd_newsvendor_5d = "mmd_newsvendor_5d"
+    mmd_portfolio = "mmd_portfolio"
     kl_portfolio = "kl_portfolio"
     kl_newsvendor_exp_1d = "kl_newsvendor_exp_1d"
     mmd_newsvendor_exp_1d = "mmd_newsvendor_exp_1d"
 
     def is_portfolio(self) -> bool:
-        return self in (ExperimentName.kl_portfolio)
+        return self in (ExperimentName.kl_portfolio, ExperimentName.mmd_portfolio)
 
 
 
@@ -55,6 +56,7 @@ def get_experiment(experiment_name: ExperimentName, dataset_dir: Optional[Path] 
         ExperimentName.mmd_newsvendor_1d_missp: mmd_newsvendor_1d_missp,
         ExperimentName.compare_solve: compare_solve,
         ExperimentName.mmd_newsvendor_5d: mmd_newsvendor_5d,
+        ExperimentName.mmd_portfolio: mmd_portfolio,
         ExperimentName.kl_portfolio: kl_portfolio,
         ExperimentName.kl_newsvendor_exp_1d: kl_newsvendor_exp_1d,
         ExperimentName.mmd_newsvendor_exp_1d: mmd_newsvendor_exp_1d
@@ -424,6 +426,53 @@ def mmd_newsvendor_5d() -> List[Dict]:
             "num_posterior_samples": num_posterior_samples,
             "num_replications": NUM_REPLICATIONS,
             "num_test_observations": NUM_TEST_OBSERVATIONS,
+            "posterior": "npl",
+            "uuid": str(uuid4()),  # uniquely identify a run
+        }
+        experiment.append(params)
+    return experiment
+
+def mmd_portfolio(mmc2_dir: Path) -> List[Dict]:
+    """MMD portfolio experiment"""
+    experiment = []
+    dgp = "DowJones"
+    num_likelihood_samples = 10  
+    num_posterior_samples = 90
+    epsilon_set = []
+    for epsilon in ROBAS_DRO_EPSILON_SET:
+        if epsilon <= 0.2:
+            epsilon_set.append(epsilon)
+    returns_df = pd.read_excel(mmc2_dir / "Datasets" / dgp / f"{dgp}.xlsx", sheet_name="Assets_Returns", header=None)
+    num_time_windows = get_num_time_windows(len(returns_df))
+    num_stocks = len(returns_df.columns)
+    # NOTE when using empirical, set likelihood to 'empirical'
+    for (algorithm, likelihood), epsilon in itertools.product(
+        [
+            ("dro_bas_mmd", "multivariate_normal"),
+            ("empirical_mmd", "empirical"),
+        ],
+        epsilon_set,
+    ):
+        if likelihood == "empirical":
+            inference = "empirical"
+        else:
+            inference = "npl_mmd"
+        params = {
+            "algorithm": algorithm,
+            "contamination": 0.0,
+            "dataset": "portfolio",
+            "dgp": dgp,
+            "dim": num_stocks,
+            "epsilon": epsilon,
+            "inference": inference,
+            "lengthscale": -1.0,        
+            "likelihood": likelihood,
+            "num_certify_points": NUM_CERTIFY,
+            "num_likelihood_samples": num_likelihood_samples,
+            "num_observations": IN_SAMPLE_TIME_WINDOW,
+            "num_posterior_samples": num_posterior_samples,
+            "num_replications": num_time_windows,
+            "num_test_observations": OUT_OF_SAMPLE_TIME_WINDOW,
             "posterior": "npl",
             "uuid": str(uuid4()),  # uniquely identify a run
         }
