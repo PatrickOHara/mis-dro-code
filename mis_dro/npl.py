@@ -114,8 +114,9 @@ class Npl:
     def draw_single_mmd_sample(self, weights, key):
         """Draws a single sample from the nonparametric posterior specified via
         data X and Dirichlet weights"""
-
-        return self.minimise_MMD(self.X, weights, key)
+        # FIXME pass eta as a parameter via the experiment setup
+        # return self.minimise_MMD(self.X, weights, key)
+        return self.minimise_MMD(self.X, weights, key, eta=0.01)
 
     def draw_samples(self, n_jobs: int = -1, random_state=None):
         """Draws B samples in parallel from the nonparametric posterior"""
