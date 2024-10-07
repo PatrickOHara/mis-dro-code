@@ -77,7 +77,7 @@ class DRO_BAS_MMD():
     '''
     DRO-BAS problem with the MMD as a KDRO problem in CVXPY 
     '''
-    def __init__(self, dim_theta, loss_call): 
+    def __init__(self, dim_data, dim_theta, loss_call): 
         '''
         #####
         Adjusted from https://github.com/jj-zhu/kdro/blob/main/kdro/kdro.py
@@ -92,6 +92,7 @@ class DRO_BAS_MMD():
         assert dim_theta > 0 
 
         self.dim_theta = dim_theta
+        self.dim_data = dim_data
         self.loss_call = loss_call
 
     def get_problem(self, n_sample, num_certify_samples):
@@ -110,8 +111,8 @@ class DRO_BAS_MMD():
         K = cp.Parameter((n_sample+n_certify, n_sample+n_certify), name="K")
         K_decomposed = cp.Parameter((n_sample+n_certify, n_sample+n_certify), name="K_decomposed")
         epsilon = cp.Parameter(1, name="epsilon", nonneg=True)
-        Xobs = cp.Parameter((n_sample,1), name="Xobs")
-        Xcert = cp.Parameter((n_certify,1), name="Xcert")
+        Xobs = cp.Parameter((n_sample,self.dim_data), name="Xobs")
+        Xcert = cp.Parameter((n_certify,self.dim_data), name="Xcert")
         
         # theta is the decision variable
         theta = cp.Variable(self.dim_theta, name="theta")

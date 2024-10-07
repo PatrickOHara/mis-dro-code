@@ -206,9 +206,10 @@ def run(
             newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim,
         )
     elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
-        dim_theta = 1
+        dim_theta = dim
+        dim_data = dim
         # FIXME we will need to pass dim (of xi) into MMD class
-        kdro_class = DRO_BAS_MMD(dim_theta, newsvendor_cost_cvxpy)
+        kdro_class = DRO_BAS_MMD(dim_data, dim_theta, newsvendor_cost_cvxpy)
         if algorithm == "dro_bas_mmd":
             n_samples = num_posterior_samples*num_likelihood_samples
         elif algorithm == "empirical_mmd":
@@ -401,10 +402,10 @@ def run_replication(
         if algorithm == "dro_bas_mmd":
             xi = xi.reshape((num_likelihood_samples*num_posterior_samples,dim))
         elif algorithm == "empirical_mmd":
-            xi = data.reshape((num_observations,1))
+            xi = data.reshape((num_observations,dim))
         _, dim_x = xi.shape
-        Xcert = np.random.uniform(np.min(xi), np.max(xi), size=[num_certify_points,dim_x])
-        zetai = np.concatenate([xi, Xcert])
+        Xcert = np.random.uniform(np.min(xi), np.max(xi), size=[num_certify_points,dim])
+        zetai = np.concatenate([xi, Xcert], axis=0)
         l = np.sqrt((1/2)*np.median(distance.cdist(zetai, zetai, 'sqeuclidean')))
         K = k_jax(zetai, zetai, l)
         K_decomp = mat_decomp_jax(K)
