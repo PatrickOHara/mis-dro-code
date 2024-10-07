@@ -136,6 +136,17 @@ def sample_posterior(
         )
     if posterior == "normal_inverse_wishart":
         return normal_inverse_wishart_samples(num_posterior_samples, *posterior_params, generator=generator)
+    if posterior == "inverse_wishart":
+        iota_post, Psi_post = posterior_params
+        dim = Psi_post.shape[0]
+        iw_post = sp.stats.invwishart(iota_post, Psi_post, seed=generator)
+        cov_samples = iw_post.rvs(num_posterior_samples)
+        idx_triu = np.triu_indices(dim)
+        triu_samples = np.zeros((int(num_posterior_samples), upper_triangular_size(dim)))
+        for i, cov in enumerate(cov_samples):
+            triu_samples[i] = cov[idx_triu]
+        return triu_samples
+    raise NotImplementedError(f"Posterior '{posterior}' is not implemented")
     if posterior == "multivariate_normal_known_cov":
         mu_posterior, kappa_posterior = posterior_params
         return sp.stats.multivariate_normal.rvs(mean=mu_posterior, cov=(1/kappa_posterior)*(5**2)*np.eye(5), size=num_posterior_samples, random_state=generator)
@@ -337,4 +348,4 @@ def get_normal_inverse_wishart_G_constant(dim: int, kappa_post: float) -> float:
 
 def upper_triangular_size(dim: int) -> int:
     """Includes the diagonal!"""
-    return dim * (dim-1) / 2 + dim
+    return int(dim * (dim-1) / 2 + dim)
