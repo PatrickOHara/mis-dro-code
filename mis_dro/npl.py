@@ -114,8 +114,9 @@ class Npl:
     def draw_single_mmd_sample(self, weights, key):
         """Draws a single sample from the nonparametric posterior specified via
         data X and Dirichlet weights"""
-
-        return self.minimise_MMD(self.X, weights, key)
+        # FIXME pass eta as a parameter via the experiment setup
+        # return self.minimise_MMD(self.X, weights, key)
+        return self.minimise_MMD(self.X, weights, key, eta=0.001)
 
     def draw_samples(self, n_jobs: int = -1, random_state=None):
         """Draws B samples in parallel from the nonparametric posterior"""
@@ -239,7 +240,7 @@ class Npl:
             batches = jnp.array(batches)
             # Update loss and gradient
             value, opt_state = step(next(itercount), opt_state, batches, rng_inputs1[i])
-            print(get_params(opt_state))
+            # print(get_params(opt_state))
             # Update smallest loss and best theta value if loss has decreased
             pred = value < smallest_loss  # Prediction that loss (value) has decreased
 

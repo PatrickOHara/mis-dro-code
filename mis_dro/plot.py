@@ -11,20 +11,29 @@ class AlgorithmLineStyle(StrEnum):
     bdro_grid_search = "dashed"
     kl_bdro = "dotted"
     kl_dro_bas = "dotted"
+    dro_bas_mmd = "dotted"
+    empirical_mmd = "dotted"
 
 
 class AlgorithmMarkerStyle(StrEnum):
     """Consistent algorithm marker styles"""
 
-    bdro_grid_search = "*"
+    # bdro_grid_search = "*"
+    dro_bas_mmd = "*"
+    empirical_mmd = "v"
     kl_bdro = "^"
     kl_dro_bas = "o"
 
+CB_color_cycle = ['#377eb8', '#ff7f00', '#4daf4a',
+                  '#f781bf', '#a65628', '#984ea3',
+                  '#999999', '#e41a1c', '#dede00']
+
 class AlgorithmColor(StrEnum):
     """Colors of algorithm lines"""
-    bdro_grid_search = "#ABABAB"
+    dro_bas_mmd = "#f781bf"
     kl_bdro = "#FF800E"
     kl_dro_bas = "#006BA4"
+    empirical_mmd = "#999999"
 
 
 
@@ -32,6 +41,8 @@ class AlgorithmName(StrEnum):
     """Consistent algorithm line styles"""
 
     bdro_grid_search = "BDRO grid search"
+    dro_bas_mmd = "RoBAS"
+    empirical_mmd = "Empirical MMD"
     kl_bdro = "BDRO"
     kl_dro_bas = "DRO-BAS"
 
@@ -243,6 +254,10 @@ def mean_variance_plot(
                     ha = "left"
                     va = "bottom"
                     # offset = 1 if i==0 or i == len(epsilon_list) else 5
+                    local_offset = offset
+                else:
+                    ha = "left"
+                    va = "bottom"
                     local_offset = offset
 
                 axis.text(
