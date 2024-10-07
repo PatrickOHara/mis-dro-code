@@ -399,7 +399,7 @@ def run_replication(
             setup_time = problem.solver_stats.setup_time
     elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
         if algorithm == "dro_bas_mmd":
-            xi = xi.reshape((num_likelihood_samples*num_posterior_samples,1))
+            xi = xi.reshape((num_likelihood_samples*num_posterior_samples,dim))
         elif algorithm == "empirical_mmd":
             xi = data.reshape((num_observations,1))
         _, dim_x = xi.shape
