@@ -11,5 +11,6 @@
 #SBATCH --output=joboutput_%j.out # Standard out from your job
 #SBATCH --error=joboutput_%j.err  # Standard error from your job
 
-## Execute your program(s) ##
+## Loop over each batch ##
+start=$(($SLURM_ARRAY_TASK_ID * 1))
 srun misdro batch {experiment_dir} $start {batch_size}
