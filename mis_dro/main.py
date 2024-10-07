@@ -456,26 +456,21 @@ def run_replication(
     else:
         raise ValueError("Please choose a valid algorithm")
     solve_time = (datetime.now() - solve_start).total_seconds()
-    # evaluate the cost
+    # evaluate the out-of-sample cost
     if (solution == np.inf).any():
-        out_of_sample_mean = np.inf
-        out_of_sample_var = 0.0
-        out_of_sample_costs = np.inf * np.ones(num_test_observations)
+        out_of_sample_cost = np.inf * np.ones(num_test_observations)
     else:
         if dataset == "newsvendor":
-            out_of_sample_costs = newsvendor_cost_cvxpy(solution, data_eval).value
+            out_of_sample_cost = newsvendor_cost_cvxpy(solution, data_eval).value
         elif dataset == "portfolio":
-            # cost is interpreted as negative return (we want to maximise return)
-            out_of_sample_costs = data_eval @ solution
-        out_of_sample_mean = np.mean(out_of_sample_costs)
-        out_of_sample_var = np.var(out_of_sample_costs)
+            out_of_sample_cost = data_eval @ solution
+        else:
+            raise NotImplementedError(f"Out-of-sample cost for dataset '{dataset}' not implemented")
         solution = list(solution)
 
     return {
         "uuid": uuid,
         "replication": replication,
-        "mean_cost": out_of_sample_mean,
-        "var_cost": out_of_sample_var,
         "solution": solution,
         "dgp_time": dgp_time,
         "likelihood_time": likelihood_time,
@@ -483,7 +478,7 @@ def run_replication(
         "solve_time": solve_time,
         "setup_time": setup_time,
         "log_partition_constant": log_partition_constant,
-        "out_of_sample_costs": list(out_of_sample_costs),
+        "out_of_sample_cost": list(out_of_sample_cost),
     }
 
 if __name__ == "__main__":
