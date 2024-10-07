@@ -11,8 +11,9 @@ import jax
 from jax import numpy as jnp
 from jax import vmap, value_and_grad, jit, config
 from jax.example_libraries import optimizers
-from .gaussian_kernel import k, k_jax
+from .gaussian_kernel import k, k_jax, k_comp
 from .models import *
+from .constants import upper_triangular_size
 
 
 def sample_npl(
@@ -22,6 +23,7 @@ def sample_npl(
     num_posterior_samples: int,
     seed: int,
     lengthscale: float = -1.0,
+    dim: int = 1,
     generator: Optional[np.random.Generator] = None,
     p: int = 1,
 ) -> np.ndarray:
@@ -51,12 +53,14 @@ def sample_npl(
     elif likelihood == "normal_known_var":
         model = univariate_GaussianModel_known_variance(m)
         p = 1
-        dim = 1
     elif likelihood == "multivariate_normal_known_cov":
         d = data.shape[1]
-        model = multivariate_GaussianModel(m, d)
+        model = multivariate_GaussianModel(m, d, known_cov=True)
         p = d
-        dim = d
+    elif likelihood == "multivariate_normal":
+        d = data.shape[1]
+        model = multivariate_GaussianModel(m, d, known_cov=False)
+        p = d + upper_triangular_size(d)
     else:
         raise NotImplementedError(
             f"Posterior '{likelihood}' is not implemented for '{inference}' inference."
@@ -110,8 +114,9 @@ class Npl:
     def draw_single_mmd_sample(self, weights, key):
         """Draws a single sample from the nonparametric posterior specified via
         data X and Dirichlet weights"""
-
-        return self.minimise_MMD(self.X, weights, key)
+        # FIXME pass eta as a parameter via the experiment setup
+        # return self.minimise_MMD(self.X, weights, key)
+        return self.minimise_MMD(self.X, weights, key, eta=0.001)
 
     def draw_samples(self, n_jobs: int = -1, random_state=None):
         """Draws B samples in parallel from the nonparametric posterior"""
@@ -184,9 +189,13 @@ class Npl:
                 theta, key
             )  # Returnes self.m random samples from the model with parameter theta
 
-            # Compute kernel Gram matrices
-            kyy = k_jax(y, y, self.l)
-            kxy = k_jax(y, x, self.l)
+            if self.d > 1:
+                # Compute kernel Gram matrices
+                kyy = k_comp(y, y) #, self.l
+                kxy = k_comp(y, x) #, self.l
+            else:
+                kyy = k_jax(y, y, self.l)
+                kxy = k_jax(y, x, self.l)
 
             # first sum
             diag_elements = jnp.diag_indices_from(kyy)
@@ -231,6 +240,7 @@ class Npl:
             batches = jnp.array(batches)
             # Update loss and gradient
             value, opt_state = step(next(itercount), opt_state, batches, rng_inputs1[i])
+            # print(get_params(opt_state))
             # Update smallest loss and best theta value if loss has decreased
             pred = value < smallest_loss  # Prediction that loss (value) has decreased
 

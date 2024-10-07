@@ -79,27 +79,28 @@ class DRO_BAS_MMD():
     '''
     DRO-BAS problem with the MMD as a KDRO problem in CVXPY 
     '''
-    def __init__(self, dim_data, dim_theta, loss_call): 
+    def __init__(self, dim_decision, dim_data, loss_call): 
         '''
         #####
         Adjusted from https://github.com/jj-zhu/kdro/blob/main/kdro/kdro.py
         #####
-        dim_theta: the dimension of theta (parameter to be optimized)
+        dim_decision: the dimension of the decision variable (parameter to be optimized)
+        dim_data: dimension of the data
 
         loss_call: A callable objective function implemented using cvxpy.
             The first argument should be a cvxpy variable.
             The second argument should be a cvxpy parameter representing the certifying points.
             The return should be a cvxpy expression.
         '''
-        assert dim_theta > 0 
+        assert dim_decision > 0 
 
-        self.dim_theta = dim_theta
+        self.dim_decision = dim_decision
         self.dim_data = dim_data
         self.loss_call = loss_call
 
-    def get_problem(self, n_sample, num_certify_samples):
+    def get_portfolio_problem(self, n_sample, num_certify_samples):
         '''
-        Get the optimisation problem in CVXPY
+        Get the optimisation problem in CVXPY for the portfolio problem
         
         Args:
         n_sample: Number of total samples.
@@ -117,7 +118,65 @@ class DRO_BAS_MMD():
         Xcert = cp.Parameter((n_certify,self.dim_data), name="Xcert")
         
         # theta is the decision variable
-        theta = cp.Variable(self.dim_theta, name="theta")
+        theta = cp.Variable(self.dim_decision, name="theta")
+
+        # f0 = a bias term as part of the RKHS function. A scalar
+        f0 = cp.Variable()
+
+        # Beta is the vector of coefficients of the dual RKHS function.
+        beta = cp.Variable(n_sample+n_certify)
+
+        # function values at the kernel_points
+        fvals = K @ beta
+
+        # List of constraints for cvxpy
+        constraints = []
+        loss_call = self.loss_call
+        # always certify the observations
+        for i in range(n_sample):
+            #FIXME when we merge with multivariate the Xobs.shape[1] should just be dim
+            constraints += [loss_call(theta, Xobs[i,:].reshape((1, Xobs.shape[1]))) 
+            <= f0 + fvals[i] ]
+
+        # certify the certifying points
+        for i in range(n_certify):
+            #FIXME when we merge with multivariate the Xcert.shape[1] should just be dim
+            xcert_i = Xcert[i,:].reshape((1, Xcert.shape[1]))
+            constraints += [loss_call(theta, xcert_i) <= f0 +
+            fvals[i+n_sample]]
+        constraints += [theta >= 0, cp.sum(theta) == 1]
+        
+        emp = f0 + cp.sum(fvals[:n_sample]) / n_sample
+        rkhs_norm = cp.norm(beta.T @ K_decomposed) # pass decomposed kernel directly
+        reg_term = epsilon * rkhs_norm
+
+        # objective function
+        obj = emp + reg_term
+        opt = cp.Problem(cp.Minimize(obj), constraints)
+        
+        return opt
+
+    def get_newsvendor_problem(self, n_sample, num_certify_samples):
+        '''
+        Get the optimisation problem in CVXPY for the newsvendor problem
+        
+        Args:
+        n_sample: Number of total samples.
+        num_certify_samples: Number of certifying points for the discretisation of the constraint.
+
+        Returns:
+        problem: A cvxpy Problem object
+        
+        '''
+        n_certify = num_certify_samples
+        K = cp.Parameter((n_sample+n_certify, n_sample+n_certify), name="K")
+        K_decomposed = cp.Parameter((n_sample+n_certify, n_sample+n_certify), name="K_decomposed")
+        epsilon = cp.Parameter(1, name="epsilon", nonneg=True)
+        Xobs = cp.Parameter((n_sample,self.dim_data), name="Xobs")
+        Xcert = cp.Parameter((n_certify,self.dim_data), name="Xcert")
+        
+        # theta is the decision variable
+        theta = cp.Variable(self.dim_decision, name="theta")
 
         # f0 = a bias term as part of the RKHS function. A scalar
         f0 = cp.Variable()

@@ -4,7 +4,11 @@
 from typing import Optional
 import numpy as np
 import cvxpy as cp
-from .bayes_conjugates import sample_posterior, upper_triangular_size
+from .bayes_conjugates import sample_posterior
+
+def portfolio_objective_cvxpy(x, xi):
+    """CVXPY portfolio objective"""
+    return xi @ x
 
 def get_kl_portfolio_problem(num_stocks: int, num_cov_samples: int) -> cp.Problem:
     """Evaluate portfolio cost function with cvxpy assuming a Gaussian likelihood

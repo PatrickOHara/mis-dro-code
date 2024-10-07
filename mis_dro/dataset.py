@@ -45,6 +45,15 @@ def sample_dgp(
         return expon.rvs(scale=20.0, size=num_observations, random_state=generator).reshape((num_observations, 1))
     if dgp == "gamma":
         return data_generation_gamma(num_observations, a=10, random_state=generator).reshape((num_observations, 1))
+    if dgp == "multivariate_normal_known_cov":
+        dgp_mean = np.array([10.0, 20.0, 30.0, 35.0, 22.0])
+        dgp_cov = (DGP_STD_TRUNCATED_NORMAL**2)*np.eye(dim)
+        # cov_multiplier = 20.0
+        # # NOTE sklearn doesn't seem to accept a Generator
+        # sklearn_cov_seed = 1    # NOTE fix the seed, we always want the same covariance
+        # sklearn_random_state = np.random.RandomState(seed=sklearn_cov_seed)
+        # dgp_cov = cov_multiplier * make_spd_matrix(dim, random_state=sklearn_random_state)
+        return multivariate_normal.rvs(dgp_mean, dgp_cov, size=num_observations, random_state=generator)
     if dgp == "multivariate_normal":
         dgp_mean = np.array([10.0, 20.0, 30.0, 35.0, 22.0])
         cov_multiplier = 20.0
@@ -52,6 +61,7 @@ def sample_dgp(
         sklearn_cov_seed = 1    # NOTE fix the seed, we always want the same covariance
         sklearn_random_state = np.random.RandomState(seed=sklearn_cov_seed)
         dgp_cov = cov_multiplier * make_spd_matrix(dim, random_state=sklearn_random_state)
+        print(dgp_cov)
         return multivariate_normal.rvs(dgp_mean, dgp_cov, size=num_observations, random_state=generator)
     if dgp == "cont_multivariate_normal":
         return cont_multivariate_normal(

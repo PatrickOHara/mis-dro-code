@@ -62,6 +62,8 @@ PORTFOLIO_EPSILON_SET = [
 ]
 
 ROBAS_DRO_EPSILON_SET = [
+    0.0001,
+    0.0005,
     0.001,
     0.003,
     0.005,
@@ -72,3 +74,7 @@ ROBAS_DRO_EPSILON_SET = [
     0.2,
     0.25
 ]
+
+def upper_triangular_size(dim: int) -> int:
+    """Includes the diagonal!"""
+    return int(dim * (dim-1) / 2 + dim)
