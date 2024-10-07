@@ -301,9 +301,8 @@ def get_agg_df(results_df: pd.DataFrame, gb_cols: list[str]):
 
     gb = results_df.groupby(by=gb_cols)
     agg_df = gb.agg(
-        out_of_sample_mean = pd.NamedAgg(column="mean_cost", aggfunc=np.mean),
-        out_of_sample_mean_of_vars = pd.NamedAgg(column="var_cost", aggfunc=np.mean),
-        out_of_sample_var_of_means = pd.NamedAgg(column="mean_cost", aggfunc=np.var),
+        out_of_sample_mean = pd.NamedAgg(column="out_of_sample_cost", aggfunc=np.mean),
+        out_of_sample_var = pd.NamedAgg(column="mean_cost", aggfunc=np.var),
         mean_solve_time = pd.NamedAgg(column="solve_time", aggfunc=np.mean),
         std_solve_time = pd.NamedAgg(column="solve_time", aggfunc=np.std),
     )
