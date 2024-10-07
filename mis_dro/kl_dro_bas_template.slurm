@@ -1,9 +1,9 @@
 #!/bin/bash
 #
 #SBATCH --job-name=kl-newsvendor
-#SBATCH --partition=cpu-batch
-#SBATCH --cpus-per-task=2
-#SBATCH --mem-per-cpu=3000
+#SBATCH --partition=parrot
+#SBATCH --cpus-per-task=1
+#SBATCH --mem-per-cpu=5000
 #SBATCH --time=2-00:00:00
 #SBATCH --array=0-{num_batches}
 #

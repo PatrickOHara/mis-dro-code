@@ -45,7 +45,7 @@ app = typer.Typer(name="misdro")
 
 @app.command(name="setup-kl")
 def setup_kl_dro_bas(
-    experiment_name: ExperimentName, experiment_dir: Path, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), overwrite: bool = False
+    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), overwrite: bool = False
 ):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
@@ -59,23 +59,18 @@ def setup_kl_dro_bas(
     with open(filepath, "w", encoding="utf-8") as json_file:
         json.dump(experiment, json_file, indent=4)
 
-    # get unique DGPs
-    dgp_algorithm_pairs = set()
-    for params in experiment:
-        dgp_algorithm_pairs.add((params["dgp"], params["algorithm"]))
+    # for the given batch size, how many batches do we need?
+    num_batches = math.ceil(float(len(experiment)) / float(batch_size))
 
     # setup SLURM file
     with open(
         Path(__file__).parent / "kl_dro_bas_template.slurm", "r", encoding="utf-8"
     ) as slurm_file:
         slurm_string = slurm_file.read()
-    for dgp, algorithm in dgp_algorithm_pairs:
-        dgp_string = slurm_string.format(
-            experiment_dir=experiment_dir, dgp=dgp, algorithm=algorithm,
-        )
-        (experiment_dir / f"{experiment_name}_{dgp}_{algorithm}.slurm").write_text(
-            dgp_string
-        )
+    dgp_string = slurm_string.format(
+        experiment_dir=experiment_dir, num_batches=num_batches, batch_size=batch_size
+    )
+    (experiment_dir / f"{experiment_name}.slurm").write_text(dgp_string)
 
 
 @app.command(name="setup-mmd")

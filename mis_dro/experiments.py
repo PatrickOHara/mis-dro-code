@@ -117,13 +117,13 @@ def kl_newsvendor_1d() -> List[Dict]:
     """KL univariate newsvendor: compare our Bayesian ambiguity set against Bayesian DRO"""
     experiment = []
     for total_model_samples, algorithm, (dgp, likelihood, posterior), epsilon in itertools.product(
-        [25, 100, 900, 2500],
+        [25, 100, 900],
         ["kl_dro_bas", "kl_bdro"],
         [
             ("normal", "normal", "normal_gamma"),
-            # ("truncated_normal", "normal", "normal_gamma"),
-            # ("exponential", "exponential", "gamma"),
-            # ("contaminated_exp", "exponential", "gamma"),
+            ("truncated_normal", "normal", "normal_gamma"),
+            ("exponential", "exponential", "gamma"),
+            ("contaminated_exp", "exponential", "gamma"),
         ],
         BAS_DRO_EPSILON_SET,
     ):
@@ -144,9 +144,11 @@ def kl_newsvendor_1d() -> List[Dict]:
             "dgp": dgp,
             "dim": 1,
             "epsilon": epsilon,
+            "ignore_dpp": True,
             "inference": "bayes",
             "lengthscale": -1.0,
             "likelihood": likelihood,
+            "njobs": 1,
             "num_likelihood_samples": num_likelihood_samples,
             "num_observations": NUM_OBSERVATIONS,
             "num_posterior_samples": num_posterior_samples,
