@@ -155,7 +155,7 @@ def kl_newsvendor_exp_1d() -> List[Dict]:
             ("kl_bdro", "bimodal_multivariate_gaussian", "multivariate_normal_known_cov", "npl_mmd", "npl", 5),
             ("kl_dro_bas", "bimodal_univariate_gaussian", "normal_known_cov", "bayes", "normal_known_cov", 1),
             ("kl_bdro", "bimodal_univariate_gaussian", "normal_known_var", "bayes", "normal_known_cov", 1),
-            ("kl_bdro", "bimodal_univariate_gaussian", "_normal_known_var", "npl_mmd", "npl", 1),
+            ("kl_bdro", "bimodal_univariate_gaussian", "normal_known_var", "npl_mmd", "npl", 1),
         ],
         BAS_DRO_EPSILON_SET,
     ):
