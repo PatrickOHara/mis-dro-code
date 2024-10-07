@@ -141,7 +141,7 @@ def sample_posterior(
         return sp.stats.multivariate_normal.rvs(mean=mu_posterior, cov=(1/kappa_posterior)*(5**2)*np.eye(5), size=num_posterior_samples, random_state=generator)
     if posterior == "normal_known_cov":
         mu_posterior, sigma_posterior = posterior_params
-        return sp.stats.multivariate_normal.rvs(loc=mu_posterior, scale=sigma_posterior, size=num_posterior_samples, random_state=generator)
+        return sp.stats.norm.rvs(loc=mu_posterior, scale=sigma_posterior, size=num_posterior_samples, random_state=generator)
     else:
         raise NotImplementedError(f"Posterior '{posterior}' is not implemented")
 
