@@ -474,7 +474,7 @@ def run_replication(
         out_of_sample_cost = np.inf * np.ones(num_test_observations)
     else:
         if dataset == "newsvendor":
-            out_of_sample_cost = newsvendor_cost_cvxpy(solution, data_eval).value
+            out_of_sample_cost = newsvendor_cost_cvxpy(solution, data_eval.reshape((num_test_observations, dim))).value
         elif dataset == "portfolio":
             out_of_sample_cost = data_eval @ solution
         else:

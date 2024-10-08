@@ -13,6 +13,8 @@ import numpy as np
 import pandas as pd
 from .constants import (
     BAS_DRO_EPSILON_SET,
+    BAS_NUM_REPLICATIONS,
+    BAS_TOTAL_MODEL_SAMPLES,
     CONTAMINATION_LEVEL,
     NUM_CERTIFY,
     NUM_LIKELIHOOD_SAMPLES,
@@ -23,7 +25,7 @@ from .constants import (
     PORTFOLIO_EPSILON_SET,
     IN_SAMPLE_TIME_WINDOW,
     OUT_OF_SAMPLE_TIME_WINDOW,
-    ROBAS_DRO_EPSILON_SET
+    ROBAS_DRO_EPSILON_SET,
 )
 from .dataset import get_num_time_windows
 
@@ -75,7 +77,7 @@ def kl_newsvendor_5d() -> List[Dict]:
     """KL univariate newsvendor: compare our Bayesian ambiguity set against Bayesian DRO"""
     experiment = []
     for total_model_samples, algorithm, (dgp, likelihood, posterior), epsilon in itertools.product(
-        [25, 100, 900, 2500],
+        BAS_TOTAL_MODEL_SAMPLES,
         ["kl_dro_bas", "kl_bdro"],
         [
             ("multivariate_normal", "multivariate_normal", "normal_inverse_wishart"),
@@ -89,23 +91,22 @@ def kl_newsvendor_5d() -> List[Dict]:
             # we calculate the posterior exactly in closed form!
             num_likelihood_samples = total_model_samples
             num_posterior_samples = 1
-        contamination = 0.0
-        if dgp == "contaminated_exp":
-            contamination = CONTAMINATION_LEVEL
         params = {
             "algorithm": algorithm,
-            "contamination": contamination,
+            "contamination": 0.0,
             "dataset": "newsvendor",
             "dgp": dgp,
             "dim": 5,
             "epsilon": epsilon,
+            "ignore_dpp": True,
             "inference": "bayes",
             "lengthscale": -1.0,
             "likelihood": likelihood,
+            "njobs": 1,
             "num_likelihood_samples": num_likelihood_samples,
             "num_observations": NUM_OBSERVATIONS,
             "num_posterior_samples": num_posterior_samples,
-            "num_replications": NUM_REPLICATIONS,
+            "num_replications": BAS_NUM_REPLICATIONS,
             "num_test_observations": NUM_TEST_OBSERVATIONS,
             "posterior": posterior,
             "uuid": str(uuid4()),  # uniquely identify a run
@@ -117,7 +118,7 @@ def kl_newsvendor_1d() -> List[Dict]:
     """KL univariate newsvendor: compare our Bayesian ambiguity set against Bayesian DRO"""
     experiment = []
     for total_model_samples, algorithm, (dgp, likelihood, posterior), epsilon in itertools.product(
-        [25, 100, 900],
+        BAS_TOTAL_MODEL_SAMPLES,
         ["kl_dro_bas", "kl_bdro"],
         [
             ("normal", "normal", "normal_gamma"),
@@ -152,7 +153,7 @@ def kl_newsvendor_1d() -> List[Dict]:
             "num_likelihood_samples": num_likelihood_samples,
             "num_observations": NUM_OBSERVATIONS,
             "num_posterior_samples": num_posterior_samples,
-            "num_replications": NUM_REPLICATIONS,
+            "num_replications": BAS_NUM_REPLICATIONS,
             "num_test_observations": NUM_TEST_OBSERVATIONS,
             "posterior": posterior,
             "uuid": str(uuid4()),  # uniquely identify a run

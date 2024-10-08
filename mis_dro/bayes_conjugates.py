@@ -80,7 +80,10 @@ def derive_analytical_posterior_params(
         theta = np.zeros((1, 2))
         mu_posterior, _, alpha_posterior, beta_posterior = posterior_params
         # we want an analytical form for the precision, which is alpha over beta
-        theta[0] = np.array([mu_posterior, alpha_posterior / beta_posterior])
+        # but the numpy normal dist function takes the standard deviation
+        # so we take square root and inverse
+        std = np.sqrt(beta_posterior / alpha_posterior)
+        theta[0] = np.array([mu_posterior, std])
         return theta
     elif posterior == "normal_inverse_wishart":
         mu_post, kappa_post, _, Psi_post = posterior_params
@@ -146,16 +149,13 @@ def sample_posterior(
         for i, cov in enumerate(cov_samples):
             triu_samples[i] = cov[idx_triu]
         return triu_samples
-    raise NotImplementedError(f"Posterior '{posterior}' is not implemented")
     if posterior == "multivariate_normal_known_cov":
         mu_posterior, kappa_posterior = posterior_params
         return sp.stats.multivariate_normal.rvs(mean=mu_posterior, cov=(1/kappa_posterior)*(5**2)*np.eye(5), size=num_posterior_samples, random_state=generator)
     if posterior == "normal_known_cov":
         mu_posterior, sigma_posterior = posterior_params
         return sp.stats.norm.rvs(loc=mu_posterior, scale=sigma_posterior, size=num_posterior_samples, random_state=generator)
-    else:
-        raise NotImplementedError(f"Posterior '{posterior}' is not implemented")
-
+    raise NotImplementedError(f"Posterior '{posterior}' is not implemented")
 
 def get_log_partition_constant(posterior: str, posterior_params: list) -> float:
     """Given the posterior params, return the optimization constant for Bayesian DRO"""
@@ -241,14 +241,17 @@ def normal_gamma_rvs(
     samples = np.zeros((num_samples, 2))
     if not generator:
         generator = np.random.default_rng()
-    # TODO make these standard deviation samples! By taking inverse sqrt
     precision_samples = generator.gamma(alpha, 1.0 / beta, num_samples)
-    standard_devs = 1 / np.sqrt(kappa * precision_samples)
+
     for i in range(num_samples):
         # NOTE numpy Normal distribution takes standard deviation as a parameter (hence sqrt) - not variance!
         samples[i, 0] = generator.normal(
-            mu, standard_devs[i], 1
+            mu, np.sqrt(1.0 / (kappa * precision_samples[i])), 1
         )
+    # NOTE we don't use kappa for the standard deviation samples: kappa only used for sampling mean above
+    # see https://en.wikipedia.org/wiki/Normal-gamma_distribution#Generating_normal-gamma_random_variates
+    # these are standard deviation samples! By taking inverse sqrt
+    standard_devs = np.sqrt(1.0 / (precision_samples))
     samples[:, 1] = standard_devs
     return samples
 
