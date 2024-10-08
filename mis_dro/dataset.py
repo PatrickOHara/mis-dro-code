@@ -27,8 +27,8 @@ def sample_dgp(
     if dgp == "normal":
         return norm.rvs(
             loc=25,
-            # scale=DGP_STD_TRUNCATED_NORMAL,
-            scale=5,
+            scale=DGP_STD_TRUNCATED_NORMAL,
+            # scale=5,
             size=num_observations,
             random_state=generator,
         ).reshape((num_observations, 1))
