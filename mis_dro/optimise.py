@@ -68,7 +68,7 @@ def get_kl_bdro_problem(
     # examples of decision objectives are the newsvendor objective
     constraints = [
         x >= SMALLEST_X,
-        # x <= LARGEST_X,
+        # x <= LARGEST_X,   # NOTE this can cause some unexpected behaviour for large epsilon
     ] + [decision_objective(x, xi[i]) <= t[i] for i in range(num_posterior_samples)]
 
     return cp.Problem(bdro_obj, constraints)

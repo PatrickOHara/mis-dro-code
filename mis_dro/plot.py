@@ -59,7 +59,7 @@ class NiceNameDGP(StrEnum):
     contaminated_exp = "Contaminated Exponential DGP"
     exponential = "Exponential DGP"
     normal = "Normal DGP"
-    multivariate_normal = "5D Multivariate Normal DGP"
+    multivariate_normal = "5D Normal DGP"
     truncated_normal = "Truncated Normal DGP"
     DowJones = "DowJones"
 
@@ -219,6 +219,7 @@ def mean_variance_plot(
     is_labelled: bool = True,
     pareto_front_col: str = "is_minimise_pareto_front",
     offset: float = 1.0,
+    special_epsilons: list[float] = [0.1, 0.5],
     **kwargs,
 ) -> None:
     # plot mean-variance trade-off
@@ -241,7 +242,7 @@ def mean_variance_plot(
         for i, epsilon in enumerate(epsilon_list):
             # if i % 4 == 0:
 
-            if i == 0 or i == len(epsilon_list) - 1 or epsilon in (0.1, 0.5):
+            if i == 0 or i == len(epsilon_list) - 1 or epsilon in special_epsilons:
                 # if line is blue then put text on bottom left
                 if kwargs["color"] == AlgorithmColor.kl_dro_bas:
                     ha = "right"
@@ -302,9 +303,8 @@ def get_agg_df(results_df: pd.DataFrame, gb_cols: list[str]):
     gb = results_df.groupby(by=gb_cols)
     agg_df = gb.agg(
         out_of_sample_mean = pd.NamedAgg(column="out_of_sample_cost", aggfunc=np.mean),
-        out_of_sample_var = pd.NamedAgg(column="mean_cost", aggfunc=np.var),
+        out_of_sample_var = pd.NamedAgg(column="out_of_sample_cost", aggfunc=np.var),
         mean_solve_time = pd.NamedAgg(column="solve_time", aggfunc=np.mean),
         std_solve_time = pd.NamedAgg(column="solve_time", aggfunc=np.std),
     )
-    agg_df["out_of_sample_var"] = agg_df["out_of_sample_mean_of_vars"] + agg_df["out_of_sample_var_of_means"]
     return agg_df
