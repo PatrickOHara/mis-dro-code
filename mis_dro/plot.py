@@ -44,6 +44,7 @@ class AlgorithmName(StrEnum):
 
 class NiceNameDGP(StrEnum):
     contaminated_exp = "Contaminated Exponential DGP"
+    contaminated_exp = "Contaminated Exponential DGP (old)"
     exponential = "Exponential DGP"
     normal = "Normal DGP"
     multivariate_normal = "5D Normal DGP"
