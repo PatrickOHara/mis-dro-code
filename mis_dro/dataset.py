@@ -61,7 +61,6 @@ def sample_dgp(
         sklearn_cov_seed = 1    # NOTE fix the seed, we always want the same covariance
         sklearn_random_state = np.random.RandomState(seed=sklearn_cov_seed)
         dgp_cov = cov_multiplier * make_spd_matrix(dim, random_state=sklearn_random_state)
-        print(dgp_cov)
         return multivariate_normal.rvs(dgp_mean, dgp_cov, size=num_observations, random_state=generator)
     if dgp == "cont_multivariate_normal":
         return cont_multivariate_normal(

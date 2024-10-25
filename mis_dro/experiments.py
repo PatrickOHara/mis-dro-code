@@ -117,17 +117,16 @@ def kl_newsvendor_5d() -> List[Dict]:
 def kl_newsvendor_1d() -> List[Dict]:
     """KL univariate newsvendor: compare our Bayesian ambiguity set against Bayesian DRO"""
     experiment = []
-    for total_model_samples, algorithm, (dgp, likelihood, posterior), epsilon, num_test_observations in itertools.product(
+    for total_model_samples, algorithm, (dgp, likelihood, posterior), epsilon in itertools.product(
         BAS_TOTAL_MODEL_SAMPLES,
         ["kl_dro_bas", "kl_bdro"],
         [
             ("normal", "normal", "normal_gamma"),
-            # ("truncated_normal", "normal", "normal_gamma"),
+            ("truncated_normal", "normal", "normal_gamma"),
             ("exponential", "exponential", "gamma"),
-            # ("contaminated_exp", "exponential", "gamma"),
+            ("contaminated_exp", "exponential", "gamma"),
         ],
         BAS_DRO_EPSILON_SET,
-        [1, 50],
     ):
         if algorithm == "kl_bdro":
             num_posterior_samples = int(np.sqrt(total_model_samples))
@@ -155,7 +154,7 @@ def kl_newsvendor_1d() -> List[Dict]:
             "num_observations": NUM_OBSERVATIONS,
             "num_posterior_samples": num_posterior_samples,
             "num_replications": BAS_NUM_REPLICATIONS,
-            "num_test_observations": num_test_observations,
+            "num_test_observations": NUM_TEST_OBSERVATIONS,
             "posterior": posterior,
             "uuid": str(uuid4()),  # uniquely identify a run
         }
