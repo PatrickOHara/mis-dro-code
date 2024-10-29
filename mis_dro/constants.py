@@ -1,6 +1,12 @@
 """Constants for e.g. number of observations or samples"""
 
+# constants for DGPs
 CONTAMINATION_LEVEL = 0.2  # ratio for contamination dataset
+DGP_NORMAL_KNOWN_VARIANCE_STD = 5.0 # standard deviation of 1D normal with known variance
+IN_SAMPLE_TIME_WINDOW = 52  # number of weeks in training period for portfolio problem
+OUT_OF_SAMPLE_TIME_WINDOW = 12  # number of weeks in out-of-sample period for portfolio
+
+# experiment constants
 NUM_OBSERVATIONS = 20  # in-sample 'training' observations
 NUM_POSTERIOR_SAMPLES = 100  # theta samples from posterior
 NUM_TEST_OBSERVATIONS = 50  # out-of-sample 'test' observations
@@ -9,8 +15,6 @@ NUM_REPLICATIONS = 200  # num times to repeat for loop
 BAS_NUM_REPLICATIONS = 500
 NUM_CERTIFY = 200 # num certufying points for discretisation of KDRO problem constraints
 MAX_PARAMS_OOM = 1000   # if the number of params of a cvxpy exceeds this number, we might go out-of-memory
-IN_SAMPLE_TIME_WINDOW = 52
-OUT_OF_SAMPLE_TIME_WINDOW = 12  # number of weeks in out-of-sample period
 BAS_TOTAL_MODEL_SAMPLES = [25, 100, 900]
 
 BAS_DRO_EPSILON_SET = [
