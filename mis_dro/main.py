@@ -103,6 +103,16 @@ def setup_mmd_dro_bas(
     )
     (experiment_dir / f"{experiment_name}.slurm").write_text(dgp_string)
 
+    experiment_df = pd.DataFrame(experiment)
+    with open(
+        Path(__file__).parent / "sample_npl.slurm", "r", encoding="utf-8"
+    ) as slurm_file:
+        slurm_string = slurm_file.read()
+    for (dataset, dgp) in set(zip(experiment_df["dataset"], experiment_df["dgp"])):
+        print(dataset, dgp)
+        dgp_string = slurm_string.format(experiment_dir=experiment_dir, dataset=dataset, dataset_dir=dataset_dir, dgp=dgp)
+        (experiment_dir / f"sample_npl_{dataset}_{dgp}.slurm").write_text(dgp_string)
+
 
 @app.command(name="csv")
 def generate_csv(experiment_dir: Path):
