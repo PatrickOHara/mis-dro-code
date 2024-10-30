@@ -30,8 +30,9 @@ from .constants import (
     NUM_TEST_OBSERVATIONS,
     NUM_CERTIFY,
     MAX_PARAMS_OOM,
+    ROBAS_NEWSVENDOR_NUM_REPLICATIONS,
 )
-from .dataset import sample_dgp, portfolio_dataset
+from .dataset import sample_dgp, portfolio_dataset, get_num_time_windows
 from .experiments import ExperimentName, get_experiment
 from .likelihood import sample_likelihood, reconstruct_covariance_from_triu
 from .newsvendor import newsvendor_cost_cvxpy
@@ -350,35 +351,10 @@ def run_replication(
         else:
             theta_sample = sample_posterior(posterior, theta_posterior, num_likelihood_samples, generator=generator)
     elif inference in ("npl_wlb", "npl_mmd"):
-        # theta_sample = sample_npl(
-        #     data,
-        #     inference,
-        #     likelihood,
-        #     num_posterior_samples,
-        #     seed=replication,
-        #     lengthscale=lengthscale,
-        #     dim=dim,
-        #     generator=generator,
-        # )
-        # load theta sample from csv files
-        if dataset == "newsvendor":
-            if contamination == 0.05:
-                c = '005'
-            if contamination == 0.2:
-                c = '02'
-            elif contamination == 0.1:
-                c = '01'
-            elif contamination == 0.0:
-                c = '00'
-            else:
-                raise ValueError(f"There are no npl samples for contamination level {contamination}")
-            path_to_csv = Path("/dcs/pg23/u1604520/misdro/npl_samples_N30_exp")
-            theta_sample = pd.read_csv(path_to_csv / f"theta_sample_{replication}_cont{c}.csv", header=None).values
-        elif dataset == "portfolio":
-            path_to_csv = experiment_dir / f"portfolio_theta_sample_{dgp}_{replication}.csv"
-            npl_df = pd.read_csv(path_to_csv, index_col=False, header=None)
-            theta_sample = npl_df.values
-            assert num_posterior_samples == theta_sample.shape[0]
+        path_to_csv = experiment_dir / "npl_samples" / f"npl_sample_{uuid}_{replication}.csv"
+        theta_sample = pd.read_csv(path_to_csv, index_col=False, header=False).values
+        assert num_posterior_samples == theta_sample.shape[0]
+        assert dim == theta_sample.shape[1]
     elif inference == "empirical":
         # empirical does not have a posterior
         theta_sample = np.nan * np.ones(num_posterior_samples)
@@ -493,6 +469,69 @@ def run_replication(
         "log_partition_constant": log_partition_constant,
         "out_of_sample_cost": list(out_of_sample_cost),
     }
+
+
+@app.command("npl")
+def sample_npl_for_experiment(
+    dataset: str,
+    dgp: str,
+    experiment_dir: Path,
+    inference: str = "npl_mmd",
+    dataset_dir: Optional[Path] = None,
+):
+    """Run a single replication where the seed is given by the replication number"""
+    filepath = experiment_dir / "experiment.json"
+    with open(filepath, "r", encoding="utf-8") as json_file:
+        experiment = json.load(json_file)
+    experiment_df = pd.DataFrame(experiment)
+    experiment_df = experiment_df.loc[(experiment_df["dataset"] == dataset) & (experiment_df["dgp"] == dgp) & (experiment_df["inference"] == inference)]
+    npl_samples_dir = experiment_dir / "npl_samples"
+    npl_samples_dir.mkdir(parents=False, exist_ok=True)
+    gb_cols = ["contamination", "dim", "lengthscale", "likelihood", "num_observations", "num_posterior_samples", "num_replications", "posterior"]
+    gb = experiment_df.groupby(gb_cols)
+    posterior_times = []
+    for group, group_df in gb:
+        group_dict = dict(zip(gb_cols, group))
+        for replication in range(group_dict["num_replications"]):
+            # 1. load portfolio dataset
+            generator = np.random.default_rng(seed=replication)
+            if dataset == "newsvendor":
+                # NOTE if contamination is specified, then only contaminate the training samples (not test samples)
+                data = sample_dgp(
+                    dgp, group_dict["num_observations"], dim=group_dict["dim"], contamination=group_dict["contamination"], generator=generator
+                )
+            elif dataset == "portfolio":
+                data, _ = portfolio_dataset(dgp, replication, dataset_dir)
+            else:
+                raise NotImplementedError(f"Dataset not implemented: {dataset}")
+
+            # 2. sample from the posterior
+            print()
+            npl_start = datetime.now()
+            print(npl_start, "- Starting portfolio sample NPL for replication", replication)    
+            theta_sample = sample_npl(
+                data,
+                inference,
+                group_dict["likelihood"],
+                group_dict["num_posterior_samples"],
+                seed=replication,
+                lengthscale=group_dict["lengthscale"],
+                generator=generator,
+                dim=group_dict["dim"],
+            )
+            npl_finish = datetime.now()
+            total_seconds =  (datetime.now() - npl_start).total_seconds()
+            print(npl_finish, "- Finished replication", replication, "in", total_seconds, "seconds.")
+
+            df = pd.DataFrame(theta_sample)
+            for uuid in group_df["uuid"]:
+                df.to_csv(npl_samples_dir / f"npl_sample_{uuid}_{replication}.csv", index=False, header=False)
+                posterior_times.append({
+                    "replication": replication,
+                    "uuid": uuid,
+                    "posterior_time": total_seconds,
+                })
+    pd.DataFrame(posterior_times).to_csv(experiment_dir / f"npl_samples_posterior_times_{dataset}_{dgp}.csv", index=False)
 
 if __name__ == "__main__":
     app()

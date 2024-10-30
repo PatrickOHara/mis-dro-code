@@ -17,6 +17,9 @@ NUM_CERTIFY = 200 # num certufying points for discretisation of KDRO problem con
 MAX_PARAMS_OOM = 1000   # if the number of params of a cvxpy exceeds this number, we might go out-of-memory
 BAS_TOTAL_MODEL_SAMPLES = [25, 100, 900]
 
+# experiment constants for RoBAS
+ROBAS_NEWSVENDOR_NUM_REPLICATIONS = 100
+
 BAS_DRO_EPSILON_SET = [
     0.001,
     0.002,

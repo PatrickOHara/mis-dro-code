@@ -110,6 +110,7 @@ class Npl:
         )  # pre calculate kernel matrix of data k(x,x)
         self.model = model
         self.seed = seed
+        self.sample = None
 
     def draw_single_mmd_sample(self, weights, key):
         """Draws a single sample from the nonparametric posterior specified via
@@ -144,6 +145,8 @@ class Npl:
                 weights, jnp.array(subkeys)
             )
             self.sample = np.array(mmd_samples)
+        else:
+            raise NotImplementedError("NPL loss function not recognised: " + self.loss_fn)
 
     def WLL(self, data, weights):
         """Get weighted negative log likelihood minimizer, for Exponential distribution model"""
