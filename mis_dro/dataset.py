@@ -28,6 +28,7 @@ def sample_dgp(
         return norm.rvs(
             loc=25,
             scale=DGP_STD_TRUNCATED_NORMAL,
+            # scale=5,
             size=num_observations,
             random_state=generator,
         ).reshape((num_observations, 1))
@@ -44,6 +45,15 @@ def sample_dgp(
         return expon.rvs(scale=20.0, size=num_observations, random_state=generator).reshape((num_observations, 1))
     if dgp == "gamma":
         return data_generation_gamma(num_observations, a=10, random_state=generator).reshape((num_observations, 1))
+    if dgp == "multivariate_normal_known_cov":
+        dgp_mean = np.array([10.0, 20.0, 30.0, 35.0, 22.0])
+        dgp_cov = (DGP_STD_TRUNCATED_NORMAL**2)*np.eye(dim)
+        # cov_multiplier = 20.0
+        # # NOTE sklearn doesn't seem to accept a Generator
+        # sklearn_cov_seed = 1    # NOTE fix the seed, we always want the same covariance
+        # sklearn_random_state = np.random.RandomState(seed=sklearn_cov_seed)
+        # dgp_cov = cov_multiplier * make_spd_matrix(dim, random_state=sklearn_random_state)
+        return multivariate_normal.rvs(dgp_mean, dgp_cov, size=num_observations, random_state=generator)
     if dgp == "multivariate_normal":
         dgp_mean = np.array([10.0, 20.0, 30.0, 35.0, 22.0])
         cov_multiplier = 20.0
@@ -60,6 +70,32 @@ def sample_dgp(
             num_observations, contamination, random_state=generator)
     if dgp == "student_t":
         return t.rvs(df=3, loc=25, scale=DGP_STD_TRUNCATED_NORMAL, size=num_observations, random_state=generator).reshape((num_observations, 1))
+    if dgp == "contaminated_exp_old":
+        cont_size = int(np.floor(contamination * num_observations))
+        n_real = num_observations - cont_size
+        data = expon.rvs(scale=10, size=n_real, random_state=generator)
+        outl = expon.rvs(scale=70, size=cont_size, random_state=generator)
+        data = np.concatenate((data, outl), axis=0)
+        generator.shuffle(data)  # shuffles the data in-place
+        return data.reshape((num_observations,1))
+    if dgp == "bimodal_multivariate_gaussian":
+        cont_size = int(np.floor(contamination * num_observations))
+        n_real = num_observations - cont_size
+        data_mode1 = multivariate_normal.rvs(mean=np.array([10,20,33,22,25]), cov=5*np.eye(5), size=int(n_real/2), random_state=generator)
+        data_mode2 = multivariate_normal.rvs(mean=60*np.ones(5), cov=5*np.eye(5), size=int(n_real/2), random_state=generator)
+        outl = multivariate_normal.rvs(mean=90*np.ones(5), cov=5*np.eye(5), size=cont_size, random_state=generator)
+        data = np.concatenate((data_mode1, data_mode2, outl), axis=0)
+        generator.shuffle(data)  # shuffles the data in-place
+        return data
+    if dgp == "bimodal_univariate_gaussian":
+        cont_size = int(np.floor(contamination * num_observations))
+        n_real = num_observations - cont_size
+        data_mode1 = norm.rvs(loc=10, scale=5, size=int(n_real/2), random_state=generator)
+        data_mode2 = norm.rvs(loc=60, scale=5, size=int(n_real/2), random_state=generator)
+        outl = norm.rvs(loc=90, scale=5, size=cont_size, random_state=generator)
+        data = np.concatenate((data_mode1, data_mode2, outl), axis=0)
+        generator.shuffle(data)  # shuffles the data in-place
+        return data.reshape((num_observations,1))
     raise ValueError(f"The data-generating process specified is not supported: {dgp}")
 
 

@@ -4,7 +4,7 @@ from typing import Optional
 import numpy as np
 import scipy as sp
 from bayesian_dro.Bayesian_DRO_continuous import DGP_STD_TRUNCATED_NORMAL
-
+from mis_dro.constants import upper_triangular_size, DGP_NORMAL_KNOWN_VARIANCE_STD
 
 def default_prior_params(prior: str, dim: int = 1) -> tuple:
     """Get the default prior parameters"""
@@ -19,6 +19,9 @@ def default_prior_params(prior: str, dim: int = 1) -> tuple:
         prior_params = normal_inverse_wishart_prior(dim)
     elif prior == "multivariate_normal_known_cov":
         prior_params = (np.zeros(dim), dim+2)
+    elif prior == "normal_known_var":
+        mu_prior, std_prior = 0.0, DGP_NORMAL_KNOWN_VARIANCE_STD
+        prior_params = (mu_prior, std_prior)
     else:
         raise NotImplementedError(f"Prior '{prior}' not implemented.")
     return prior_params
@@ -52,6 +55,14 @@ def get_posterior_params(
         kappa_posterior = kappa_prior + N
         mu_posterior = (kappa_prior * mu_prior + N * xi_mean) / kappa_posterior
         post_params = (mu_posterior, kappa_posterior)
+    elif posterior == "normal_known_var":
+        mu_prior, std_prior = prior_params
+        data_mean = np.mean(data, axis=0)
+        N = data.shape[0]
+        true_var = DGP_NORMAL_KNOWN_VARIANCE_STD**2
+        mu_posterior = (true_var * mu_prior + N * std_prior**2 * data_mean) / (N * std_prior**2 + true_var)
+        std_posterior = np.sqrt(std_prior**2*true_var/(true_var+N*std_prior**2))
+        post_params = (mu_posterior, std_posterior)
     else:
         raise NotImplementedError(f"Posterior '{posterior}' is not implemented")
     return post_params
@@ -69,7 +80,10 @@ def derive_analytical_posterior_params(
         theta = np.zeros((1, 2))
         mu_posterior, _, alpha_posterior, beta_posterior = posterior_params
         # we want an analytical form for the precision, which is alpha over beta
-        theta[0] = np.array([mu_posterior, alpha_posterior / beta_posterior])
+        # but the numpy normal dist function takes the standard deviation
+        # so we take square root and inverse
+        std = np.sqrt(beta_posterior / alpha_posterior)
+        theta[0] = np.array([mu_posterior, std])
         return theta
     elif posterior == "normal_inverse_wishart":
         mu_post, kappa_post, _, Psi_post = posterior_params
@@ -80,6 +94,10 @@ def derive_analytical_posterior_params(
         theta[0, dim:] = (1/(kappa_post - dim - 2)) * Psi_post[np.triu_indices(dim)]
         return theta
     elif posterior == "multivariate_normal_known_cov":
+        mu_posterior, _ = posterior_params
+        dim = mu_posterior.shape[0]
+        return mu_posterior.reshape((1,dim))
+    elif posterior == "normal_known_var":
         mu_posterior, _ = posterior_params
         dim = mu_posterior.shape[0]
         return mu_posterior.reshape((1,dim))
@@ -131,13 +149,14 @@ def sample_posterior(
         for i, cov in enumerate(cov_samples):
             triu_samples[i] = cov[idx_triu]
         return triu_samples
-    raise NotImplementedError(f"Posterior '{posterior}' is not implemented")
     if posterior == "multivariate_normal_known_cov":
         mu_posterior, kappa_posterior = posterior_params
-        return sp.stats.multivariate_normal.rvs(mean=mu_posterior, cov=(DGP_STD_TRUNCATED_NORMAL**2)*np.eye(5), size=num_posterior_samples, random_state=generator)
-    else:
-        raise NotImplementedError(f"Posterior '{posterior}' is not implemented")
-
+        dim = mu_posterior.shape[0]
+        return sp.stats.multivariate_normal.rvs(mean=mu_posterior, cov=(1/kappa_posterior)*(DGP_NORMAL_KNOWN_VARIANCE_STD**2)*np.eye(dim), size=num_posterior_samples, random_state=generator)
+    if posterior == "normal_known_var":
+        mu_posterior, std_posterior = posterior_params
+        return sp.stats.norm.rvs(loc=mu_posterior, scale=std_posterior, size=num_posterior_samples, random_state=generator)
+    raise NotImplementedError(f"Posterior '{posterior}' is not implemented")
 
 def get_log_partition_constant(posterior: str, posterior_params: list) -> float:
     """Given the posterior params, return the optimization constant for Bayesian DRO"""
@@ -155,6 +174,9 @@ def get_log_partition_constant(posterior: str, posterior_params: list) -> float:
         mu_posterior, kappa_posterior = posterior_params
         dim = mu_posterior.shape[0]
         return dim/(2*kappa_posterior)
+    elif posterior == "normal_known_var":
+        _, std_posterior = posterior_params
+        return (std_posterior**2)/(2*DGP_NORMAL_KNOWN_VARIANCE_STD**2)
     else:
         raise NotImplementedError(f"get_log_partition_constant not implemented for posterior {posterior}")
 
@@ -220,14 +242,17 @@ def normal_gamma_rvs(
     samples = np.zeros((num_samples, 2))
     if not generator:
         generator = np.random.default_rng()
-    # TODO make these standard deviation samples! By taking inverse sqrt
     precision_samples = generator.gamma(alpha, 1.0 / beta, num_samples)
-    standard_devs = 1 / np.sqrt(kappa * precision_samples)
+
     for i in range(num_samples):
         # NOTE numpy Normal distribution takes standard deviation as a parameter (hence sqrt) - not variance!
         samples[i, 0] = generator.normal(
-            mu, standard_devs[i], 1
+            mu, np.sqrt(1.0 / (kappa * precision_samples[i])), 1
         )
+    # NOTE we don't use kappa for the standard deviation samples: kappa only used for sampling mean above
+    # see https://en.wikipedia.org/wiki/Normal-gamma_distribution#Generating_normal-gamma_random_variates
+    # these are standard deviation samples! By taking inverse sqrt
+    standard_devs = np.sqrt(1.0 / (precision_samples))
     samples[:, 1] = standard_devs
     return samples
 
@@ -325,6 +350,3 @@ def get_normal_inverse_wishart_G_constant(dim: int, kappa_post: float) -> float:
     term4 = 0.5 * dim * np.log(kappa_post - dim - 2)
     return term1 + term2 + term3 + term4
 
-def upper_triangular_size(dim: int) -> int:
-    """Includes the diagonal!"""
-    return int(dim * (dim-1) / 2 + dim)
