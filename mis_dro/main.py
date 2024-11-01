@@ -30,8 +30,9 @@ from .constants import (
     NUM_TEST_OBSERVATIONS,
     NUM_CERTIFY,
     MAX_PARAMS_OOM,
+    ROBAS_NEWSVENDOR_NUM_REPLICATIONS,
 )
-from .dataset import sample_dgp, portfolio_dataset
+from .dataset import sample_dgp, portfolio_dataset, get_num_time_windows
 from .experiments import ExperimentName, get_experiment
 from .likelihood import sample_likelihood, reconstruct_covariance_from_triu
 from .newsvendor import newsvendor_cost_cvxpy
@@ -75,16 +76,18 @@ def setup_kl_dro_bas(
 
 @app.command(name="setup-mmd")
 def setup_mmd_dro_bas(
-    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), overwrite: bool = False, njobs: int = -1,
+    experiment_name: ExperimentName, experiment_dir: Path, npl_samples_dir: Path, batch_size: int, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), overwrite: bool = False, njobs: int = -1,
 ):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
         experiment_dir.mkdir(parents=False, exist_ok=False)
 
     # get the experiment from the name
+    print("Creating experiment...")
     experiment = get_experiment(experiment_name, dataset_dir=dataset_dir)
 
     # write experiment file to JSON
+    print("Writing experiment to JSON...")
     filepath = experiment_dir / "experiment.json"
     with open(filepath, "w", encoding="utf-8") as json_file:
         json.dump(experiment, json_file, indent=4)
@@ -93,14 +96,41 @@ def setup_mmd_dro_bas(
     num_batches = math.ceil(float(len(experiment)) / float(batch_size))
 
     # setup SLURM file
+    print("Setting up SLURM files for optimization...")
     with open(
         Path(__file__).parent / "mmd_dro_bas_template.slurm", "r", encoding="utf-8"
     ) as slurm_file:
         slurm_string = slurm_file.read()
-    dgp_string = slurm_string.format(
+    slurm_string = slurm_string.format(
         experiment_dir=experiment_dir, njobs=njobs, num_batches=num_batches, batch_size=batch_size
     )
-    (experiment_dir / f"{experiment_name}.slurm").write_text(dgp_string)
+    slurm_string += f" --npl-samples-dir {npl_samples_dir}"
+    (experiment_dir / f"{experiment_name}.slurm").write_text(slurm_string)
+
+    # create an ID for each unique posterior setting and save the IDs to a CSV
+    if npl_samples_dir.exists():
+        print("Using NPL samples from", npl_samples_dir)
+    else:
+        print("Setting up SLURM files ready for sampling the NPL on GPUs")
+        npl_samples_dir.mkdir(parents=False)
+        experiment_df = pd.DataFrame(experiment)
+        gb = experiment_df.groupby(POSTERIOR_GB_COLS)
+        posterior_settings = []
+        for group, _ in gb:
+            npl_row = dict(zip(POSTERIOR_GB_COLS, group))
+            npl_row["npl_uuid"] = str(uuid4())
+            posterior_settings.append(npl_row)
+        posterior_settings_df = pd.DataFrame(posterior_settings)
+        posterior_settings_df.to_csv(npl_samples_dir / "npl_settings.csv", index=False)
+
+        # then create SLURM file ready to sample the NPL on the cluster
+        num_npl_batches = len(posterior_settings_df) - 1
+        with open(
+            Path(__file__).parent / "sample_npl.slurm", "r", encoding="utf-8"
+        ) as npl_slurm_file:
+            npl_slurm_string = npl_slurm_file.read()
+        npl_slurm_string = npl_slurm_string.format(num_npl_batches=num_npl_batches, npl_samples_dir=npl_samples_dir, dataset_dir=dataset_dir)
+        (npl_samples_dir / f"sample_npl_{experiment_name}.slurm").write_text(npl_slurm_string)
 
 
 @app.command(name="csv")
@@ -144,7 +174,7 @@ def run_experiment(
 
 
 @app.command(name="batch")
-def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool = False, dataset_dir: Path = Path("~/datasets/misdro/mmc2")):
+def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool = False, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), npl_samples_dir: Optional[Path] = None):
     print(datetime.now(), "Running batch from index", start)
     print()
     filepath = experiment_dir / "experiment.json"
@@ -153,10 +183,10 @@ def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool 
     batch_experiment = experiment[start: min(start + batch_size, len(experiment))]
     for params in batch_experiment:
         if not ((experiment_dir / params["uuid"]).exists() and only_missing):
-            run(experiment_dir, dataset_dir=dataset_dir, **params)
+            run(experiment_dir, dataset_dir=dataset_dir, npl_samples_dir=npl_samples_dir, **params)
 
 @app.command(name="uuid")
-def run_uuid(experiment_dir: Path, uuid: UUID, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), njobs: int = -1, verbose: bool = False) -> None:
+def run_uuid(experiment_dir: Path, uuid: UUID, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), npl_samples_dir: Optional[Path] = None, njobs: int = -1, verbose: bool = False) -> None:
     """Run DRO for only one specified uuid parameters"""
     filepath = experiment_dir / "experiment.json"
     with open(filepath, "r", encoding="utf-8") as json_file:
@@ -165,7 +195,7 @@ def run_uuid(experiment_dir: Path, uuid: UUID, dataset_dir: Path = Path("~/datas
     for params in experiment:
         if params["uuid"] == str(uuid):
             found = True
-            run(experiment_dir, verbose=verbose, njobs=njobs, dataset_dir=dataset_dir, **params)
+            run(experiment_dir, verbose=verbose, njobs=njobs, dataset_dir=dataset_dir, npl_samples_dir=npl_samples_dir, **params)
     if not found:
         raise ValueError(f"UUID {uuid} not found in {filepath}")
 
@@ -186,6 +216,7 @@ def run(
     lengthscale: float = -1.0,
     likelihood: str = "exponential",
     njobs: int = -1,
+    npl_samples_dir: Optional[Path] = None,
     num_likelihood_samples: int = NUM_LIKELIHOOD_SAMPLES,
     num_observations: int = NUM_OBSERVATIONS,
     num_posterior_samples: int = NUM_POSTERIOR_SAMPLES,
@@ -234,6 +265,15 @@ def run(
             ignore_dpp = True
             njobs = 1
 
+    if inference in ("npl_wlb", "npl_mmd"):
+        posterior_df = pd.read_csv(npl_samples_dir / "npl_settings.csv").set_index(POSTERIOR_GB_COLS)
+        npl_params = dict(zip(POSTERIOR_GB_COLS, [contamination, dataset, dgp, dim, inference, lengthscale, likelihood, num_observations, num_posterior_samples, num_replications, posterior]))
+        print(npl_params)
+        npl_uuid = get_npl_uuid(posterior_df, npl_params)
+        npl_uuid_dir = npl_samples_dir / npl_uuid
+    else:
+        npl_uuid_dir = None
+
     params = {
         "algorithm": algorithm,
         "contamination": contamination,
@@ -242,11 +282,11 @@ def run(
         "dgp": dgp,
         "dim": dim,
         "epsilon": epsilon,
-        "experiment_dir": experiment_dir,
         "ignore_dpp": ignore_dpp,
         "inference": inference,
         "lengthscale": lengthscale,
         "likelihood": likelihood,
+        "npl_uuid_dir": npl_uuid_dir,
         "num_certify_points": num_certify_points,
         "num_likelihood_samples": num_likelihood_samples,
         "num_observations": num_observations,
@@ -299,11 +339,11 @@ def run_replication(
     dgp: str = "truncated_normal",
     dim: int = 1,
     epsilon: float = 1.0,
-    experiment_dir: Optional[Path] = None,
     ignore_dpp: bool = False,
     inference: str = "bayes",
     lengthscale: float = -1.0,
     likelihood: str = "exponential",
+    npl_uuid_dir: Optional[Path] = None,
     num_certify_points: int = NUM_CERTIFY,
     num_likelihood_samples: int = NUM_LIKELIHOOD_SAMPLES,
     num_observations: int = NUM_OBSERVATIONS,
@@ -350,35 +390,11 @@ def run_replication(
         else:
             theta_sample = sample_posterior(posterior, theta_posterior, num_likelihood_samples, generator=generator)
     elif inference in ("npl_wlb", "npl_mmd"):
-        # theta_sample = sample_npl(
-        #     data,
-        #     inference,
-        #     likelihood,
-        #     num_posterior_samples,
-        #     seed=replication,
-        #     lengthscale=lengthscale,
-        #     dim=dim,
-        #     generator=generator,
-        # )
-        # load theta sample from csv files
-        if dataset == "newsvendor":
-            if contamination == 0.05:
-                c = '005'
-            if contamination == 0.2:
-                c = '02'
-            elif contamination == 0.1:
-                c = '01'
-            elif contamination == 0.0:
-                c = '00'
-            else:
-                raise ValueError(f"There are no npl samples for contamination level {contamination}")
-            path_to_csv = Path("/dcs/pg23/u1604520/misdro/npl_samples_N30_exp")
-            theta_sample = pd.read_csv(path_to_csv / f"theta_sample_{replication}_cont{c}.csv", header=None).values
-        elif dataset == "portfolio":
-            path_to_csv = experiment_dir / f"portfolio_theta_sample_{dgp}_{replication}.csv"
-            npl_df = pd.read_csv(path_to_csv, index_col=False, header=None)
-            theta_sample = npl_df.values
-            assert num_posterior_samples == theta_sample.shape[0]
+        # get the posterior 
+        path_to_csv = npl_uuid_dir / f"npl_sample_{replication}.csv"
+        theta_sample = pd.read_csv(path_to_csv, index_col=False, header=None).values
+        assert num_posterior_samples == theta_sample.shape[0]
+        assert dim == theta_sample.shape[1]
     elif inference == "empirical":
         # empirical does not have a posterior
         theta_sample = np.nan * np.ones(num_posterior_samples)
@@ -493,6 +509,71 @@ def run_replication(
         "log_partition_constant": log_partition_constant,
         "out_of_sample_cost": list(out_of_sample_cost),
     }
+
+POSTERIOR_GB_COLS = ["contamination", "dataset", "dgp", "dim", "inference", "lengthscale", "likelihood", "num_observations", "num_posterior_samples", "num_replications", "posterior"]
+
+def get_npl_uuid(posterior_settings_df: pd.DataFrame, params: dict) -> str:
+    params_tuple = tuple([params[key] for key in POSTERIOR_GB_COLS])
+    param_sr = posterior_settings_df.loc[params_tuple]
+    return param_sr["npl_uuid"]
+
+@app.command("npl")
+def sample_npl_for_experiment(
+    npl_samples_dir: Path,
+    batch: int,
+    dataset_dir: Optional[Path] = None,
+):
+    """Run a single replication where the seed is given by the replication number"""
+
+    npl_samples_dir.mkdir(parents=False, exist_ok=True)
+    posterior_times = []
+
+    npl_df = pd.read_csv(npl_samples_dir / "npl_settings.csv")
+    npl_row = npl_df.iloc[batch]
+    npl_dir = npl_samples_dir / npl_row["npl_uuid"]
+    npl_dir.mkdir()
+    dataset = npl_row["dataset"]
+    dgp = npl_row["dgp"]
+    npl_uuid = npl_row["npl_uuid"]
+    for replication in range(npl_row["num_replications"]):
+        # 1. load portfolio dataset
+        generator = np.random.default_rng(seed=replication)
+        if dataset == "newsvendor":
+            # NOTE if contamination is specified, then only contaminate the training samples (not test samples)
+            data = sample_dgp(
+                dgp, npl_row["num_observations"], dim=npl_row["dim"], contamination=npl_row["contamination"], generator=generator
+            )
+        elif dataset == "portfolio":
+            data, _ = portfolio_dataset(dgp, replication, dataset_dir)
+        else:
+            raise NotImplementedError(f"Dataset not implemented: {dataset}")
+
+        # 2. sample from the posterior
+        print()
+        npl_start = datetime.now()
+        print(npl_start, "- Starting portfolio sample NPL for replication", replication)    
+        theta_sample = sample_npl(
+            data,
+            npl_row["inference"],
+            npl_row["likelihood"],
+            npl_row["num_posterior_samples"],
+            seed=replication,
+            lengthscale=npl_row["lengthscale"],
+            generator=generator,
+            dim=npl_row["dim"],
+        )
+        npl_finish = datetime.now()
+        total_seconds =  (datetime.now() - npl_start).total_seconds()
+        print(npl_finish, "- Finished replication", replication, "in", total_seconds, "seconds.")
+
+        df = pd.DataFrame(theta_sample)
+        df.to_csv(npl_dir / f"npl_sample_{replication}.csv", index=False, header=False)
+        posterior_times.append({
+            "replication": replication,
+            "npl_uuid": npl_uuid,
+            "posterior_time": total_seconds,
+        })
+    pd.DataFrame(posterior_times).to_csv(npl_samples_dir / npl_uuid / f"npl_times_{npl_uuid}.csv", index=False)
 
 if __name__ == "__main__":
     app()

@@ -83,7 +83,7 @@ def sample_npl(
 class Npl:
     """This class contains functions to perform NPL inference (for alpha = 0 in the DP prior) for the Exponential distribution model."""
 
-    def __init__(self, X, B, p, m, model, seed, l=-1, loss_fn="npl_wlb"):
+    def __init__(self, X, B, p, m, model, seed, l=-1, loss_fn="npl_wlb", eta: float = 0.1):
         """
         Args:
             X: Data set
@@ -110,13 +110,15 @@ class Npl:
         )  # pre calculate kernel matrix of data k(x,x)
         self.model = model
         self.seed = seed
+        self.sample = None
+        self.eta = eta
 
     def draw_single_mmd_sample(self, weights, key):
         """Draws a single sample from the nonparametric posterior specified via
         data X and Dirichlet weights"""
         # FIXME pass eta as a parameter via the experiment setup
         # return self.minimise_MMD(self.X, weights, key)
-        return self.minimise_MMD(self.X, weights, key, eta=0.001)
+        return self.minimise_MMD(self.X, weights, key, eta=self.eta)
 
     def draw_samples(self, n_jobs: int = -1, random_state=None):
         """Draws B samples in parallel from the nonparametric posterior"""
@@ -144,6 +146,8 @@ class Npl:
                 weights, jnp.array(subkeys)
             )
             self.sample = np.array(mmd_samples)
+        else:
+            raise NotImplementedError("NPL loss function not recognised: " + self.loss_fn)
 
     def WLL(self, data, weights):
         """Get weighted negative log likelihood minimizer, for Exponential distribution model"""
@@ -189,6 +193,7 @@ class Npl:
                 theta, key
             )  # Returnes self.m random samples from the model with parameter theta
 
+            # FIXME handle dimensions
             if self.d > 1:
                 # Compute kernel Gram matrices
                 kyy = k_comp(y, y) #, self.l

@@ -3,7 +3,7 @@
 import jax
 import jax.numpy as jnp
 from bayesian_dro.Bayesian_DRO_continuous import DGP_STD_TRUNCATED_NORMAL
-from .constants import upper_triangular_size
+from .constants import upper_triangular_size, DGP_NORMAL_KNOWN_VARIANCE_STD
 
 class ExponentialModel:
     def __init__(self, m):
@@ -51,13 +51,7 @@ class univariate_GaussianModel_known_variance:
     
     def sample(self, theta, key):
         mu = theta[0]
-        # std = DGP_STD_TRUNCATED_NORMAL
-        std = 5
-        x = (
-            mu + std*jax.random.normal(key, shape=(self.m,1))
-        )
-        
-        return x
+        return mu + DGP_NORMAL_KNOWN_VARIANCE_STD*jax.random.normal(key, shape=(self.m,1))        
     
     def init_params(self, data):
         return jnp.mean(data).reshape((1,))
