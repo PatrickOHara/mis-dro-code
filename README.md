@@ -57,6 +57,25 @@ misdro csv $EXPERIMENT_DIR
 ```
 then you can analyse the results using the `newsvendor_experiment.ipynb` notebook.
 
+### Sampling from the NPL
+
+Setup the MMD experiment. You will need to pass the `experiment_dir` and `npl_samples_dir`.
+```
+misdro setup-mmd mmd_newsvendor_1d {experiment_dir} {npl_samples_dir} 1
+```
+If `npl_samples_dir` does not exist, then `setup-mmd` will create a SLURM file and `npl_settings.csv` inside the newly created `npl_samples_dir` ready for you to run the NPL. If `npl_samples_dir` exists, then we assume you are using NPL samples from a previous run. Either way, the `npl_samples_dir` will be passed to the SLURM files so they know where the samples are!
+
+To run NPL samples on the GPU, run the SLURM file using `sbatch`:
+```
+sbatch sample_npl_mmd_newsvendor_1d.slurm 
+```
+The above SLURM script will generate a directory for each NPL 'setting'. Inside each directory will be a CSV file for each replication.
+
+Once all the NPL samples have been generated, run the SLURM file from `experiment_dir` using `sbatch`.
+```
+sbatch mmd_newsvendor_1d.slurm
+```
+
 
 ### Bayesian DRO
 
