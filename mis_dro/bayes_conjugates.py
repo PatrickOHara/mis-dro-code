@@ -350,3 +350,31 @@ def get_normal_inverse_wishart_G_constant(dim: int, kappa_post: float) -> float:
     term4 = 0.5 * dim * np.log(kappa_post - dim - 2)
     return term1 + term2 + term3 + term4
 
+def posterior_predictive_params(posterior: str, posterior_params: tuple) -> np.array:
+    """Get the posterior predictive params"""
+    if posterior == "normal_gamma":
+        # NOTE https://www.cs.ubc.ca/~murphyk/Papers/bayesGauss.pdf
+        # from eq. (100) of above link:
+        mu_posterior, kappa_posterior, alpha_posterior, beta_posterior = posterior_params
+
+        # the scale is rougly equalivalent to the standard deviation
+        # in particular, the case where dof = infinity is a Gaussian
+        scale = np.sqrt((beta_posterior * (kappa_posterior + 1)) / (alpha_posterior * kappa_posterior))
+
+        dof = 2 * alpha_posterior   # degrees of freedom for student t
+        return np.array([[mu_posterior, scale, dof]])
+    raise NotImplementedError(f"Posterior predictive not implemented for posterior '{posterior}'.")
+
+def sample_posterior_predictive(
+    likelihood: str,
+    posterior: str,
+    theta_sample: np.ndarray,
+    dim: int,
+    num_likelihood_samples: int,
+    generator: Optional[np.random.Generator] = None,
+) -> np.array:
+    """Sample from the posterior predictive"""
+    if likelihood == "normal" and posterior == "normal_gamma":
+        mu, scale, dof = theta_sample[0]
+        return sp.stats.t.rvs(dof, loc=mu, scale=scale, size=(num_likelihood_samples, dim), random_state=generator)
+    raise NotImplementedError()

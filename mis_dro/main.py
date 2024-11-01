@@ -20,6 +20,8 @@ from .bayes_conjugates import (
     get_log_partition_constant,
     get_posterior_params,
     derive_analytical_posterior_params,
+    posterior_predictive_params,
+    sample_posterior_predictive,
 )
 from .constants import (
     CONTAMINATION_LEVEL,
@@ -387,6 +389,10 @@ def run_replication(
         elif algorithm == "kl_bdro" and dataset == "portfolio" and posterior == "normal_inverse_wishart":
             mu_post, _, iota_post, Psi_post = theta_posterior
             theta_sample = bdro_portfolio_posterior_samples(num_posterior_samples, mu_post, iota_post, Psi_post, generator=generator)
+        elif algorithm == "kl_pp" and likelihood == "normal" and posterior == "normal_gamma":
+            if dataset == "portfolio":
+                raise NotImplementedError()
+            theta_sample == posterior_predictive_params(posterior, theta_posterior)
         else:
             theta_sample = sample_posterior(posterior, theta_posterior, num_likelihood_samples, generator=generator)
     elif inference in ("npl_wlb", "npl_mmd"):
@@ -410,6 +416,8 @@ def run_replication(
         xi = data
     elif inference == "bayes" and dataset == "portfolio" and likelihood == "multivariate_normal":
         pass    # no need to sample from likelihood cause we have closed form
+    elif inference == "bayes" and algorithm == "kl_pp":
+        xi = sample_posterior_predictive(likelihood, posterior, theta_sample, dim, num_likelihood_samples, generator=generator)
     else:
         xi = sample_likelihood(
             likelihood,
@@ -442,7 +450,7 @@ def run_replication(
         problem.solve(solver=cp.MOSEK, verbose=verbose, ignore_dpp=ignore_dpp, accept_unknown=True)
         solution = problem.var_dict["x"].value
         setup_time = problem.solver_stats.setup_time
-    elif algorithm in ("kl_bdro", "kl_dro_bas"):
+    elif algorithm in ("kl_bdro", "kl_dro_bas", "kl_pp"):
         if epsilon - log_partition_constant < 0:
             # NOTE the optimisation problem is unbounded below
             solution = np.inf * np.ones(dim)
