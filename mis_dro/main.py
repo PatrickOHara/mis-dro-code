@@ -197,7 +197,7 @@ def run_uuid(experiment_dir: Path, uuid: UUID, dataset_dir: Path = Path("~/datas
     for params in experiment:
         if params["uuid"] == str(uuid):
             found = True
-            run(experiment_dir, verbose=verbose, njobs=njobs, dataset_dir=dataset_dir, npl_samples_dir=npl_samples_dir, **params)
+            run(experiment_dir, verbose=verbose, dataset_dir=dataset_dir, npl_samples_dir=npl_samples_dir, **params)
     if not found:
         raise ValueError(f"UUID {uuid} not found in {filepath}")
 
@@ -233,7 +233,7 @@ def run(
     if uuid:
         print(uuid)
     print("DGP:", dgp, " - ALGORITHM:", algorithm, " - NUM LIKELIHOOD SAMPLES:", num_likelihood_samples, " - POSTERIOR:", posterior, "- DATASET:", dataset, "- DIM:", dim)
-    if algorithm in ("kl_bdro", "kl_dro_bas") and dataset == "newsvendor":
+    if algorithm in ("kl_bdro", "kl_dro_bas", "kl_pp") and dataset == "newsvendor":
         problem = get_kl_bdro_problem(
             newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim,
         )
@@ -392,7 +392,7 @@ def run_replication(
         elif algorithm == "kl_pp" and likelihood == "normal" and posterior == "normal_gamma":
             if dataset == "portfolio":
                 raise NotImplementedError()
-            theta_sample == posterior_predictive_params(posterior, theta_posterior)
+            theta_sample = posterior_predictive_params(posterior, theta_posterior)
         else:
             theta_sample = sample_posterior(posterior, theta_posterior, num_likelihood_samples, generator=generator)
     elif inference in ("npl_wlb", "npl_mmd"):
@@ -417,7 +417,7 @@ def run_replication(
     elif inference == "bayes" and dataset == "portfolio" and likelihood == "multivariate_normal":
         pass    # no need to sample from likelihood cause we have closed form
     elif inference == "bayes" and algorithm == "kl_pp":
-        xi = sample_posterior_predictive(likelihood, posterior, theta_sample, dim, num_likelihood_samples, generator=generator)
+        xi = sample_posterior_predictive(likelihood, posterior, theta_sample, dim, num_likelihood_samples, generator=generator).reshape((1, num_likelihood_samples, dim))
     else:
         xi = sample_likelihood(
             likelihood,

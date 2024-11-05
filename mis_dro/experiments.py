@@ -122,12 +122,11 @@ def kl_newsvendor_1d() -> List[Dict]:
         ["kl_pp", "kl_dro_bas", "kl_bdro"],
         [
             ("normal", "normal", "normal_gamma"),
-            # ("truncated_normal", "normal", "normal_gamma"),
-            # ("exponential", "exponential", "gamma"),
-            # ("contaminated_exp", "exponential", "gamma"),
+            ("truncated_normal", "normal", "normal_gamma"),
+            ("exponential", "exponential", "gamma"),
+            ("contaminated_exp", "exponential", "gamma"),
         ],
-        # BAS_DRO_EPSILON_SET,
-        [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3]
+        BAS_DRO_EPSILON_SET,
     ):
         if algorithm == "kl_bdro":
             num_posterior_samples = int(np.sqrt(total_model_samples))
