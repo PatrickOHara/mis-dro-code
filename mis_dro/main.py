@@ -389,7 +389,7 @@ def run_replication(
         elif algorithm == "kl_bdro" and dataset == "portfolio" and posterior == "normal_inverse_wishart":
             mu_post, _, iota_post, Psi_post = theta_posterior
             theta_sample = bdro_portfolio_posterior_samples(num_posterior_samples, mu_post, iota_post, Psi_post, generator=generator)
-        elif algorithm == "kl_pp" and likelihood == "normal" and posterior == "normal_gamma":
+        elif algorithm == "kl_pp":
             if dataset == "portfolio":
                 raise NotImplementedError()
             theta_sample = posterior_predictive_params(posterior, theta_posterior)

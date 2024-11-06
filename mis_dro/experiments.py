@@ -130,8 +130,8 @@ def kl_newsvendor_1d() -> List[Dict]:
         [
             ("normal", "normal", "normal_gamma"),
             ("truncated_normal", "normal", "normal_gamma"),
-            ("exponential", "exponential", "gamma"),
-            ("contaminated_exp", "exponential", "gamma"),
+            # ("exponential", "exponential", "gamma"),
+            # ("contaminated_exp", "exponential", "gamma"),
         ],
         BAS_DRO_EPSILON_SET,
     ):

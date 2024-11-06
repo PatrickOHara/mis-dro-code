@@ -378,7 +378,7 @@ def posterior_predictive_params(posterior: str, posterior_params: tuple) -> np.a
         shape = (kappa_posterior + 1)/(kappa_posterior*df) * Psi_posterior
         pp_params[0,:dim] = mu_posterior
         pp_params[0,dim:dim + vec_triu_size] = shape[idx_triu]
-        pp_params[0,dim + vec_triu_size + 1] = df
+        pp_params[0,dim + vec_triu_size] = df
         return pp_params
 
     raise NotImplementedError(f"Posterior predictive not implemented for posterior '{posterior}'.")
@@ -396,11 +396,12 @@ def sample_posterior_predictive(
         mu, scale, df = theta_sample[0]
         return sp.stats.t.rvs(df, loc=mu, scale=scale, size=(num_likelihood_samples, dim), random_state=generator)
     if likelihood == "multivariate_normal" and posterior == "normal_inverse_wishart":
-        pp_params = theta_sample
+        pp_params = theta_sample[0]
         loc = pp_params[:dim]
         vec_triu_size = int(upper_triangular_size(dim))
         vec_shape = pp_params[dim: dim + vec_triu_size]
-        df = pp_params[dim: dim + vec_triu_size]
+        df = pp_params[dim + vec_triu_size]
         shape = reconstruct_covariance_from_triu(vec_shape, dim)
-        return sp.stats.multivariate_t.rvs(loc=loc, shape=shape, df=df, size=(num_likelihood_samples, dim), random_state=generator)
+        samples = sp.stats.multivariate_t.rvs(loc=loc, shape=shape, df=df, size=(1, num_likelihood_samples), random_state=generator)
+        return samples
     raise NotImplementedError()
