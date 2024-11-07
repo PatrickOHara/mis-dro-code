@@ -15,7 +15,7 @@ class AlgorithmLineStyle(StrEnum):
     kl_dro_bas = "dotted"
     dro_bas_mmd = "dotted"
     empirical_mmd = "dotted"
-
+    kl_pp = "dotted"
 
 CB_color_cycle = ['#377eb8', '#ff7f00', '#4daf4a',
                   '#f781bf', '#a65628', '#984ea3',
@@ -27,6 +27,7 @@ class AlgorithmColor(StrEnum):
     kl_bdro = "#FF800E"
     kl_dro_bas = "#006BA4"
     empirical_mmd = "#999999"
+    kl_pp = "red"
 
 
 
@@ -38,6 +39,7 @@ class AlgorithmName(StrEnum):
     empirical_mmd = "Empirical MMD"
     kl_bdro = "BDRO"
     kl_dro_bas = "DRO-BAS"
+    kl_pp = "KL-PP"
 
 
 
@@ -70,6 +72,7 @@ class InferencePrettyName(StrEnum):
 
 ALGORITHM_INFERENCE_MARKERS = {
     ("kl_dro_bas", "bayes"): 'o',
+    ("kl_pp", "bayes"): '*',
     ("kl_bdro", "bayes"): '^',
     ("kl_bdro", "npl_mmd"): "x",
     ("dro_bas_mmd", "npl_mmd"): "*",
