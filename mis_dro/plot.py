@@ -38,8 +38,8 @@ class AlgorithmName(StrEnum):
     dro_bas_mmd = "RoBAS"
     empirical_mmd = "Empirical MMD"
     kl_bdro = "BDRO"
-    kl_dro_bas = "DRO-BAS"
-    kl_pp = "KL-PP"
+    kl_dro_bas = "DRO-BAS (PE)"
+    kl_pp = "DRO-BAS (PP)"
 
 
 
@@ -210,11 +210,11 @@ def convert_str_to_float_list(str_list: str, list_len: int) -> list[float]:
 def preprocess_results_df(results_df: pd.DataFrame, dgp: str):
     """Filter results, process columns, and create new columns"""
     assert len(results_df["num_test_observations"].unique()) == 1
-    assert len(results_df["dim"].unique()) == 1
+    assert len(results_df.loc[(results_df["dgp"] == dgp)]["dim"].unique()) == 1 
     num_test_observations = results_df["num_test_observations"].unique()[0]
-    dim = results_df["dim"].unique()[0]
+    
     processed_df = results_df.copy()
-
+    dim = processed_df.loc[(processed_df["dgp"] == dgp)]["dim"].unique()
     # filter by the DGP and cases where the the log partition function is feasible for epsilon
     processed_df = processed_df.loc[(processed_df["dgp"] == dgp) & (processed_df["log_partition_constant"] < processed_df["epsilon"])]
 
