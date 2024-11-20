@@ -380,6 +380,12 @@ def posterior_predictive_params(posterior: str, posterior_params: tuple) -> np.a
         pp_params[0,dim:dim + vec_triu_size] = shape[idx_triu]
         pp_params[0,dim + vec_triu_size] = df
         return pp_params
+    
+    if posterior == "gamma":
+        alpha_posterior, beta_posterior = posterior_params
+        shape = alpha_posterior
+        scale = beta_posterior
+        return np.array([[shape, scale]])
 
     raise NotImplementedError(f"Posterior predictive not implemented for posterior '{posterior}'.")
 
@@ -404,4 +410,7 @@ def sample_posterior_predictive(
         shape = reconstruct_covariance_from_triu(vec_shape, dim)
         samples = sp.stats.multivariate_t.rvs(loc=loc, shape=shape, df=df, size=(1, num_likelihood_samples), random_state=generator)
         return samples
+    if likelihood == "exponential" and posterior == "gamma":
+        shape, scale = theta_sample[0]
+        return sp.stats.lomax.rvs(c=shape, scale=scale, size=(num_likelihood_samples, dim), random_state=generator)
     raise NotImplementedError()
