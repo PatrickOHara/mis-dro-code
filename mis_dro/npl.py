@@ -193,14 +193,14 @@ class Npl:
                 theta, key
             )  # Returnes self.m random samples from the model with parameter theta
 
-            # FIXME handle dimensions
-            if self.d > 1:
-                # Compute kernel Gram matrices
-                kyy = k_comp(y, y) #, self.l
-                kxy = k_comp(y, x) #, self.l
-            else:
-                kyy = k_jax(y, y, self.l)
-                kxy = k_jax(y, x, self.l)
+            # # FIXME handle dimensions
+            # if self.d > 1:
+            #     # Compute kernel Gram matrices
+            #     kyy = k_comp(y, y) #, self.l
+            #     kxy = k_comp(y, x) #, self.l
+            # else:
+            kyy = k_jax(y, y, self.l)
+            kxy = k_jax(y, x, self.l)
 
             # first sum
             diag_elements = jnp.diag_indices_from(kyy)
