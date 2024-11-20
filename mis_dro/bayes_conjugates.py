@@ -4,7 +4,8 @@ from typing import Optional
 import numpy as np
 import scipy as sp
 from bayesian_dro.Bayesian_DRO_continuous import DGP_STD_TRUNCATED_NORMAL
-from mis_dro.constants import upper_triangular_size, DGP_NORMAL_KNOWN_VARIANCE_STD
+from .constants import upper_triangular_size, DGP_NORMAL_KNOWN_VARIANCE_STD
+from .likelihood import reconstruct_covariance_from_triu
 
 def default_prior_params(prior: str, dim: int = 1) -> tuple:
     """Get the default prior parameters"""
@@ -350,3 +351,57 @@ def get_normal_inverse_wishart_G_constant(dim: int, kappa_post: float) -> float:
     term4 = 0.5 * dim * np.log(kappa_post - dim - 2)
     return term1 + term2 + term3 + term4
 
+def posterior_predictive_params(posterior: str, posterior_params: tuple) -> np.array:
+    """Get the posterior predictive params"""
+    if posterior == "normal_gamma":
+        # NOTE https://www.cs.ubc.ca/~murphyk/Papers/bayesGauss.pdf
+        # from eq. (100) of above link:
+        mu_posterior, kappa_posterior, alpha_posterior, beta_posterior = posterior_params
+
+        # the scale is rougly equalivalent to the standard deviation
+        # in particular, the case where dof = infinity is a Gaussian
+        scale = np.sqrt((beta_posterior * (kappa_posterior + 1)) / (alpha_posterior * kappa_posterior))
+
+        dof = 2 * alpha_posterior   # degrees of freedom for student t
+        return np.array([[mu_posterior, scale, dof]])
+
+    if posterior == "normal_inverse_wishart":
+        # NOTE eq. (3.182), Chapter 3.4.4.3, Murphy (2023) "Probabilistic Machine Learning: Advanced Topics".
+        mu_posterior, kappa_posterior, nu_posterior, Psi_posterior = posterior_params
+        dim = mu_posterior.shape[0]
+        vec_triu_size = int(upper_triangular_size(dim))
+        df = nu_posterior - dim + 1     # degrees of freedom
+
+        # store the posterior params in a vectorized vector
+        pp_params = np.zeros((1, dim + vec_triu_size + 1))
+        idx_triu = np.triu_indices(dim)
+        shape = (kappa_posterior + 1)/(kappa_posterior*df) * Psi_posterior
+        pp_params[0,:dim] = mu_posterior
+        pp_params[0,dim:dim + vec_triu_size] = shape[idx_triu]
+        pp_params[0,dim + vec_triu_size] = df
+        return pp_params
+
+    raise NotImplementedError(f"Posterior predictive not implemented for posterior '{posterior}'.")
+
+def sample_posterior_predictive(
+    likelihood: str,
+    posterior: str,
+    theta_sample: np.ndarray,
+    dim: int,
+    num_likelihood_samples: int,
+    generator: Optional[np.random.Generator] = None,
+) -> np.array:
+    """Sample from the posterior predictive"""
+    if likelihood == "normal" and posterior == "normal_gamma":
+        mu, scale, df = theta_sample[0]
+        return sp.stats.t.rvs(df, loc=mu, scale=scale, size=(num_likelihood_samples, dim), random_state=generator)
+    if likelihood == "multivariate_normal" and posterior == "normal_inverse_wishart":
+        pp_params = theta_sample[0]
+        loc = pp_params[:dim]
+        vec_triu_size = int(upper_triangular_size(dim))
+        vec_shape = pp_params[dim: dim + vec_triu_size]
+        df = pp_params[dim + vec_triu_size]
+        shape = reconstruct_covariance_from_triu(vec_shape, dim)
+        samples = sp.stats.multivariate_t.rvs(loc=loc, shape=shape, df=df, size=(1, num_likelihood_samples), random_state=generator)
+        return samples
+    raise NotImplementedError()

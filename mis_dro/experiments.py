@@ -78,19 +78,12 @@ def kl_newsvendor_5d() -> List[Dict]:
     experiment = []
     for total_model_samples, algorithm, (dgp, likelihood, posterior), epsilon in itertools.product(
         BAS_TOTAL_MODEL_SAMPLES,
-        ["kl_dro_bas", "kl_bdro"],
+        ["kl_dro_bas", "kl_pp", "kl_bdro"],
         [
             ("multivariate_normal", "multivariate_normal", "normal_inverse_wishart"),
         ],
         BAS_DRO_EPSILON_SET,
     ):
-        if algorithm == "kl_bdro":
-            num_posterior_samples = int(np.sqrt(total_model_samples))
-            num_likelihood_samples = int(np.sqrt(total_model_samples))
-        if algorithm == "kl_dro_bas":
-            # we calculate the posterior exactly in closed form!
-            num_likelihood_samples = total_model_samples
-            num_posterior_samples = 1
         params = {
             "algorithm": algorithm,
             "contamination": 0.0,
@@ -103,9 +96,9 @@ def kl_newsvendor_5d() -> List[Dict]:
             "lengthscale": -1.0,
             "likelihood": likelihood,
             "njobs": 1,
-            "num_likelihood_samples": num_likelihood_samples,
+            "num_likelihood_samples": get_num_likelihood_samples(total_model_samples, algorithm),
             "num_observations": NUM_OBSERVATIONS,
-            "num_posterior_samples": num_posterior_samples,
+            "num_posterior_samples": get_num_posterior_samples(total_model_samples, algorithm),
             "num_replications": BAS_NUM_REPLICATIONS,
             "num_test_observations": NUM_TEST_OBSERVATIONS,
             "posterior": posterior,
@@ -114,27 +107,34 @@ def kl_newsvendor_5d() -> List[Dict]:
         experiment.append(params)
     return experiment
 
+def get_num_likelihood_samples(num_total_samples: int, algorithm: str) -> int:
+    if algorithm == "kl_bdro":
+        return int(np.sqrt(num_total_samples))
+    if algorithm in ("kl_dro_bas", "kl_pp"):
+        return num_total_samples
+    raise NotImplementedError()
+
+def get_num_posterior_samples(num_total_samples: int, algorithm: str) -> int:
+    if algorithm == "kl_bdro":
+        return int(np.sqrt(num_total_samples))
+    if algorithm in ("kl_dro_bas", "kl_pp"):
+        return 1
+    raise NotImplementedError()
+
 def kl_newsvendor_1d() -> List[Dict]:
     """KL univariate newsvendor: compare our Bayesian ambiguity set against Bayesian DRO"""
     experiment = []
     for total_model_samples, algorithm, (dgp, likelihood, posterior), epsilon in itertools.product(
         BAS_TOTAL_MODEL_SAMPLES,
-        ["kl_dro_bas", "kl_bdro"],
+        ["kl_pp", "kl_dro_bas", "kl_bdro"],
         [
             ("normal", "normal", "normal_gamma"),
             ("truncated_normal", "normal", "normal_gamma"),
-            ("exponential", "exponential", "gamma"),
-            ("contaminated_exp", "exponential", "gamma"),
+            # ("exponential", "exponential", "gamma"),
+            # ("contaminated_exp", "exponential", "gamma"),
         ],
         BAS_DRO_EPSILON_SET,
     ):
-        if algorithm == "kl_bdro":
-            num_posterior_samples = int(np.sqrt(total_model_samples))
-            num_likelihood_samples = int(np.sqrt(total_model_samples))
-        if algorithm == "kl_dro_bas":
-            # we calculate the posterior exactly in closed form!
-            num_likelihood_samples = total_model_samples
-            num_posterior_samples = 1
         contamination = 0.0
         if dgp == "contaminated_exp":
             contamination = CONTAMINATION_LEVEL
@@ -150,9 +150,9 @@ def kl_newsvendor_1d() -> List[Dict]:
             "lengthscale": -1.0,
             "likelihood": likelihood,
             "njobs": 1,
-            "num_likelihood_samples": num_likelihood_samples,
+            "num_likelihood_samples": get_num_likelihood_samples(total_model_samples, algorithm),
             "num_observations": NUM_OBSERVATIONS,
-            "num_posterior_samples": num_posterior_samples,
+            "num_posterior_samples": get_num_posterior_samples(total_model_samples, algorithm),
             "num_replications": BAS_NUM_REPLICATIONS,
             "num_test_observations": NUM_TEST_OBSERVATIONS,
             "posterior": posterior,
