@@ -233,7 +233,7 @@ def run(
     if uuid:
         print(uuid)
     print("DGP:", dgp, " - ALGORITHM:", algorithm, " - NUM LIKELIHOOD SAMPLES:", num_likelihood_samples, " - POSTERIOR:", posterior, "- DATASET:", dataset, "- DIM:", dim)
-    if algorithm in ("kl_bdro", "kl_dro_bas", "kl_pp") and dataset == "newsvendor":
+    if (algorithm in ("kl_bdro", "kl_dro_bas") and dataset == "newsvendor") or algorithm == "kl_pp":
         problem = get_kl_bdro_problem(
             newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim,
         )
@@ -390,8 +390,6 @@ def run_replication(
             mu_post, _, iota_post, Psi_post = theta_posterior
             theta_sample = bdro_portfolio_posterior_samples(num_posterior_samples, mu_post, iota_post, Psi_post, generator=generator)
         elif algorithm == "kl_pp":
-            if dataset == "portfolio":
-                raise NotImplementedError()
             theta_sample = posterior_predictive_params(posterior, theta_posterior)
         else:
             theta_sample = sample_posterior(posterior, theta_posterior, num_likelihood_samples, generator=generator)

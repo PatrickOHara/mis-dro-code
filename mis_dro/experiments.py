@@ -498,7 +498,7 @@ def kl_portfolio(mmc2_dir: Path) -> List[Dict]:
     """KL Portfolio experiment with DRO-BAS vs BDRO"""
     experiment = []
     for algorithm, dgp, epsilon in itertools.product(
-        ["kl_dro_bas", "kl_bdro"],
+        ["kl_dro_bas", "kl_bdro", "kl_pp"],
         ["DowJones"],
         PORTFOLIO_EPSILON_SET,
     ):
@@ -507,6 +507,8 @@ def kl_portfolio(mmc2_dir: Path) -> List[Dict]:
         if algorithm == "kl_bdro":
             # likelihood in closed form
             num_posterior_samples_list = [5, 10, 30]
+        elif algorithm == "kl_pp":
+            num_likelihood_samples = 30
 
         for num_posterior_samples in num_posterior_samples_list:
             returns_df = pd.read_excel(mmc2_dir / "Datasets" / dgp / f"{dgp}.xlsx", sheet_name="Assets_Returns", header=None)
