@@ -412,10 +412,10 @@ def run_replication(
     likelihood_start = datetime.now()
     if inference == "empirical":
         xi = data
-    elif inference == "bayes" and dataset == "portfolio" and likelihood == "multivariate_normal":
-        pass    # no need to sample from likelihood cause we have closed form
     elif inference == "bayes" and algorithm == "kl_pp":
         xi = sample_posterior_predictive(likelihood, posterior, theta_sample, dim, num_likelihood_samples, generator=generator).reshape((1, num_likelihood_samples, dim))
+    elif inference == "bayes" and dataset == "portfolio" and likelihood == "multivariate_normal":
+        pass    # no need to sample from likelihood cause we have closed form
     else:
         xi = sample_likelihood(
             likelihood,

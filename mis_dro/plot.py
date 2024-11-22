@@ -105,6 +105,7 @@ def mean_variance_plot(
     offset: float = 1.0,
     special_epsilons: list[float] = [0.1, 0.5],
     var_col: float = "out_of_sample_var",
+    add_log_partition_function: float = 0.0,
     **kwargs,
 ) -> None:
     """Plot mean-variance trade-off."""
@@ -150,7 +151,7 @@ def mean_variance_plot(
                 axis.text(
                     out_of_sample_var[i] + local_offset,
                     out_of_sample_mean[i] + local_offset,
-                    epsilon,
+                    np.round(epsilon + add_log_partition_function, 5),
                     ha=ha,
                     va=va,
                     color=kwargs["color"],
@@ -207,7 +208,7 @@ def convert_str_to_float_list(str_list: str, list_len: int) -> list[float]:
     else:
         return [float(x) for x in str_list.strip('[]').split(',')]
 
-def preprocess_results_df(results_df: pd.DataFrame, dgp: str):
+def preprocess_results_df(results_df: pd.DataFrame, dgp: str, dataset: str = "newsvendor"):
     """Filter results, process columns, and create new columns"""
     assert len(results_df["num_test_observations"].unique()) == 1
     assert len(results_df["dim"].unique()) == 1
@@ -216,7 +217,9 @@ def preprocess_results_df(results_df: pd.DataFrame, dgp: str):
     processed_df = results_df.copy()
 
     # filter by the DGP and cases where the the log partition function is feasible for epsilon
-    processed_df = processed_df.loc[(processed_df["dgp"] == dgp) & (processed_df["log_partition_constant"] < processed_df["epsilon"])]
+    processed_df = processed_df.loc[processed_df["dgp"] == dgp]
+    if dataset != "portfolio":
+        processed_df = processed_df.loc[processed_df["log_partition_constant"] < processed_df["epsilon"]]
 
     # get useful stats such as the number of samples and total time spent sampling
     processed_df["num_total_samples"] = processed_df["num_posterior_samples"] * processed_df["num_likelihood_samples"]
