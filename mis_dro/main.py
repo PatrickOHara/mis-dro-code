@@ -233,11 +233,11 @@ def run(
     if uuid:
         print(uuid)
     print("DGP:", dgp, " - ALGORITHM:", algorithm, " - NUM LIKELIHOOD SAMPLES:", num_likelihood_samples, " - POSTERIOR:", posterior, "- DATASET:", dataset, "- DIM:", dim)
-    if algorithm in ("kl_bdro", "kl_dro_bas") and dataset == "newsvendor":
+    if algorithm in ("kl_bdro", "kl_dro_bas", "kl_pp") and dataset == "newsvendor":
         problem = get_kl_bdro_problem(
             newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim,
         )
-    elif algorithm == "kl_pp":
+    elif algorithm == "kl_pp" and dataset == "portfolio":
         problem = get_kl_bdro_problem(portfolio_objective_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim)
     elif algorithm in ("kl_bdro", "kl_dro_bas") and dataset == "portfolio" and likelihood == "multivariate_normal":
         problem = get_kl_portfolio_problem(dim, num_posterior_samples)
