@@ -38,8 +38,8 @@ class AlgorithmName(StrEnum):
     dro_bas_mmd = "RoBAS"
     empirical_mmd = "Empirical MMD"
     kl_bdro = "BDRO"
-    kl_dro_bas = "DRO-BAS (PE)"
-    kl_pp = "DRO-BAS (PP)"
+    kl_dro_bas = "DRO-BAS$_{PE}$"
+    kl_pp = "DRO-BAS$_{PP}$"
 
 
 

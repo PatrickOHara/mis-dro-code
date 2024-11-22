@@ -76,9 +76,10 @@ def get_experiment(experiment_name: ExperimentName, dataset_dir: Optional[Path] 
 def kl_newsvendor_5d() -> List[Dict]:
     """KL univariate newsvendor: compare our Bayesian ambiguity set against Bayesian DRO"""
     experiment = []
-    for total_model_samples, algorithm, (dgp, likelihood, posterior), epsilon in itertools.product(
+    for total_model_samples, algorithm, num_observations, (dgp, likelihood, posterior), epsilon in itertools.product(
         BAS_TOTAL_MODEL_SAMPLES,
         ["kl_dro_bas", "kl_pp", "kl_bdro"],
+        [20],
         [
             ("multivariate_normal", "multivariate_normal", "normal_inverse_wishart"),
         ],
@@ -97,7 +98,7 @@ def kl_newsvendor_5d() -> List[Dict]:
             "likelihood": likelihood,
             "njobs": 1,
             "num_likelihood_samples": get_num_likelihood_samples(total_model_samples, algorithm),
-            "num_observations": NUM_OBSERVATIONS,
+            "num_observations": num_observations,
             "num_posterior_samples": get_num_posterior_samples(total_model_samples, algorithm),
             "num_replications": BAS_NUM_REPLICATIONS,
             "num_test_observations": NUM_TEST_OBSERVATIONS,
@@ -124,13 +125,14 @@ def get_num_posterior_samples(num_total_samples: int, algorithm: str) -> int:
 def kl_newsvendor_1d() -> List[Dict]:
     """KL univariate newsvendor: compare our Bayesian ambiguity set against Bayesian DRO"""
     experiment = []
-    for total_model_samples, algorithm, (dgp, likelihood, posterior), epsilon in itertools.product(
+    for total_model_samples, algorithm, num_observations, (dgp, likelihood, posterior), epsilon in itertools.product(
         BAS_TOTAL_MODEL_SAMPLES,
         ["kl_pp", "kl_dro_bas", "kl_bdro"],
+        [5, 20, 100],
         [
-            ("normal", "normal", "normal_gamma"),
-            ("truncated_normal", "normal", "normal_gamma"),
-            # ("exponential", "exponential", "gamma"),
+            # ("normal", "normal", "normal_gamma"),
+            # ("truncated_normal", "normal", "normal_gamma"),
+            ("exponential", "exponential", "gamma"),
             # ("contaminated_exp", "exponential", "gamma"),
         ],
         BAS_DRO_EPSILON_SET,
@@ -151,7 +153,7 @@ def kl_newsvendor_1d() -> List[Dict]:
             "likelihood": likelihood,
             "njobs": 1,
             "num_likelihood_samples": get_num_likelihood_samples(total_model_samples, algorithm),
-            "num_observations": NUM_OBSERVATIONS,
+            "num_observations": num_observations,
             "num_posterior_samples": get_num_posterior_samples(total_model_samples, algorithm),
             "num_replications": BAS_NUM_REPLICATIONS,
             "num_test_observations": NUM_TEST_OBSERVATIONS,
