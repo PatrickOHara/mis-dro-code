@@ -11,6 +11,7 @@ def get_kl_bdro_problem(
     num_posterior_samples: int,
     num_likelihood_samples: int,
     dim: int = 1,
+    problem_name: str = "newsvendor",
 ) -> cp.Problem:
     """Bayesian DRO as a cvxpy optimisaton problem.
 
@@ -66,10 +67,14 @@ def get_kl_bdro_problem(
     )
     # add the decision objective as an epigraph constraint
     # examples of decision objectives are the newsvendor objective
-    constraints = [
-        x >= SMALLEST_X,
-        # x <= LARGEST_X,   # NOTE this can cause some unexpected behaviour for large epsilon
-    ] + [decision_objective(x, xi[i]) <= t[i] for i in range(num_posterior_samples)]
+    if problem_name == "newsvendor":
+        constraints = [
+            x >= SMALLEST_X,
+            # x <= LARGEST_X,   # NOTE this can cause some unexpected behaviour for large epsilon
+        ]
+    elif problem_name == "portfolio":
+        constraints = [x >= 0, cp.sum(x) == 1]
+    constraints += [decision_objective(x, xi[i]) <= t[i] for i in range(num_posterior_samples)]
 
     return cp.Problem(bdro_obj, constraints)
 
