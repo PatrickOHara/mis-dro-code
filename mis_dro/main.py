@@ -560,7 +560,7 @@ def sample_npl_for_experiment(
         # 2. sample from the posterior
         print()
         npl_start = datetime.now()
-        print(npl_start, "- Starting portfolio sample NPL for replication", replication)    
+        print(npl_start, "- Starting", dataset, "sample NPL for replication", replication)    
         theta_sample = sample_npl(
             data,
             npl_row["inference"],
