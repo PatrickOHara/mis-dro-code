@@ -123,6 +123,7 @@ def setup_mmd_dro_bas(
             npl_row["npl_uuid"] = str(uuid4())
             posterior_settings.append(npl_row)
         posterior_settings_df = pd.DataFrame(posterior_settings)
+        posterior_settings_df = posterior_settings_df.loc[posterior_settings_df["inference"].isin(["npl_mmd", "npl_wlb"])]
         posterior_settings_df.to_csv(npl_samples_dir / "npl_settings.csv", index=False)
 
         # then create SLURM file ready to sample the NPL on the cluster
