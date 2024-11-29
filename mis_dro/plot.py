@@ -51,6 +51,8 @@ class NiceNameDGP(StrEnum):
     multivariate_normal = "5D Normal DGP"
     truncated_normal = "Truncated Normal DGP"
     DowJones = "DowJones"
+    bimodal_univariate_gaussian = "Bimodal Normal DGP"
+    bimodal_multivariate_gaussian = "Bimodal 5D Normal DGP"
 
 
 
