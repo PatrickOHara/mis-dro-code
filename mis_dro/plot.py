@@ -23,9 +23,9 @@ CB_color_cycle = ['#377eb8', '#ff7f00', '#4daf4a',
 
 class AlgorithmColor(StrEnum):
     """Colors of algorithm lines"""
-    dro_bas_mmd = "#f781bf"
+    dro_bas_mmd = "#008080"   #"#f781bf"
     kl_bdro = "#FF800E"
-    kl_dro_bas = "#006BA4"
+    kl_dro_bas = "#8A2BE2" #"#006BA4"
     empirical_mmd = "#999999"
     kl_pp = "red"
 
@@ -53,6 +53,7 @@ class NiceNameDGP(StrEnum):
     DowJones = "DowJones"
     bimodal_univariate_gaussian = "Bimodal Normal DGP"
     bimodal_multivariate_gaussian = "Bimodal 5D Normal DGP"
+    contaminated_normal = "Contaminated Normal DGP"
 
 
 
