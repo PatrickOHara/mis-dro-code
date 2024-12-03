@@ -100,7 +100,7 @@ def derive_analytical_posterior_params(
         return mu_posterior.reshape((1,dim))
     elif posterior == "normal_known_var":
         mu_posterior, _ = posterior_params
-        dim = mu_posterior.shape[0]
+        dim = 1
         return mu_posterior.reshape((1,dim))
     else:
         raise NotImplementedError(
@@ -386,6 +386,19 @@ def posterior_predictive_params(posterior: str, posterior_params: tuple) -> np.a
         shape = alpha_posterior
         scale = beta_posterior
         return np.array([[shape, scale]])
+    
+    if posterior == "normal_known_var":
+        mu_posterior, std_posterior = posterior_params
+        return np.array([mu_posterior[0], std_posterior])
+    
+    if posterior == "multivariate_normal_known_cov":
+        mu_posterior, kappa_posterior = posterior_params
+        dim = mu_posterior.shape[0]
+        pp_params = np.zeros(dim + 1)
+        pp_params[:dim] = mu_posterior
+        pp_params[-1] = kappa_posterior
+        return pp_params
+
 
     raise NotImplementedError(f"Posterior predictive not implemented for posterior '{posterior}'.")
 
@@ -413,4 +426,15 @@ def sample_posterior_predictive(
     if likelihood == "exponential" and posterior == "gamma":
         shape, scale = theta_sample[0]
         return sp.stats.lomax.rvs(c=shape, scale=scale, size=(num_likelihood_samples, dim), random_state=generator)
+    if likelihood == "normal_known_var" and posterior == "normal_known_var":
+        mu, scale = theta_sample
+        return sp.stats.norm.rvs(loc=mu, scale=np.sqrt(scale**2+DGP_NORMAL_KNOWN_VARIANCE_STD**2), size=(num_likelihood_samples, dim), random_state=generator)
+    if  likelihood == "multivariate_normal_known_cov" and posterior == "multivariate_normal_known_cov":
+        pp_params = theta_sample
+        dim = pp_params.shape[0] - 1
+        mu = pp_params[:dim]
+        kappa = pp_params[-1]
+        var = (1/kappa)*(DGP_NORMAL_KNOWN_VARIANCE_STD**2) +  DGP_NORMAL_KNOWN_VARIANCE_STD**2  
+        return sp.stats.multivariate_normal.rvs(mean=mu, cov=var*np.eye(dim), size=num_likelihood_samples, random_state=generator)
+
     raise NotImplementedError()

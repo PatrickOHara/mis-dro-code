@@ -11,7 +11,7 @@ from sklearn.datasets import make_spd_matrix
 
 
 from bayesian_dro.Bayesian_DRO_continuous import data_generation, DGP_STD_TRUNCATED_NORMAL
-from .constants import IN_SAMPLE_TIME_WINDOW, OUT_OF_SAMPLE_TIME_WINDOW
+from .constants import IN_SAMPLE_TIME_WINDOW, OUT_OF_SAMPLE_TIME_WINDOW, DGP_NORMAL_KNOWN_VARIANCE_STD
 
 
 def sample_dgp(
@@ -173,8 +173,8 @@ def contaminated_normal(num_observations: int, contamination: float, random_stat
         random_state = np.random.default_rng()
     cont_size = int(np.floor(contamination * num_observations))
     n_real = num_observations - cont_size
-    data = norm.rvs(loc=25, scale=DGP_STD_TRUNCATED_NORMAL, size=n_real, random_state=random_state) 
-    outl = norm.rvs(loc=75, scale=DGP_STD_TRUNCATED_NORMAL, size=cont_size, random_state=random_state) 
+    data = norm.rvs(loc=25, scale=DGP_NORMAL_KNOWN_VARIANCE_STD, size=n_real, random_state=random_state) 
+    outl = norm.rvs(loc=75, scale=DGP_NORMAL_KNOWN_VARIANCE_STD, size=cont_size, random_state=random_state) 
     data = np.concatenate((data, outl), axis=0)
     random_state.shuffle(data)  # shuffles the data in-place
     return data
