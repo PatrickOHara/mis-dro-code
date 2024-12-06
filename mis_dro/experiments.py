@@ -276,20 +276,23 @@ def mmd_newsvendor_1d() -> List[Dict]:
     # NOTE do not set up all the below combinations in one experiment to preserve memory
     for (algorithm, dgp, likelihood, inference, posterior), contamination, num_observations, epsilon in itertools.product(
         [
-            ("dro_bas_mmd", "contaminated_exp", "exponential", "npl_mmd", "npl"),     # misspecified
-            ("empirical_mmd", "contaminated_exp", "empirical", "empirical", "empirical"),            # empirical
-            ("dro_bas_mmd", "contaminated_exp_large_outliers", "exponential", "npl_mmd", "npl"),     # misspecified
-            ("empirical_mmd", "contaminated_exp_large_outliers", "empirical", "empirical", "empirical"),            # empirical
-            ("dro_bas_mmd", "contaminated_exp_small_outliers", "exponential", "npl_mmd", "npl"),
-            ("empirical_mmd", "contaminated_exp_small_outliers", "empirical", "empirical", "empirical"),
+            # ("dro_bas_mmd", "contaminated_exp", "exponential", "npl_mmd", "npl"),     # misspecified
+            # ("empirical_mmd", "contaminated_exp", "empirical", "empirical", "empirical"),            # empirical
+            # ("dro_bas_mmd", "contaminated_exp_large_outliers", "exponential", "npl_mmd", "npl"),     # misspecified
+            # ("empirical_mmd", "contaminated_exp_large_outliers", "empirical", "empirical", "empirical"),            # empirical
+            # ("dro_bas_mmd", "contaminated_exp_small_outliers", "exponential", "npl_mmd", "npl"),
+            # ("empirical_mmd", "contaminated_exp_small_outliers", "empirical", "empirical", "empirical"),
             # ("dro_bas_mmd", "exponential", "exponential", "npl_mmd"),          # well specified
             # ("empirical_mmd", "exponential", "empirical", "empirical"),                 # empirical
-            ("kl_dro_bas", "contaminated_exp", "exponential", "bayes", "gamma"),
-            ("kl_bdro", "contaminated_exp", "exponential", "bayes", "gamma"),
-            ("kl_dro_bas", "contaminated_exp_large_outliers", "exponential", "bayes", "gamma"),
-            ("kl_bdro", "contaminated_exp_large_outliers", "exponential", "bayes", "gamma"),
-            ("kl_dro_bas", "contaminated_exp_small_outliers", "exponential", "bayes", "gamma"),
-            ("kl_bdro", "contaminated_exp_small_outliers", "exponential", "bayes", "gamma"),
+            # ("kl_dro_bas", "contaminated_exp", "exponential", "bayes", "gamma"),
+            # ("kl_bdro", "contaminated_exp", "exponential", "bayes", "gamma"),
+            # ("kl_dro_bas", "contaminated_exp_large_outliers", "exponential", "bayes", "gamma"),
+            # ("kl_bdro", "contaminated_exp_large_outliers", "exponential", "bayes", "gamma"),
+            # ("kl_dro_bas", "contaminated_exp_small_outliers", "exponential", "bayes", "gamma"),
+            # ("kl_bdro", "contaminated_exp_small_outliers", "exponential", "bayes", "gamma"),
+            ("kl_pp", "contaminated_exp", "exponential", "bayes", "gamma"),
+            ("kl_pp", "contaminated_exp_large_outliers", "exponential", "bayes", "gamma"),
+            ("kl_pp", "contaminated_exp_small_outliers", "exponential", "bayes", "gamma"),
             # ("kl_bdro", "contaminated_exp", "exponential", "npl_mmd")
             # ("kl_dro_bas", "exponential", "exponential", "bayes"),
             # ("kl_bdro", "exponential", "exponential", "bayes")
