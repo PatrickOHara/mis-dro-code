@@ -322,6 +322,9 @@ def mmd_newsvendor_1d() -> List[Dict]:
             # we calculate the posterior exactly in closed form!
             num_likelihood_samples = 900
             num_posterior_samples = 1
+        if algorithm == "kl_pp":
+            num_likelihood_samples = 900
+            num_posterior_samples = 1
         # else:
         #     inference = "npl_mmd"
         # contamination = 0.0
