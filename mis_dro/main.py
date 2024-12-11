@@ -135,8 +135,26 @@ def setup_mmd_dro_bas(
         (npl_samples_dir / f"sample_npl_{experiment_name}.slurm").write_text(npl_slurm_string)
 
 
+# @app.command(name="csv")
+# def generate_csv(experiment_dir: Path):
+#     """Write a CSV file with all the results"""
+#     experiment_filepath = experiment_dir / "experiment.json"
+#     with open(experiment_filepath, "r", encoding="utf-8") as json_file:
+#         experiment = json.load(json_file)
+#     df = pd.DataFrame(experiment).set_index("uuid")
+#     result_df = pd.concat(
+#         [
+#             pd.read_csv(
+#                 experiment_dir / f"{uuid}.csv", index_col=["uuid", "replication"]
+#             )
+#             for uuid in df.index
+#             if (experiment_dir / f"{uuid}.csv").exists()
+#         ]
+#     )
+#     result_df = result_df.join(df, on="uuid")
+#     result_df.to_csv(experiment_dir / "results.csv", index=True)
 @app.command(name="csv")
-def generate_csv(experiment_dir: Path):
+def generate_csv(experiment_dir: Path, npl_samples_dir: Optional[Path] = None):
     """Write a CSV file with all the results"""
     experiment_filepath = experiment_dir / "experiment.json"
     with open(experiment_filepath, "r", encoding="utf-8") as json_file:
@@ -152,7 +170,24 @@ def generate_csv(experiment_dir: Path):
         ]
     )
     result_df = result_df.join(df, on="uuid")
-    result_df.to_csv(experiment_dir / "results.csv", index=True)
+    result_df = result_df.reset_index()
+    if npl_samples_dir:
+        # load the settings for the NPL sampling
+        settings_df = pd.read_csv(npl_samples_dir / "npl_settings.csv")
+        # filter df because the empirical method doesn't produce anything and we get an error
+        filtered_settings_df = settings_df[settings_df["inference"] == "npl_mmd"]
+        # then, for each npl_uuid, load the times taken for each replication
+        times_df = pd.concat([pd.read_csv(npl_samples_dir / npl_uuid / f"npl_times_{npl_uuid}.csv") for npl_uuid in filtered_settings_df["npl_uuid"]])
+        # now merge the times and the npl_uuids together
+        result_df = result_df.merge(settings_df, how="left", on=POSTERIOR_GB_COLS)
+        result_df = result_df.merge(times_df, on=["npl_uuid", "replication"], how="left", suffixes=('', '_drop'))
+        # finally, replace the incorrect posterior times with the correct ones
+        result_df.loc[~(result_df['posterior_time_drop'].isna()), 'posterior_time'] = result_df['posterior_time_drop']
+        result_df = result_df.drop("posterior_time_drop", axis=1)
+    # save to a CSV file
+    print(result_df)
+    result_df.to_csv(experiment_dir / "results.csv", index=False)
+
 
 
 @app.command(name="experiment")
