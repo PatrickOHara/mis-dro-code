@@ -35,7 +35,7 @@ class AlgorithmName(StrEnum):
     """Consistent algorithm line styles"""
 
     bdro_grid_search = "BDRO grid search"
-    dro_bas_mmd = "RoBAS"
+    dro_bas_mmd = "DRO-RoBAS"
     empirical_mmd = "Empirical MMD"
     kl_bdro = "BDRO"
     kl_dro_bas = "DRO-BAS$_{PE}$"
@@ -51,7 +51,7 @@ class NiceNameDGP(StrEnum):
     multivariate_normal = "5D Normal DGP"
     truncated_normal = "Truncated Normal DGP"
     DowJones = "DowJones"
-    bimodal_univariate_gaussian = "Bimodal Normal DGP"
+    bimodal_univariate_gaussian = "Bimodal 1D Normal DGP"
     bimodal_multivariate_gaussian = "Bimodal 5D Normal DGP"
     contaminated_normal = "Contaminated Normal DGP"
 
