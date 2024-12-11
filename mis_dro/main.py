@@ -49,7 +49,7 @@ app = typer.Typer(name="misdro")
 
 @app.command(name="setup-kl")
 def setup_kl_dro_bas(
-    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), overwrite: bool = False
+    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, dataset_dir: Path = Path("~/misdro/datasets/mmc2"), overwrite: bool = False
 ):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
@@ -79,7 +79,7 @@ def setup_kl_dro_bas(
 
 @app.command(name="setup-mmd")
 def setup_mmd_dro_bas(
-    experiment_name: ExperimentName, experiment_dir: Path, npl_samples_dir: Path, batch_size: int, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), overwrite: bool = False, njobs: int = -1,
+    experiment_name: ExperimentName, experiment_dir: Path, npl_samples_dir: Path, batch_size: int, dataset_dir: Path = Path("~/misdro/datasets/mmc2"), overwrite: bool = False, njobs: int = -1,
 ):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
@@ -178,7 +178,7 @@ def run_experiment(
     algorithm: str,
     only_missing: bool = False, #NOTE if the experiment runs out of memory set this to true to true 
     njobs: int = -1,
-    dataset_dir: Path = Path("~/datasets/misdro/mmc2"),
+    dataset_dir: Path = Path("~/misdro/datasets/mmc2"),
 ):
     """When using SLURM, this function is called to run an experiment"""
     print(datetime.now(), "- Running algorithm", algorithm, "with DGP", dgp, "from experiment directory", experiment_dir)
@@ -192,7 +192,7 @@ def run_experiment(
 
 
 @app.command(name="batch")
-def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool = False, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), npl_samples_dir: Optional[Path] = None):
+def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool = False, dataset_dir: Path = Path("~/misdro/datasets/mmc2"), npl_samples_dir: Optional[Path] = None):
     print(datetime.now(), "Running batch from index", start)
     print()
     filepath = experiment_dir / "experiment.json"
@@ -204,7 +204,7 @@ def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool 
             run(experiment_dir, dataset_dir=dataset_dir, npl_samples_dir=npl_samples_dir, **params)
 
 @app.command(name="uuid")
-def run_uuid(experiment_dir: Path, uuid: UUID, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), npl_samples_dir: Optional[Path] = None, njobs: int = -1, verbose: bool = False) -> None:
+def run_uuid(experiment_dir: Path, uuid: UUID, dataset_dir: Path = Path("~/misdro/datasets/mmc2"), npl_samples_dir: Optional[Path] = None, njobs: int = -1, verbose: bool = False) -> None:
     """Run DRO for only one specified uuid parameters"""
     filepath = experiment_dir / "experiment.json"
     with open(filepath, "r", encoding="utf-8") as json_file:
@@ -416,7 +416,7 @@ def run_replication(
         elif algorithm == "kl_pp":
             theta_sample = posterior_predictive_params(posterior, theta_posterior)
         else:
-            theta_sample = sample_posterior(posterior, theta_posterior, num_likelihood_samples, generator=generator)
+            theta_sample = sample_posterior(posterior, theta_posterior, num_posterior_samples, generator=generator)
     elif inference in ("npl_wlb", "npl_mmd"):
         # get the posterior 
         path_to_csv = npl_uuid_dir / f"npl_sample_{replication}.csv"
@@ -446,8 +446,9 @@ def run_replication(
             theta_sample,
             dim,
             num_likelihood_samples,
+            num_posterior_samples,
             generator=generator,
-        )
+        ) # num_post x num_lkh x dim
     likelihood_time = (datetime.now() - likelihood_start).total_seconds()
 
     # 4. run the chosen DRO algorithm

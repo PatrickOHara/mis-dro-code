@@ -10,6 +10,7 @@ def sample_likelihood(
     theta_sample: np.ndarray,
     dim: int,
     num_likelihood_samples: int,
+    num_posterior_samples: int,
     generator: Optional[np.random.Generator],
     inference: str = "bayes",
 ) -> np.ndarray:
@@ -20,7 +21,7 @@ def sample_likelihood(
     """
     if not generator:
         generator = np.random.default_rng()
-    num_posterior_samples = theta_sample.shape[0]
+    # num_posterior_samples = theta_sample.shape[0]
     xi = np.zeros([num_posterior_samples, num_likelihood_samples, dim])
     if likelihood == "exponential":
         for i in range(num_posterior_samples):
