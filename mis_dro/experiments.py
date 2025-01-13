@@ -27,7 +27,7 @@ from .constants import (
     OUT_OF_SAMPLE_TIME_WINDOW,
     ROBAS_DRO_EPSILON_SET,
 )
-from .dataset import get_num_time_windows
+from .dataset import get_num_time_windows, get_portfolio_returns_df
 
 
 class ExperimentName(StrEnum):
@@ -41,11 +41,12 @@ class ExperimentName(StrEnum):
     mmd_newsvendor_5d = "mmd_newsvendor_5d"
     mmd_portfolio = "mmd_portfolio"
     kl_portfolio = "kl_portfolio"
+    kl_portfolio_crash = "kl_portfolio_crash"
     kl_newsvendor_exp_1d = "kl_newsvendor_exp_1d"
     mmd_newsvendor_exp_1d = "mmd_newsvendor_exp_1d"
 
     def is_portfolio(self) -> bool:
-        return self in (ExperimentName.kl_portfolio, ExperimentName.mmd_portfolio)
+        return self in (ExperimentName.kl_portfolio, ExperimentName.mmd_portfolio, ExperimentName.kl_portfolio_crash)
 
 
 
@@ -60,6 +61,7 @@ def get_experiment(experiment_name: ExperimentName, dataset_dir: Optional[Path] 
         ExperimentName.mmd_newsvendor_5d: mmd_newsvendor_5d,
         ExperimentName.mmd_portfolio: mmd_portfolio,
         ExperimentName.kl_portfolio: kl_portfolio,
+        ExperimentName.kl_portfolio_crash: kl_portfolio_crash,
         ExperimentName.kl_newsvendor_exp_1d: kl_newsvendor_exp_1d,
         ExperimentName.mmd_newsvendor_exp_1d: mmd_newsvendor_exp_1d
     }
@@ -97,9 +99,9 @@ def kl_newsvendor_5d() -> List[Dict]:
             "lengthscale": -1.0,
             "likelihood": likelihood,
             "njobs": 1,
-            "num_likelihood_samples": get_num_likelihood_samples(total_model_samples, algorithm),
+            "num_likelihood_samples": get_num_likelihood_samples("newsvendor", total_model_samples, algorithm),
             "num_observations": num_observations,
-            "num_posterior_samples": get_num_posterior_samples(total_model_samples, algorithm),
+            "num_posterior_samples": get_num_posterior_samples("newsvendor", total_model_samples, algorithm),
             "num_replications": BAS_NUM_REPLICATIONS,
             "num_test_observations": NUM_TEST_OBSERVATIONS,
             "posterior": posterior,
@@ -108,14 +110,18 @@ def kl_newsvendor_5d() -> List[Dict]:
         experiment.append(params)
     return experiment
 
-def get_num_likelihood_samples(num_total_samples: int, algorithm: str) -> int:
+def get_num_likelihood_samples(dataset: str, num_total_samples: int, algorithm: str) -> int:
+    if algorithm == "kl_bdro" and dataset == "portfolio":
+        return 1
     if algorithm == "kl_bdro":
         return int(np.sqrt(num_total_samples))
     if algorithm in ("kl_dro_bas", "kl_pp"):
         return num_total_samples
     raise NotImplementedError()
 
-def get_num_posterior_samples(num_total_samples: int, algorithm: str) -> int:
+def get_num_posterior_samples(dataset: str, num_total_samples: int, algorithm: str) -> int:
+    if algorithm == "kl_bdro" and dataset == "portfolio":
+        return num_total_samples
     if algorithm == "kl_bdro":
         return int(np.sqrt(num_total_samples))
     if algorithm in ("kl_dro_bas", "kl_pp"):
@@ -152,9 +158,9 @@ def kl_newsvendor_1d() -> List[Dict]:
             "lengthscale": -1.0,
             "likelihood": likelihood,
             "njobs": 1,
-            "num_likelihood_samples": get_num_likelihood_samples(total_model_samples, algorithm),
+            "num_likelihood_samples": get_num_likelihood_samples("newsvendor", total_model_samples, algorithm),
             "num_observations": num_observations,
-            "num_posterior_samples": get_num_posterior_samples(total_model_samples, algorithm),
+            "num_posterior_samples": get_num_posterior_samples("newsvendor", total_model_samples, algorithm),
             "num_replications": BAS_NUM_REPLICATIONS,
             "num_test_observations": NUM_TEST_OBSERVATIONS,
             "posterior": posterior,
@@ -517,6 +523,40 @@ def mmd_portfolio(mmc2_dir: Path) -> List[Dict]:
         experiment.append(params)
     return experiment
 
+def kl_portfolio_crash(mmc2_dir: Path) -> List[Dict]:
+    """Portfolio experiment with a stock crash"""
+    experiment = []
+    dgp = "DowJones-crash"
+    num_samples = 900
+    for algorithm, epsilon in itertools.product(
+        ["kl_dro_bas", "kl_bdro", "kl_pp"],
+        PORTFOLIO_EPSILON_SET,
+    ):
+        returns_df = get_portfolio_returns_df(mmc2_dir, dgp)
+        num_stocks = len(returns_df.columns)
+        params = {
+            "algorithm": algorithm,
+            "contamination": 0.0,
+            "dataset": "portfolio",
+            "dgp": dgp,
+            "dim": num_stocks,
+            "epsilon": epsilon,
+            "ignore_dpp": True,
+            "inference": "bayes",
+            "lengthscale": -1.0,
+            "likelihood": "multivariate_normal",
+            "njobs": 1,
+            "num_likelihood_samples": get_num_likelihood_samples("portfolio", num_samples, algorithm),
+            "num_observations": IN_SAMPLE_TIME_WINDOW,
+            "num_posterior_samples": get_num_posterior_samples("portfolio", num_samples, algorithm),
+            "num_replications": 1,
+            "num_test_observations": 4 * IN_SAMPLE_TIME_WINDOW, # 4 years of test observations
+            "posterior": "normal_inverse_wishart",
+            "uuid": str(uuid4()),  # uniquely identify a run
+        }
+        experiment.append(params)
+    return experiment
+        
 def kl_portfolio(mmc2_dir: Path) -> List[Dict]:
     """KL Portfolio experiment with DRO-BAS vs BDRO"""
     experiment = []
@@ -530,19 +570,9 @@ def kl_portfolio(mmc2_dir: Path) -> List[Dict]:
             num_samples_list = [100, 400, 900]            
 
         for num_samples in num_samples_list:
-            returns_df = pd.read_excel(mmc2_dir / "Datasets" / dgp / f"{dgp}.xlsx", sheet_name="Assets_Returns", header=None)
+            returns_df = get_portfolio_returns_df(mmc2_dir, dgp)
             num_time_windows = get_num_time_windows(len(returns_df))
             num_stocks = len(returns_df.columns)
-
-            if algorithm == "kl_dro_bas":
-                num_likelihood_samples = 1
-                num_posterior_samples = 1
-            elif algorithm == "kl_pp":
-                num_likelihood_samples = num_samples
-                num_posterior_samples = 1
-            elif algorithm == "kl_bdro":
-                num_posterior_samples = num_samples
-
             params = {
                 "algorithm": algorithm,
                 "contamination": 0.0,
@@ -555,9 +585,9 @@ def kl_portfolio(mmc2_dir: Path) -> List[Dict]:
                 "lengthscale": -1.0,
                 "likelihood": "multivariate_normal",
                 "njobs": 1,
-                "num_likelihood_samples": num_likelihood_samples,
+                "num_likelihood_samples": get_num_likelihood_samples("portfolio", num_samples, algorithm),
                 "num_observations": IN_SAMPLE_TIME_WINDOW,
-                "num_posterior_samples": num_posterior_samples,
+                "num_posterior_samples": get_num_posterior_samples("portfolio", num_samples, algorithm),
                 "num_replications": num_time_windows,
                 "num_test_observations": OUT_OF_SAMPLE_TIME_WINDOW,
                 "posterior": "normal_inverse_wishart",

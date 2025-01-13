@@ -25,6 +25,7 @@ from .bayes_conjugates import (
 )
 from .constants import (
     CONTAMINATION_LEVEL,
+    IN_SAMPLE_TIME_WINDOW,
     NUM_LIKELIHOOD_SAMPLES,
     NUM_OBSERVATIONS,
     NUM_POSTERIOR_SAMPLES,
@@ -386,7 +387,10 @@ def run_replication(
         )
     elif dataset == "portfolio":
         # NOTE shape of data (N, D) where N is number of weeks and D is the number of stocks
-        data, data_eval = portfolio_dataset(dgp, replication, dataset_dir)
+        if dgp == "DowJones-crash":
+            data, data_eval = portfolio_dataset(dgp, 72, dataset_dir, out_of_sample_time_window=IN_SAMPLE_TIME_WINDOW*4, normalise=True)
+        else:
+            data, data_eval = portfolio_dataset(dgp, replication, dataset_dir)
     else:
         raise NotImplementedError(f"Dataset not implemented: {dataset}")
     dgp_time = (datetime.now() - dgp_start).total_seconds()
@@ -509,6 +513,7 @@ def run_replication(
         raise ValueError("Please choose a valid algorithm")
     solve_time = (datetime.now() - solve_start).total_seconds()
     # evaluate the out-of-sample cost
+    print(solution)
     if (solution == np.inf).any():
         out_of_sample_cost = np.inf * np.ones(num_test_observations)
     else:
