@@ -8,7 +8,7 @@ from .bayes_conjugates import sample_posterior
 
 def portfolio_objective_cvxpy(x, xi):
     """CVXPY portfolio objective"""
-    return xi @ x
+    return - xi @ x
 
 def get_kl_portfolio_problem(num_stocks: int, num_cov_samples: int) -> cp.Problem:
     """Evaluate portfolio cost function with cvxpy assuming a Gaussian likelihood
