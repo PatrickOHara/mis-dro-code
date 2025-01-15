@@ -488,7 +488,7 @@ def mmd_portfolio(mmc2_dir: Path) -> List[Dict]:
     for epsilon in ROBAS_DRO_EPSILON_SET:
         if epsilon <= 0.2:
             epsilon_set.append(epsilon)
-    returns_df = pd.read_excel(mmc2_dir / "Datasets" / dgp / f"{dgp}.xlsx", sheet_name="Assets_Returns", header=None)
+    returns_df = get_portfolio_returns_df(mmc2_dir, dgp)
     num_time_windows = get_num_time_windows(len(returns_df))
     num_stocks = len(returns_df.columns)
     # NOTE when using empirical, set likelihood to 'empirical'
