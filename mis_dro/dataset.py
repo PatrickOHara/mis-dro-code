@@ -11,7 +11,7 @@ from sklearn.datasets import make_spd_matrix
 
 
 from bayesian_dro.Bayesian_DRO_continuous import data_generation, DGP_STD_TRUNCATED_NORMAL
-from .constants import IN_SAMPLE_TIME_WINDOW, OUT_OF_SAMPLE_TIME_WINDOW
+from .constants import IN_SAMPLE_TIME_WINDOW, OUT_OF_SAMPLE_TIME_WINDOW, DGP_NORMAL_KNOWN_VARIANCE_STD
 
 
 def sample_dgp(
@@ -41,6 +41,12 @@ def sample_dgp(
         return data_generation_outliers(
             num_observations, contamination, random_state=generator
         ).reshape((num_observations, 1))
+    if dgp == "contaminated_exp_large_outliers":
+        return data_generation_outliers(
+            num_observations, contamination, outlier_mean=1000.0, random_state=generator
+        ).reshape((num_observations, 1))
+    if dgp == "contaminated_exp_small_outliers":
+        return contaminated_exp_small_outliers(num_observations, contamination, random_state=generator).reshape((num_observations, 1))
     if dgp == "exponential":
         return expon.rvs(scale=20.0, size=num_observations, random_state=generator).reshape((num_observations, 1))
     if dgp == "gamma":
@@ -102,9 +108,37 @@ def sample_dgp(
 def data_generation_outliers(
     num_observations: int,
     contamination: float,
+    outlier_mean: float = 100.0,
     random_state: Optional[np.random.Generator] = None,
 ):
     """A contaminated exponential data-generating process (DGP)
+
+    Args:
+        num_observations: Number of observations from DGP
+        contamination: Ratio of contaminated observations (outliers)
+        outlier_mean: Location of the mean of the Gaussian to draw contaminated samples from
+        random_state: A numpy random generator, if provided
+
+    Notes:
+        Shuffles data to ensure anomalies are not grouped together
+    """
+    if not random_state:
+        random_state = np.random.default_rng()
+    cont_size = int(np.floor(contamination * num_observations))
+    n_real = num_observations - cont_size
+    data = expon.rvs(scale=20, size=n_real, random_state=random_state)
+    outl = norm.rvs(loc=outlier_mean, scale=0.5, size=cont_size, random_state=random_state) 
+    data = np.concatenate((data, outl), axis=0)
+    random_state.shuffle(data)  # shuffle the data in-place
+    return data
+
+def contaminated_exp_small_outliers(
+    num_observations: int,
+    contamination: float,
+    random_state = None,
+):
+    """A contaminated exponential data-generating process (DGP) with
+    small outliers coming from an exponential distribution with mean 0.01.
 
     Args:
         num_observations: Number of observations from DGP
@@ -119,7 +153,7 @@ def data_generation_outliers(
     cont_size = int(np.floor(contamination * num_observations))
     n_real = num_observations - cont_size
     data = expon.rvs(scale=20, size=n_real, random_state=random_state)
-    outl = norm.rvs(loc=100, scale=0.5, size=cont_size, random_state=random_state) 
+    outl = expon.rvs(scale=0.01, size=cont_size, random_state=random_state) 
     data = np.concatenate((data, outl), axis=0)
     random_state.shuffle(data)  # shuffle the data in-place
     return data
@@ -139,8 +173,8 @@ def contaminated_normal(num_observations: int, contamination: float, random_stat
         random_state = np.random.default_rng()
     cont_size = int(np.floor(contamination * num_observations))
     n_real = num_observations - cont_size
-    data = norm.rvs(loc=25, scale=DGP_STD_TRUNCATED_NORMAL, size=n_real, random_state=random_state) 
-    outl = norm.rvs(loc=75, scale=DGP_STD_TRUNCATED_NORMAL, size=cont_size, random_state=random_state) 
+    data = norm.rvs(loc=25, scale=DGP_NORMAL_KNOWN_VARIANCE_STD, size=n_real, random_state=random_state) 
+    outl = norm.rvs(loc=75, scale=DGP_NORMAL_KNOWN_VARIANCE_STD, size=cont_size, random_state=random_state) 
     data = np.concatenate((data, outl), axis=0)
     random_state.shuffle(data)  # shuffles the data in-place
     return data

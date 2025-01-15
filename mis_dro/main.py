@@ -123,6 +123,7 @@ def setup_mmd_dro_bas(
             npl_row["npl_uuid"] = str(uuid4())
             posterior_settings.append(npl_row)
         posterior_settings_df = pd.DataFrame(posterior_settings)
+        posterior_settings_df = posterior_settings_df.loc[posterior_settings_df["inference"].isin(["npl_mmd", "npl_wlb"])]
         posterior_settings_df.to_csv(npl_samples_dir / "npl_settings.csv", index=False)
 
         # then create SLURM file ready to sample the NPL on the cluster
@@ -136,7 +137,7 @@ def setup_mmd_dro_bas(
 
 
 @app.command(name="csv")
-def generate_csv(experiment_dir: Path):
+def generate_csv(experiment_dir: Path, npl_samples_dir: Optional[Path] = None):
     """Write a CSV file with all the results"""
     experiment_filepath = experiment_dir / "experiment.json"
     with open(experiment_filepath, "r", encoding="utf-8") as json_file:
@@ -152,7 +153,21 @@ def generate_csv(experiment_dir: Path):
         ]
     )
     result_df = result_df.join(df, on="uuid")
-    result_df.to_csv(experiment_dir / "results.csv", index=True)
+    result_df = result_df.reset_index()
+    if npl_samples_dir:
+        # load the settings for the NPL sampling
+        settings_df = pd.read_csv(npl_samples_dir / "npl_settings.csv")
+        # then, for each npl_uuid, load the times taken for each replication
+        times_df = pd.concat([pd.read_csv(npl_samples_dir / npl_uuid / f"npl_times_{npl_uuid}.csv") for npl_uuid in settings_df["npl_uuid"]])
+        # now merge the times and the npl_uuids together
+        result_df = result_df.merge(settings_df, how="left", on=POSTERIOR_GB_COLS)
+        result_df = result_df.merge(times_df, on=["npl_uuid", "replication"], how="left", suffixes=('', '_drop'))
+        # finally, replace the incorrect posterior times with the correct ones
+        result_df.loc[~(result_df['posterior_time_drop'].isna()), 'posterior_time'] = result_df['posterior_time_drop']
+        result_df = result_df.drop("posterior_time_drop", axis=1)
+    # save to a CSV file
+    print(result_df)
+    result_df.to_csv(experiment_dir / "results.csv", index=False)
 
 
 @app.command(name="experiment")
@@ -559,7 +574,7 @@ def sample_npl_for_experiment(
         # 2. sample from the posterior
         print()
         npl_start = datetime.now()
-        print(npl_start, "- Starting portfolio sample NPL for replication", replication)    
+        print(npl_start, "- Starting", dataset, "sample NPL for replication", replication)    
         theta_sample = sample_npl(
             data,
             npl_row["inference"],
