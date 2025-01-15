@@ -11,6 +11,7 @@ def get_kl_bdro_problem(
     num_posterior_samples: int,
     num_likelihood_samples: int,
     dim: int = 1,
+    is_portfolio: bool = False,
 ) -> cp.Problem:
     """Bayesian DRO as a cvxpy optimisaton problem.
 
@@ -68,9 +69,13 @@ def get_kl_bdro_problem(
     # examples of decision objectives are the newsvendor objective
     constraints = [
         x >= SMALLEST_X,
-        cp.sum(x) == 1,
-        # x <= LARGEST_X,   # NOTE this can cause some unexpected behaviour for large epsilon
+        # x <= LARGEST_X,   # NOTE this can cause some unexpected behaviour for large epsilon in newsvendor problem
     ] + [decision_objective(x, xi[i]) <= t[i] for i in range(num_posterior_samples)]
+
+    # TODO this is a temporary fix for portfolio : this whole function should
+    # really be a class that one can inherit from and add custom constraints
+    if is_portfolio:
+        constraints.append(cp.sum(x) == 1)
 
     return cp.Problem(bdro_obj, constraints)
 

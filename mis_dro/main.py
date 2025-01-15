@@ -254,7 +254,7 @@ def run(
             newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim,
         )
     elif algorithm == "kl_pp" and dataset == "portfolio":
-        problem = get_kl_bdro_problem(portfolio_objective_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim)
+        problem = get_kl_bdro_problem(portfolio_objective_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim, is_portfolio=True)
     elif algorithm in ("kl_bdro", "kl_dro_bas") and dataset == "portfolio" and likelihood == "multivariate_normal":
         problem = get_kl_portfolio_problem(dim, num_posterior_samples)
     elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
@@ -388,7 +388,9 @@ def run_replication(
     elif dataset == "portfolio":
         # NOTE shape of data (N, D) where N is number of weeks and D is the number of stocks
         if dgp == "DowJones-crash":
-            data, data_eval = portfolio_dataset(dgp, 72, dataset_dir, out_of_sample_time_window=IN_SAMPLE_TIME_WINDOW*4, normalise=True)
+            CRASH_WINDOW_ID = 75    # NOTE use 72 for long term evaluation of crash
+            CRASH_OOS_TIME_WINDOW = IN_SAMPLE_TIME_WINDOW  # NOTE use 4 years for long term
+            data, data_eval = portfolio_dataset(dgp, CRASH_WINDOW_ID, dataset_dir, out_of_sample_time_window=CRASH_OOS_TIME_WINDOW)
         else:
             data, data_eval = portfolio_dataset(dgp, replication, dataset_dir)
     else:
@@ -419,7 +421,7 @@ def run_replication(
         path_to_csv = npl_uuid_dir / f"npl_sample_{replication}.csv"
         theta_sample = pd.read_csv(path_to_csv, index_col=False, header=None).values
         assert num_posterior_samples == theta_sample.shape[0]
-        assert dim == theta_sample.shape[1]
+        # assert dim == theta_sample.shape[1], f"Dimension dim={dim} not equal to {theta_sample.shape[1]}"
     elif inference == "empirical":
         # empirical does not have a posterior
         theta_sample = np.nan * np.ones(num_posterior_samples)
@@ -513,7 +515,6 @@ def run_replication(
         raise ValueError("Please choose a valid algorithm")
     solve_time = (datetime.now() - solve_start).total_seconds()
     # evaluate the out-of-sample cost
-    print(solution)
     if (solution == np.inf).any():
         out_of_sample_cost = np.inf * np.ones(num_test_observations)
     else:

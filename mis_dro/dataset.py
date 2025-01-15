@@ -215,7 +215,6 @@ def portfolio_dataset(
     mmc2_dir: Path,
     in_sample_time_window: int = IN_SAMPLE_TIME_WINDOW,
     out_of_sample_time_window: int = OUT_OF_SAMPLE_TIME_WINDOW,
-    normalise: bool = False,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Gets the training and test datasets for the porfolio problem.
 
@@ -232,13 +231,6 @@ def portfolio_dataset(
         Download data from https://www.data-in-brief.com/article/S2352-3409(16)30399-7/fulltext
     """
     returns_df = get_portfolio_returns_df(mmc2_dir, dgp)
-    if normalise:
-        print(returns_df.isna().any())
-        returns_mean = returns_df.mean()
-        returns_std = returns_df.std()
-        print(returns_mean, returns_std)
-        returns_df = returns_df.apply(lambda x: (x - returns_mean)/returns_std, axis=1)
-        print(returns_df)
     num_time_windows = get_num_time_windows(len(returns_df))
     assert time_window_id < num_time_windows
     start_training_week = time_window_id * 12 # inclusive
@@ -246,7 +238,6 @@ def portfolio_dataset(
     start_test_week = end_training_week # inclusive
     end_test_week = start_test_week + out_of_sample_time_window # not inclusive
     training_data = returns_df.iloc[start_training_week: end_training_week].values
-    print(training_data)
     test_data = returns_df.iloc[start_test_week: end_test_week].values
     return training_data, test_data
 
