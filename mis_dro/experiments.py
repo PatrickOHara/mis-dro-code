@@ -170,12 +170,13 @@ def kl_newsvendor_exp_1d() -> List[Dict]:
     num_test_observations = NUM_TEST_OBSERVATIONS
     num_certify_points = 200
     for contamination, num_observations, (algorithm, dgp, likelihood, inference, posterior, dim), epsilon in itertools.product(
-        [0.0],
+        [0.0], #, 0.1, 0.2],
         [20],
         [   
 
-            ("kl_dro_bas", "bimodal_multivariate_gaussian", "multivariate_normal_known_cov", "bayes", "multivariate_normal_known_cov", 5),
-            ("kl_pp", "bimodal_multivariate_gaussian", "multivariate_normal_known_cov", "bayes", "multivariate_normal_known_cov", 5),
+            # ("kl_dro_bas", "bimodal_multivariate_gaussian", "multivariate_normal_known_cov", "bayes", "multivariate_normal_known_cov", 5),
+            # ("kl_pp", "bimodal_multivariate_gaussian", "multivariate_normal_known_cov", "bayes", "multivariate_normal_known_cov", 5),
+            ("kl_bdro", "bimodal_multivariate_gaussian", "multivariate_normal_known_cov", "bayes", "multivariate_normal_known_cov", 5)
             # ("kl_dro_bas", "bimodal_univariate_gaussian", "normal_known_var", "bayes", "normal_known_var", 1),
             # ("kl_bdro", "bimodal_univariate_gaussian", "normal_known_var", "bayes", "normal_known_var", 1),
             # ("kl_pp", "bimodal_univariate_gaussian", "normal_known_var", "bayes", "normal_known_var", 1),
@@ -184,6 +185,9 @@ def kl_newsvendor_exp_1d() -> List[Dict]:
             # ("kl_pp", "contaminated_normal", "normal_known_var", "bayes",  "normal_known_var", 1),
             # ("kl_bdro", "contaminated_normal", "normal_known_var", "bayes", "normal_known_var", 1),
             # ("kl_bdro", "contaminated_normal", "normal_known_var", "npl_mmd", "npl", 1),
+            # ("kl_pp", "contaminated_exp", "exponential", "bayes", "gamma", 1),
+            # ("kl_dro_bas", "contaminated_exp", "exponential", "bayes", "gamma", 1),
+            # ("kl_bdro", "contaminated_exp", "exponential", "bayes", "gamma", 1),
         ],
         BAS_DRO_EPSILON_SET,
     ):
@@ -200,7 +204,9 @@ def kl_newsvendor_exp_1d() -> List[Dict]:
             "dataset": "newsvendor",
             "dgp": dgp,
             "dim": dim,
+            "njobs": 1,
             "epsilon": epsilon,
+            "ignore_dpp": True,
             "inference": inference,
             "lengthscale": -1.0,
             "likelihood": likelihood,
@@ -230,11 +236,13 @@ def mmd_newsvendor_exp_1d() -> List[Dict]:
             # ("empirical_mmd", "contaminated_normal", "empirical", "empirical", "npl", 1)
             # ("dro_bas_mmd", "bimodal_univariate_gaussian", "normal_known_var", "npl_mmd", "npl", 1),
             # ("empirical_mmd", "bimodal_univariate_gaussian", "empirical", "empirical", "empirical", 1)
-            ("dro_bas_mmd", "bimodal_multivariate_gaussian", "multivariate_normal_known_cov", "npl_mmd", "npl", 5), 
-            ("empirical_mmd", "bimodal_multivariate_gaussian", "empirical", "empirical", "empirical", 5),
+            # ("dro_bas_mmd", "bimodal_multivariate_gaussian", "multivariate_normal_known_cov", "npl_mmd", "npl", 5), 
+            # ("empirical_mmd", "bimodal_multivariate_gaussian", "empirical", "empirical", "empirical", 5),
+            ("dro_bas_mmd", "contaminated_exp", "exponential", "npl_mmd", "npl", 1), 
+            ("empirical_mmd", "contaminated_exp", "exponential", "empirical", "empirical", 1),
 
         ],
-        [0.0],
+        [0.0, 0.1, 0.2],
         ROBAS_DRO_EPSILON_SET,
     ):
         # if inference == "bayes":
