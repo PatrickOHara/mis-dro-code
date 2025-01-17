@@ -46,17 +46,15 @@ class AlgorithmName(StrEnum):
 
 
 class NiceNameDGP(StrEnum):
-    contaminated_exp = "Contaminated Exp DGP"
-    contaminated_exp_large_outliers = "Large Outliers Exp"
-    contaminated_exp_small_outliers = "Small Outliers Exp"
+    contaminated_exp = "Contaminated Exp"
     exponential = "Exponential DGP"
     normal = "Normal DGP"
     multivariate_normal = "5D Normal DGP"
     truncated_normal = "Truncated Normal DGP"
     DowJones = "DowJones"
-    bimodal_univariate_gaussian = "Bimodal 1D Normal DGP"
-    bimodal_multivariate_gaussian = "Bimodal 5D Normal DGP"
-    contaminated_normal = "Contaminated Normal DGP"
+    bimodal_univariate_gaussian = "Bimodal 1D Normal"
+    bimodal_multivariate_gaussian = "Bimodal 5D Normal"
+    contaminated_normal = "Contaminated Normal"
 
 
 

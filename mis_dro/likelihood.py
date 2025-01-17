@@ -55,7 +55,7 @@ def sample_likelihood(
             cov = (5**2)*np.eye(dim)
             # vec_triu = theta_sample[i,dim:]
             # cov = reconstruct_covariance_from_triu(vec_triu, dim)
-            xi[i] = generator.multivariate_normal(mu, cov, size=num_likelihood_samples)
+            xi[i] = generator.multivariate_normal(mu, cov, size=num_likelihood_samples).reshape((num_likelihood_samples,dim))
     elif likelihood == "normal_known_var":
         for i in range(num_posterior_samples):
             xi[i] = generator.normal(
