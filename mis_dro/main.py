@@ -42,6 +42,7 @@ from .newsvendor import newsvendor_cost_cvxpy
 from .npl import sample_npl
 from .optimise import get_kl_bdro_problem, DRO_BAS_MMD
 from .portfolio import get_kl_portfolio_problem, bdro_portfolio_posterior_samples, portfolio_objective_cvxpy
+from .preprocessing import normalise_by_dimension
 from .gaussian_kernel import *
 
 app = typer.Typer(name="misdro")
@@ -363,6 +364,7 @@ def run_replication(
     inference: str = "bayes",
     lengthscale: float = -1.0,
     likelihood: str = "exponential",
+    normalise: bool = False,
     npl_uuid_dir: Optional[Path] = None,
     num_certify_points: int = NUM_CERTIFY,
     num_likelihood_samples: int = NUM_LIKELIHOOD_SAMPLES,
@@ -393,6 +395,9 @@ def run_replication(
             data, data_eval = portfolio_dataset(dgp, CRASH_WINDOW_ID, dataset_dir, out_of_sample_time_window=CRASH_OOS_TIME_WINDOW)
         else:
             data, data_eval = portfolio_dataset(dgp, replication, dataset_dir)
+        # NOTE only normalise training data
+        if normalise:
+            data = normalise_by_dimension(data)
     else:
         raise NotImplementedError(f"Dataset not implemented: {dataset}")
     dgp_time = (datetime.now() - dgp_start).total_seconds()
@@ -539,7 +544,7 @@ def run_replication(
         "out_of_sample_cost": list(out_of_sample_cost),
     }
 
-POSTERIOR_GB_COLS = ["contamination", "dataset", "dgp", "dim", "inference", "lengthscale", "likelihood", "num_observations", "num_posterior_samples", "num_replications", "posterior"]
+POSTERIOR_GB_COLS = ["contamination", "dataset", "dgp", "dim", "inference", "lengthscale", "likelihood", "normalise", "num_observations", "num_posterior_samples", "num_replications", "posterior"]
 
 def get_npl_uuid(posterior_settings_df: pd.DataFrame, params: dict) -> str:
     params_tuple = tuple([params[key] for key in POSTERIOR_GB_COLS])
@@ -574,6 +579,8 @@ def sample_npl_for_experiment(
             )
         elif dataset == "portfolio":
             data, _ = portfolio_dataset(dgp, replication, dataset_dir)
+            if npl_row["normalise"]:
+                data = normalise_by_dimension(data)
         else:
             raise NotImplementedError(f"Dataset not implemented: {dataset}")
 
