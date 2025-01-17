@@ -518,7 +518,7 @@ def mmd_portfolio(mmc2_dir: Path) -> List[Dict]:
             "num_likelihood_samples": num_likelihood_samples,
             "num_observations": IN_SAMPLE_TIME_WINDOW,
             "num_posterior_samples": num_posterior_samples,
-            "num_replications": 3,
+            "num_replications": num_time_windows,
             "num_test_observations": OUT_OF_SAMPLE_TIME_WINDOW,
             "posterior": "npl",
             "uuid": str(uuid4()),  # uniquely identify a run
