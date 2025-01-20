@@ -504,7 +504,7 @@ def mmd_portfolio(mmc2_dir: Path) -> List[Dict]:
     num_time_windows = get_num_time_windows(len(returns_df))
     num_stocks = len(returns_df.columns)
     # NOTE when using empirical, set likelihood to 'empirical'
-    for (algorithm, likelihood), epsilon in itertools.product(
+    for (algorithm, likelihood), epsilon, in itertools.product(
         [
             ("dro_bas_mmd", "multivariate_normal"),
             ("empirical_mmd", "empirical"),
@@ -513,30 +513,34 @@ def mmd_portfolio(mmc2_dir: Path) -> List[Dict]:
     ):
         if likelihood == "empirical":
             inference = "empirical"
+            eta_set = [np.nan]
         else:
             inference = "npl_mmd"
-        params = {
-            "algorithm": algorithm,
-            "contamination": 0.0,
-            "dataset": "portfolio",
-            "dgp": dgp,
-            "dim": num_stocks,
-            "epsilon": epsilon,
-            "inference": inference,
-            "kernel_name": "k_comp",
-            "lengthscale": -1.0,        
-            "likelihood": likelihood,
-            "normalise": True,
-            "num_certify_points": NUM_CERTIFY,
-            "num_likelihood_samples": num_likelihood_samples,
-            "num_observations": IN_SAMPLE_TIME_WINDOW,
-            "num_posterior_samples": num_posterior_samples,
-            "num_replications": num_time_windows,
-            "num_test_observations": OUT_OF_SAMPLE_TIME_WINDOW,
-            "posterior": "npl",
-            "uuid": str(uuid4()),  # uniquely identify a run
-        }
-        experiment.append(params)
+            eta_set = [0.1]
+        for eta in eta_set:
+            params = {
+                "algorithm": algorithm,
+                "contamination": 0.0,
+                "dataset": "portfolio",
+                "dgp": dgp,
+                "dim": num_stocks,
+                "epsilon": epsilon,
+                "eta": eta,
+                "inference": inference,
+                "lengthscale": -1.0,
+                "kernel_name": "k_comp",        
+                "likelihood": likelihood,
+                "normalise": True,
+                "num_certify_points": NUM_CERTIFY,
+                "num_likelihood_samples": num_likelihood_samples,
+                "num_observations": IN_SAMPLE_TIME_WINDOW,
+                "num_posterior_samples": num_posterior_samples,
+                "num_replications": num_time_windows,
+                "num_test_observations": OUT_OF_SAMPLE_TIME_WINDOW,
+                "posterior": "npl",
+                "uuid": str(uuid4()),  # uniquely identify a run
+            }
+            experiment.append(params)
     return experiment
 
 def mmd_portfolio_crash(mmc2_dir: Path) -> List[Dict]:

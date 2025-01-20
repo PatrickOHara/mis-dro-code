@@ -26,6 +26,7 @@ from .bayes_conjugates import (
 from .constants import (
     CONTAMINATION_LEVEL,
     IN_SAMPLE_TIME_WINDOW,
+    NPL_ETA,
     NUM_LIKELIHOOD_SAMPLES,
     NUM_OBSERVATIONS,
     NUM_POSTERIOR_SAMPLES,
@@ -231,12 +232,14 @@ def run(
     dgp: str = "truncated_normal",
     dim: int = 1,
     epsilon: float = 1.0,
+    eta: float = NPL_ETA,
     ignore_dpp: bool = False,
     inference: str = "bayes",
     kernel_name: str = "k_jax",
     lengthscale: float = -1.0,
     likelihood: str = "exponential",
     njobs: int = -1,
+    normalise: bool = False,
     npl_samples_dir: Optional[Path] = None,
     num_likelihood_samples: int = NUM_LIKELIHOOD_SAMPLES,
     num_observations: int = NUM_OBSERVATIONS,
@@ -288,15 +291,6 @@ def run(
             ignore_dpp = True
             njobs = 1
 
-    if inference in ("npl_wlb", "npl_mmd"):
-        posterior_df = pd.read_csv(npl_samples_dir / "npl_settings.csv").set_index(POSTERIOR_GB_COLS)
-        npl_params = dict(zip(POSTERIOR_GB_COLS, [contamination, dataset, dgp, dim, inference, kernel_name, lengthscale, likelihood, num_observations, num_posterior_samples, num_replications, posterior]))
-        print(npl_params)
-        npl_uuid = get_npl_uuid(posterior_df, npl_params)
-        npl_uuid_dir = npl_samples_dir / npl_uuid
-    else:
-        npl_uuid_dir = None
-
     params = {
         "algorithm": algorithm,
         "contamination": contamination,
@@ -305,20 +299,32 @@ def run(
         "dgp": dgp,
         "dim": dim,
         "epsilon": epsilon,
+        "eta": eta,
         "ignore_dpp": ignore_dpp,
         "inference": inference,
         "lengthscale": lengthscale,
         "likelihood": likelihood,
-        "npl_uuid_dir": npl_uuid_dir,
+        "normalise": normalise,
         "num_certify_points": num_certify_points,
         "num_likelihood_samples": num_likelihood_samples,
         "num_observations": num_observations,
         "num_posterior_samples": num_posterior_samples,
+        "num_replications": num_replications,
         "num_test_observations": num_test_observations,
         "posterior": posterior,
         "uuid": uuid,
         "verbose": verbose,
     }
+
+    if inference in ("npl_wlb", "npl_mmd"):
+        posterior_df = pd.read_csv(npl_samples_dir / "npl_settings.csv").set_index(POSTERIOR_GB_COLS)
+        npl_params = {key: params[key] for key in POSTERIOR_GB_COLS}
+        npl_uuid = get_npl_uuid(posterior_df, npl_params)
+        params["npl_uuid_dir"] = npl_samples_dir / npl_uuid
+    else:
+        params["npl_uuid_dir"] = None
+    params.pop("num_replications")  # popped because we don't need to pass this to the run_replication method, but it is needed above for getting the npl_uuid
+
     if njobs == 1:
         all_solve_start = datetime.now()
         list_of_replication_stats = []
@@ -362,6 +368,7 @@ def run_replication(
     dgp: str = "truncated_normal",
     dim: int = 1,
     epsilon: float = 1.0,
+    eta: float = NPL_ETA,
     ignore_dpp: bool = False,
     inference: str = "bayes",
     lengthscale: float = -1.0,
@@ -547,7 +554,22 @@ def run_replication(
         "out_of_sample_cost": list(out_of_sample_cost),
     }
 
-POSTERIOR_GB_COLS = ["contamination", "dataset", "dgp", "dim", "inference", "kernel_name", "lengthscale", "likelihood", "num_observations", "num_posterior_samples", "num_replications", "posterior"]
+POSTERIOR_GB_COLS = [
+    "contamination",
+    "dataset",
+    "dgp",
+    "dim",
+    "eta",
+    "inference",
+    "kernel_name",
+    "lengthscale",
+    "likelihood",
+    "normalise",
+    "num_observations",
+    "num_posterior_samples",
+    "num_replications",
+    "posterior"
+]
 
 def get_npl_uuid(posterior_settings_df: pd.DataFrame, params: dict) -> str:
     params_tuple = tuple([params[key] for key in POSTERIOR_GB_COLS])
@@ -601,6 +623,7 @@ def sample_npl_for_experiment(
             generator=generator,
             dim=npl_row["dim"],
             kernel_name=npl_row["kernel_name"],
+            eta=npl_row["eta"],
         )
         npl_finish = datetime.now()
         total_seconds =  (datetime.now() - npl_start).total_seconds()
