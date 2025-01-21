@@ -2,7 +2,7 @@
 
 import numpy as np
 
-def normalise_by_dimension(data: np.ndarray) -> np.ndarray:
+def normalise_by_dimension(data: np.ndarray, mean: np.array, std: np.array) -> np.ndarray:
     """For each dimension, normalise by subtracting the mean
     and dividing by the standard deviation
 
@@ -12,6 +12,8 @@ def normalise_by_dimension(data: np.ndarray) -> np.ndarray:
     Returns:
         Normalised dataset
     """
-    return np.apply_along_axis(lambda x: (x - np.mean(x))/np.std(x), 0, data)
-
+    normalised_data = np.zeros_like(data)
+    for i in range(data.shape[1]):
+        normalised_data[:,i] = (data[:,i] - mean[i])/std[i]
+    return normalised_data
 

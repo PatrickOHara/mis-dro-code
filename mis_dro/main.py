@@ -144,17 +144,31 @@ def generate_csv(experiment_dir: Path, npl_samples_dir: Optional[Path] = None):
     experiment_filepath = experiment_dir / "experiment.json"
     with open(experiment_filepath, "r", encoding="utf-8") as json_file:
         experiment = json.load(json_file)
-    df = pd.DataFrame(experiment).set_index("uuid")
-    result_df = pd.concat(
-        [
-            pd.read_csv(
-                experiment_dir / f"{uuid}.csv", index_col=["uuid", "replication"]
-            )
-            for uuid in df.index
-            if (experiment_dir / f"{uuid}.csv").exists()
-        ]
-    )
-    result_df = result_df.join(df, on="uuid")
+    experiment_df = pd.DataFrame(experiment).set_index("uuid")
+    print("Loading and concatenating", len(experiment_df), "CSV files into a pandas dataframe...")
+    result_df = pd.DataFrame()
+    result_list = []
+    failed_uuid_list = []
+    missing_uuid_list = []
+    for uuid in experiment_df.index:
+        if (experiment_dir / f"{uuid}.csv").exists():
+            try:
+                result_list.append(pd.read_csv(
+                    experiment_dir / f"{uuid}.csv", index_col=["uuid", "replication"]
+                ))
+            except pd.errors.ParserError:
+                failed_uuid_list.append(uuid)
+        else:
+            missing_uuid_list.append(uuid)
+
+    print("The following UUIDs did not have a CSV file:")
+    print(missing_uuid_list)
+    print()
+    print("The following UUIDs failed due to a pandas.errors.ParserError:")
+    print(failed_uuid_list)
+    result_df = pd.concat([result_df] + result_list)
+
+    result_df = result_df.join(experiment_df, on="uuid")
     result_df = result_df.reset_index()
     if npl_samples_dir:
         # load the settings for the NPL sampling
@@ -195,12 +209,13 @@ def run_experiment(
 
 
 @app.command(name="batch")
-def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool = False, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), npl_samples_dir: Optional[Path] = None):
-    print(datetime.now(), "Running batch from index", start)
+def batch(experiment_dir: Path, batch_id: int, batch_size: int, only_missing: bool = False, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), npl_samples_dir: Optional[Path] = None):
+    print(datetime.now(), "Running batch from array index", batch_id)
     print()
     filepath = experiment_dir / "experiment.json"
     with open(filepath, "r", encoding="utf-8") as json_file:
         experiment = json.load(json_file)
+    start = batch_id * batch_size
     batch_experiment = experiment[start: min(start + batch_size, len(experiment))]
     for params in batch_experiment:
         if not ((experiment_dir / params["uuid"]).exists() and only_missing):
@@ -255,7 +270,7 @@ def run(
     if uuid:
         print(uuid)
     print("DGP:", dgp, " - ALGORITHM:", algorithm, " - NUM LIKELIHOOD SAMPLES:", num_likelihood_samples, " - POSTERIOR:", posterior, "- DATASET:", dataset, "- DIM:", dim)
-    if algorithm in ("kl_bdro", "kl_dro_bas", "kl_pp") and dataset == "newsvendor":
+    if algorithm in ("kl_bdro", "kl_dro_bas", "kl_pp", "kl_empirical") and dataset == "newsvendor":
         problem = get_kl_bdro_problem(
             newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim,
         )
@@ -461,7 +476,8 @@ def run_replication(
             num_likelihood_samples,
             num_posterior_samples,
             generator=generator,
-        ) # num_post x num_lkh x dim
+            inference=inference,
+        )
     likelihood_time = (datetime.now() - likelihood_start).total_seconds()
 
     # 4. run the chosen DRO algorithm
@@ -486,7 +502,7 @@ def run_replication(
         problem.solve(solver=cp.MOSEK, verbose=verbose, ignore_dpp=ignore_dpp, accept_unknown=True)
         solution = problem.var_dict["x"].value
         setup_time = problem.solver_stats.setup_time
-    elif algorithm in ("kl_bdro", "kl_dro_bas", "kl_pp"):
+    elif algorithm in ("kl_bdro", "kl_dro_bas", "kl_pp", "kl_empirical"):
         if epsilon - log_partition_constant < 0:
             # NOTE the optimisation problem is unbounded below
             solution = np.inf * np.ones(dim)
@@ -495,6 +511,7 @@ def run_replication(
         else:
             # set parameters then solve
             problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon - log_partition_constant])
+            xi = xi.reshape((num_posterior_samples, num_likelihood_samples, dim))
             for i in range(num_posterior_samples):
                 problem.param_dict[f"xi_{i}"].value = xi[i]
             # NOTE the MOSEK 'accept_unknown' argument is needed due to https://github.com/cvxpy/cvxpy/pull/2117
