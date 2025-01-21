@@ -13,6 +13,7 @@ class AlgorithmLineStyle(StrEnum):
     bdro_grid_search = "dashed"
     kl_bdro = "dotted"
     kl_dro_bas = "dotted"
+    kl_empirical = "dotted"
     dro_bas_mmd = "dotted"
     empirical_mmd = "dotted"
     kl_pp = "dotted"
@@ -27,8 +28,9 @@ class AlgorithmColor(StrEnum):
     kl_bdro = "#FF800E"
     # kl_dro_bas = "#8A2BE2" 
     kl_dro_bas = "#006BA4"
+    kl_empirical = "#999999"
     empirical_mmd = "#999999"
-    kl_pp = "red"
+    kl_pp = "#984ea3"
 
 
 
@@ -41,6 +43,7 @@ class AlgorithmName(StrEnum):
     kl_bdro = "BDRO"
     kl_dro_bas = "DRO-BAS$_{PE}$"
     kl_pp = "DRO-BAS$_{PP}$"
+    kl_empirical = "Empirical KL"
 
 
 
@@ -83,6 +86,7 @@ ALGORITHM_INFERENCE_MARKERS = {
     ("kl_bdro", "npl_mmd"): "x",
     ("dro_bas_mmd", "npl_mmd"): "*",
     ("empirical_mmd", "empirical"): "+",
+    ("kl_empirical", "empirical"): "x",
 }
 
 

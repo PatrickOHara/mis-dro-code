@@ -26,6 +26,7 @@ from .constants import (
     IN_SAMPLE_TIME_WINDOW,
     OUT_OF_SAMPLE_TIME_WINDOW,
     ROBAS_DRO_EPSILON_SET,
+    SMALL_BAS_DRO_EPSILON_SET,
 )
 from .dataset import get_num_time_windows, get_portfolio_returns_df
 
@@ -80,45 +81,55 @@ def get_experiment(experiment_name: ExperimentName, dataset_dir: Optional[Path] 
 def kl_newsvendor_5d() -> List[Dict]:
     """KL univariate newsvendor: compare our Bayesian ambiguity set against Bayesian DRO"""
     experiment = []
-    for total_model_samples, algorithm, num_observations, (dgp, likelihood, posterior), epsilon in itertools.product(
-        BAS_TOTAL_MODEL_SAMPLES,
-        ["kl_dro_bas", "kl_pp", "kl_bdro"],
-        [20],
+    for algorithm, num_observations, (dgp, likelihood, posterior), epsilon in itertools.product(
+        ["kl_pp", "kl_dro_bas", "kl_bdro", "kl_empirical"],
+        [NUM_OBSERVATIONS],
         [
             ("multivariate_normal", "multivariate_normal", "normal_inverse_wishart"),
         ],
         BAS_DRO_EPSILON_SET,
     ):
-        params = {
-            "algorithm": algorithm,
-            "contamination": 0.0,
-            "dataset": "newsvendor",
-            "dgp": dgp,
-            "dim": 5,
-            "epsilon": epsilon,
-            "ignore_dpp": True,
-            "inference": "bayes",
-            "lengthscale": -1.0,
-            "likelihood": likelihood,
-            "njobs": 1,
-            "num_likelihood_samples": get_num_likelihood_samples("newsvendor", total_model_samples, algorithm),
-            "num_observations": num_observations,
-            "num_posterior_samples": get_num_posterior_samples("newsvendor", total_model_samples, algorithm),
-            "num_replications": BAS_NUM_REPLICATIONS,
-            "num_test_observations": NUM_TEST_OBSERVATIONS,
-            "posterior": posterior,
-            "uuid": str(uuid4()),  # uniquely identify a run
-        }
-        experiment.append(params)
+        if algorithm == "kl_empirical":
+            total_model_samples_list = [0]
+            likelihood = "empirical"
+            posterior = "empirical"
+            inference = "empirical"
+        else:
+            total_model_samples_list = BAS_TOTAL_MODEL_SAMPLES
+            inference = "bayes"
+        for total_model_samples in total_model_samples_list:
+            params = {
+                "algorithm": algorithm,
+                "contamination": 0.0,
+                "dataset": "newsvendor",
+                "dgp": dgp,
+                "dim": 5,
+                "epsilon": epsilon,
+                "ignore_dpp": True,
+                "inference": inference,
+                "lengthscale": -1.0,
+                "likelihood": likelihood,
+                "njobs": 1,
+                "num_likelihood_samples": get_num_likelihood_samples("newsvendor", num_observations, total_model_samples, algorithm),
+                "num_observations": num_observations,
+                "num_posterior_samples": get_num_posterior_samples("newsvendor", total_model_samples, algorithm),
+                "num_replications": BAS_NUM_REPLICATIONS,
+                "num_test_observations": NUM_TEST_OBSERVATIONS,
+                "posterior": posterior,
+                "uuid": str(uuid4()),  # uniquely identify a run
+            }
+            experiment.append(params)
     return experiment
 
-def get_num_likelihood_samples(dataset: str, num_total_samples: int, algorithm: str) -> int:
+def get_num_likelihood_samples(dataset: str, num_observations: int, num_total_samples: int, algorithm: str) -> int:
     if algorithm == "kl_bdro" and dataset == "portfolio":
         return 1
     if algorithm == "kl_bdro":
         return int(np.sqrt(num_total_samples))
     if algorithm in ("kl_dro_bas", "kl_pp"):
         return num_total_samples
+    if algorithm == "kl_empirical":
+        return num_observations
     raise NotImplementedError()
 
 def get_num_posterior_samples(dataset: str, num_total_samples: int, algorithm: str) -> int:
@@ -128,47 +139,59 @@ def get_num_posterior_samples(dataset: str, num_total_samples: int, algorithm: s
         return int(np.sqrt(num_total_samples))
     if algorithm in ("kl_dro_bas", "kl_pp"):
         return 1
+    if algorithm == "kl_empirical":
+        return 1
     raise NotImplementedError()
 
 def kl_newsvendor_1d() -> List[Dict]:
     """KL univariate newsvendor: compare our Bayesian ambiguity set against Bayesian DRO"""
     experiment = []
-    for total_model_samples, algorithm, num_observations, (dgp, likelihood, posterior), epsilon in itertools.product(
-        BAS_TOTAL_MODEL_SAMPLES,
-        ["kl_pp", "kl_dro_bas", "kl_bdro"],
-        [5, 20, 100],
+    for algorithm, num_observations, (dgp, likelihood, posterior), epsilon in itertools.product(
+        ["kl_pp", "kl_dro_bas", "kl_bdro", "kl_empirical"],
+        [NUM_OBSERVATIONS], # [5, 20, 100],
         [
-            # ("normal", "normal", "normal_gamma"),
+            ("normal", "normal", "normal_gamma"),
             # ("truncated_normal", "normal", "normal_gamma"),
             ("exponential", "exponential", "gamma"),
             # ("contaminated_exp", "exponential", "gamma"),
         ],
         BAS_DRO_EPSILON_SET,
+        # SMALL_BAS_DRO_EPSILON_SET,
     ):
+        if algorithm == "kl_empirical":
+            total_model_samples_list = [0]
+            likelihood = "empirical"
+            posterior = "empirical"
+            inference = "empirical"
+        else:
+            # total_model_samples_list = BAS_TOTAL_MODEL_SAMPLES
+            total_model_samples_list = [3600, 10000]
+            inference = "bayes"
         contamination = 0.0
         if dgp == "contaminated_exp":
             contamination = CONTAMINATION_LEVEL
-        params = {
-            "algorithm": algorithm,
-            "contamination": contamination,
-            "dataset": "newsvendor",
-            "dgp": dgp,
-            "dim": 1,
-            "epsilon": epsilon,
-            "ignore_dpp": True,
-            "inference": "bayes",
-            "lengthscale": -1.0,
-            "likelihood": likelihood,
-            "njobs": 1,
-            "num_likelihood_samples": get_num_likelihood_samples("newsvendor", total_model_samples, algorithm),
-            "num_observations": num_observations,
-            "num_posterior_samples": get_num_posterior_samples("newsvendor", total_model_samples, algorithm),
-            "num_replications": BAS_NUM_REPLICATIONS,
-            "num_test_observations": NUM_TEST_OBSERVATIONS,
-            "posterior": posterior,
-            "uuid": str(uuid4()),  # uniquely identify a run
-        }
-        experiment.append(params)
+        for total_model_samples in total_model_samples_list:
+            params = {
+                "algorithm": algorithm,
+                "contamination": contamination,
+                "dataset": "newsvendor",
+                "dgp": dgp,
+                "dim": 1,
+                "epsilon": epsilon,
+                "ignore_dpp": True,
+                "inference": inference,
+                "lengthscale": -1.0,
+                "likelihood": likelihood,
+                "njobs": 1,
+                "num_likelihood_samples": get_num_likelihood_samples("newsvendor", num_observations, total_model_samples, algorithm),
+                "num_observations": num_observations,
+                "num_posterior_samples": get_num_posterior_samples("newsvendor", total_model_samples, algorithm),
+                "num_replications": BAS_NUM_REPLICATIONS,
+                "num_test_observations": NUM_TEST_OBSERVATIONS,
+                "posterior": posterior,
+                "uuid": str(uuid4()),  # uniquely identify a run
+            }
+            experiment.append(params)
     return experiment
 
 def kl_newsvendor_exp_1d() -> List[Dict]:
@@ -517,7 +540,7 @@ def mmd_portfolio(mmc2_dir: Path) -> List[Dict]:
                 "inference": inference,
                 "lengthscale": -1.0,        
                 "likelihood": likelihood,
-                "normalise": True,
+                "normalise": False,
                 "num_certify_points": NUM_CERTIFY,
                 "num_likelihood_samples": num_likelihood_samples,
                 "num_observations": IN_SAMPLE_TIME_WINDOW,
@@ -600,7 +623,7 @@ def kl_portfolio_crash(mmc2_dir: Path) -> List[Dict]:
             "lengthscale": -1.0,
             "likelihood": "multivariate_normal",
             "njobs": 1,
-            "num_likelihood_samples": get_num_likelihood_samples("portfolio", num_samples, algorithm),
+            "num_likelihood_samples": get_num_likelihood_samples("portfolio", IN_SAMPLE_TIME_WINDOW, num_samples, algorithm),
             "num_observations": IN_SAMPLE_TIME_WINDOW,
             "num_posterior_samples": get_num_posterior_samples("portfolio", num_samples, algorithm),
             "num_replications": 1,
@@ -615,15 +638,24 @@ def kl_portfolio(mmc2_dir: Path) -> List[Dict]:
     """KL Portfolio experiment with DRO-BAS vs BDRO"""
     experiment = []
     for algorithm, dgp, epsilon in itertools.product(
-        ["kl_dro_bas", "kl_bdro", "kl_pp"],
+        ["kl_dro_bas", "kl_bdro", "kl_pp", "kl_empirical"],
         ["DowJones"],
         PORTFOLIO_EPSILON_SET,
     ):
-        num_samples_list = [1]
-        if algorithm in ("kl_bdro", "kl_pp"):
-            num_samples_list = [100, 400, 900]            
-
-        for num_samples in num_samples_list:
+        if algorithm == "kl_empirical":
+            total_model_samples_list = [0]
+            likelihood = "empirical"
+            posterior = "empirical"
+            inference = "empirical"
+        else:
+            if algorithm == "kl_dro_bas":
+                total_model_samples_list = [1]
+            else:
+                total_model_samples_list = BAS_TOTAL_MODEL_SAMPLES
+            likelihood = "multivariate_normal"
+            posterior = "normal_inverse_wishart"
+            inference = "bayes"
+        for num_samples in total_model_samples_list:
             returns_df = get_portfolio_returns_df(mmc2_dir, dgp)
             num_time_windows = get_num_time_windows(len(returns_df))
             num_stocks = len(returns_df.columns)
@@ -635,16 +667,16 @@ def kl_portfolio(mmc2_dir: Path) -> List[Dict]:
                 "dim": num_stocks,
                 "epsilon": epsilon,
                 "ignore_dpp": True,
-                "inference": "bayes",
-                "lengthscale": -1.0,
-                "likelihood": "multivariate_normal",
+                "inference": inference,
+                "likelihood": likelihood,
                 "njobs": 1,
-                "num_likelihood_samples": get_num_likelihood_samples("portfolio", num_samples, algorithm),
+                "normalise": False,
+                "num_likelihood_samples": get_num_likelihood_samples("portfolio", IN_SAMPLE_TIME_WINDOW, num_samples, algorithm),
                 "num_observations": IN_SAMPLE_TIME_WINDOW,
                 "num_posterior_samples": get_num_posterior_samples("portfolio", num_samples, algorithm),
                 "num_replications": num_time_windows,
                 "num_test_observations": OUT_OF_SAMPLE_TIME_WINDOW,
-                "posterior": "normal_inverse_wishart",
+                "posterior": posterior,
                 "uuid": str(uuid4()),  # uniquely identify a run
             }
             experiment.append(params)
