@@ -276,6 +276,8 @@ def run(
         )
     elif algorithm == "kl_pp" and dataset == "portfolio":
         problem = get_kl_bdro_problem(portfolio_objective_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim, is_portfolio=True)
+    elif algorithm == "kl_empirical" and dataset == "portfolio":
+        problem = get_kl_bdro_problem(portfolio_objective_cvxpy, 1, num_observations, dim=dim, is_portfolio=True)
     elif algorithm in ("kl_bdro", "kl_dro_bas") and dataset == "portfolio" and likelihood == "multivariate_normal":
         problem = get_kl_portfolio_problem(dim, num_posterior_samples)
     elif algorithm in ("dro_bas_mmd", "empirical_mmd"):

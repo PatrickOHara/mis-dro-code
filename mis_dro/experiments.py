@@ -664,8 +664,12 @@ def kl_portfolio(mmc2_dir: Path) -> List[Dict]:
         else:
             if algorithm == "kl_dro_bas":
                 total_model_samples_list = [1]
+            elif algorithm == "kl_pp":
+                total_model_samples_list = [900, 3600]
+            elif algorithm == "kl_bdro":
+                total_model_samples_list = [900]
             else:
-                total_model_samples_list = BAS_TOTAL_MODEL_SAMPLES
+                raise ValueError("Provide a supported algorithm")
             likelihood = "multivariate_normal"
             posterior = "normal_inverse_wishart"
             inference = "bayes"
