@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 #SBATCH --job-name=mmd-newsvendor
-#SBATCH --partition=parrot
+#SBATCH --partition=cpu-batch
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=20000
 #SBATCH --time=2-00:00:00
