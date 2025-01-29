@@ -272,11 +272,11 @@ def run(
         problem = get_kl_bdro_problem(
             newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim,
         )
-    elif algorithm == "kl_pp" and dataset == "portfolio":
+    elif algorithm == "kl_pp" and dataset in ("portfolio", "portfolio_synthetic"):
         problem = get_kl_bdro_problem(portfolio_objective_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim, is_portfolio=True)
-    elif algorithm == "kl_empirical" and dataset == "portfolio":
+    elif algorithm == "kl_empirical" and dataset in ("portfolio", "portfolio_synthetic"):
         problem = get_kl_bdro_problem(portfolio_objective_cvxpy, 1, num_observations, dim=dim, is_portfolio=True)
-    elif algorithm in ("kl_bdro", "kl_dro_bas") and dataset == "portfolio" and likelihood == "multivariate_normal":
+    elif algorithm in ("kl_bdro", "kl_dro_bas") and dataset in ("portfolio", "portfolio_synthetic") and likelihood == "multivariate_normal":
         problem = get_kl_portfolio_problem(dim, num_posterior_samples)
     elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
         dim_theta = dim
@@ -287,7 +287,7 @@ def run(
         if dataset == "newsvendor":
             kdro_class = DRO_BAS_MMD(dim_theta, dim, newsvendor_cost_cvxpy)
             problem = kdro_class.get_newsvendor_problem(n_samples, num_certify_points)
-        elif dataset == "portfolio":
+        elif dataset in ("portfolio", "portfolio_synthetic"):
             kdro_class = DRO_BAS_MMD(dim_theta, dim, portfolio_objective_cvxpy)
             problem = kdro_class.get_portfolio_problem(n_samples, num_certify_points)
         else:
@@ -403,7 +403,7 @@ def run_replication(
     # 1. generate dataset
     dgp_start = datetime.now()
     generator = np.random.default_rng(seed=replication)
-    if dataset == "newsvendor":
+    if dataset == "newsvendor" or dataset == "portfolio_synthetic":
         # NOTE if contamination is specified, then only contaminate the training samples (not test samples)
         data = sample_dgp(
             dgp, num_observations, dim=dim, contamination=contamination, generator=generator
@@ -438,7 +438,7 @@ def run_replication(
             theta_sample = derive_analytical_posterior_params(
                 posterior, theta_posterior
             )
-        elif algorithm == "kl_bdro" and dataset == "portfolio" and posterior == "normal_inverse_wishart":
+        elif algorithm == "kl_bdro" and dataset in ("portfolio", "portfolio_synthetic") and posterior == "normal_inverse_wishart":
             mu_post, _, iota_post, Psi_post = theta_posterior
             theta_sample = bdro_portfolio_posterior_samples(num_posterior_samples, mu_post, iota_post, Psi_post, generator=generator)
         elif algorithm == "kl_pp":
@@ -466,7 +466,7 @@ def run_replication(
         xi = data
     elif inference == "bayes" and algorithm == "kl_pp":
         xi = sample_posterior_predictive(likelihood, posterior, theta_sample, dim, num_likelihood_samples, generator=generator).reshape((1, num_likelihood_samples, dim))
-    elif inference == "bayes" and dataset == "portfolio" and likelihood == "multivariate_normal":
+    elif inference == "bayes" and dataset in ("portfolio", "portfolio_synthetic") and likelihood == "multivariate_normal":
         pass    # no need to sample from likelihood cause we have closed form
     else:
         xi = sample_likelihood(
@@ -482,7 +482,11 @@ def run_replication(
     # 4. run the chosen DRO algorithm
     solve_start = datetime.now()
     solution = np.nan
-    if dataset == "portfolio" and algorithm in ("kl_bdro", "kl_dro_bas") and likelihood == "multivariate_normal":
+    if (
+            (dataset == "portfolio" or dataset == "portfolio_synthetic")
+            and algorithm in ("kl_bdro", "kl_dro_bas")
+            and likelihood == "multivariate_normal"
+    ):
         # if epsilon - log_partition_constant < 0:
         #     # NOTE the optimisation problem is unbounded below
         #     solution = np.inf * np.ones(dim)
@@ -551,7 +555,7 @@ def run_replication(
     else:
         if dataset == "newsvendor":
             out_of_sample_cost = newsvendor_cost_cvxpy(solution, data_eval.reshape((num_test_observations, dim))).value
-        elif dataset == "portfolio":
+        elif dataset in ("portfolio", "portfolio_synthetic"):
             out_of_sample_cost = data_eval @ solution
         else:
             raise NotImplementedError(f"Out-of-sample cost for dataset '{dataset}' not implemented")
@@ -612,7 +616,7 @@ def sample_npl_for_experiment(
     for replication in range(npl_row["num_replications"]):
         # 1. load portfolio dataset
         generator = np.random.default_rng(seed=replication)
-        if dataset == "newsvendor":
+        if dataset in ("newsvendor", "portfolio_synthetic"):
             # NOTE if contamination is specified, then only contaminate the training samples (not test samples)
             data = sample_dgp(
                 dgp, npl_row["num_observations"], dim=npl_row["dim"], contamination=npl_row["contamination"], generator=generator

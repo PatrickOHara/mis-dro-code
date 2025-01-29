@@ -70,6 +70,7 @@ class NiceNameDGP(StrEnum):
     bimodal_univariate_gaussian = "Bimodal Normal DGP"
     bimodal_multivariate_gaussian = "Bimodal 5D Normal DGP"
     contaminated_normal = "Contaminated Normal DGP"
+    portfolio_contaminated_multivariate_normal = "Contaminated Normal DGP"
 
 
 
