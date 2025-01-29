@@ -41,9 +41,11 @@ class ExperimentName(StrEnum):
     compare_solve = "compare_solve"
     mmd_newsvendor_5d = "mmd_newsvendor_5d"
     mmd_portfolio = "mmd_portfolio"
+    mmd_portfolio_synthetic = "mmd_portfolio_synthetic"
     mmd_portfolio_crash = "mmd_portfolio_crash"
     kl_portfolio = "kl_portfolio"
     kl_portfolio_crash = "kl_portfolio_crash"
+    kl_portfolio_synthetic = "kl_portfolio_synthetic"
     kl_newsvendor_exp_1d = "kl_newsvendor_exp_1d"
     mmd_newsvendor_exp_1d = "mmd_newsvendor_exp_1d"
 
@@ -65,8 +67,10 @@ def get_experiment(experiment_name: ExperimentName, dataset_dir: Optional[Path] 
         ExperimentName.mmd_portfolio_crash: mmd_portfolio_crash,
         ExperimentName.kl_portfolio: kl_portfolio,
         ExperimentName.kl_portfolio_crash: kl_portfolio_crash,
+        ExperimentName.kl_portfolio_synthetic: kl_portfolio_synthetic,
         ExperimentName.kl_newsvendor_exp_1d: kl_newsvendor_exp_1d,
-        ExperimentName.mmd_newsvendor_exp_1d: mmd_newsvendor_exp_1d
+        ExperimentName.mmd_newsvendor_exp_1d: mmd_newsvendor_exp_1d,
+        ExperimentName.mmd_portfolio_synthetic: mmd_portfolio_synthetic,
     }
     try:
         if experiment_name.is_portfolio():
@@ -512,6 +516,113 @@ def mmd_newsvendor_5d() -> List[Dict]:
         }
         experiment.append(params)
     return experiment
+
+def kl_portfolio_synthetic() -> List[Dict]:
+    """MMD portfolio experiment"""
+    experiment = []
+    dgp = "portfolio_contaminated_multivariate_normal"
+    num_replications = 100
+    dim = 5
+    epsilon_set = BAS_DRO_EPSILON_SET
+    for algorithm, contamination, epsilon, in itertools.product(
+        [
+            "kl_dro_bas",
+            "kl_pp",
+            "kl_bdro",
+        ],
+        [0.0, 0.1, 0.2],
+        epsilon_set,
+    ):
+        inference = "bayes"
+        likelihood = "multivariate_normal"
+        posterior = "normal_inverse_wishart"
+        if algorithm == "kl_dro_bas":
+            num_likelihood_samples = 1
+            num_posterior_samples = 1
+        elif algorithm == "kl_pp":
+            num_likelihood_samples = 900
+            num_posterior_samples = 1
+        elif algorithm == "kl_bdro":
+            num_likelihood_samples = 10
+            num_posterior_samples = 90
+        else:
+            raise ValueError(algorithm)
+        params = {
+            "algorithm": algorithm,
+            "contamination": contamination,
+            "dataset": "portfolio_synthetic",
+            "dgp": dgp,
+            "dim": dim,
+            "epsilon": epsilon,
+            "eta": np.nan,
+            "ignore_dpp": True,
+            "inference": inference,
+            "lengthscale": -1.0,
+            "likelihood": likelihood,
+            "normalise": False,
+            "num_likelihood_samples": num_likelihood_samples,
+            "num_observations": 100,
+            "num_posterior_samples": num_posterior_samples,
+            "num_replications": num_replications,
+            "num_test_observations": 100,
+            "posterior": posterior,
+            "uuid": str(uuid4()),  # uniquely identify a run
+        }
+        experiment.append(params)
+    return experiment
+
+def mmd_portfolio_synthetic() -> List[Dict]:
+    """MMD portfolio experiment"""
+    experiment = []
+    dgp = "portfolio_contaminated_multivariate_normal"
+    num_likelihood_samples = 10  
+    num_posterior_samples = 90
+    num_replications = 100
+    dim = 5
+    # epsilon_set = [0.0001, 0.001, 0.01, 0.1, 1.0]
+    epsilon_set = ROBAS_DRO_EPSILON_SET
+    for (algorithm, likelihood), contamination, epsilon, in itertools.product(
+        [
+            ("dro_bas_mmd", "multivariate_normal"),
+            ("empirical_mmd", "empirical"),
+        ],
+        [0.0, 0.1, 0.2],
+        epsilon_set,
+    ):
+        if algorithm == "empirical_mmd":
+            inference = "empirical"
+            posterior = "empirical"
+            eta = np.nan
+        elif algorithm == "dro_bas_mmd":
+            inference = "npl_mmd"
+            posterior = "npl"
+            eta = 0.1
+        else:
+            raise ValueError(algorithm)
+        params = {
+            "algorithm": algorithm,
+            "contamination": contamination,
+            "dataset": "portfolio_synthetic",
+            "dgp": dgp,
+            "dim": dim,
+            "epsilon": epsilon,
+            "eta": eta,
+            "inference": inference,
+            "lengthscale": -1.0,
+            "likelihood": likelihood,
+            "normalise": False,
+            "num_certify_points": NUM_CERTIFY,
+            "num_likelihood_samples": num_likelihood_samples,
+            "num_observations": 100,
+            "num_posterior_samples": num_posterior_samples,
+            "num_replications": num_replications,
+            "num_test_observations": 100,
+            "posterior": posterior,
+            "uuid": str(uuid4()),  # uniquely identify a run
+        }
+        experiment.append(params)
+    return experiment
+
 
 def mmd_portfolio(mmc2_dir: Path) -> List[Dict]:
     """MMD portfolio experiment"""
