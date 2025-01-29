@@ -81,7 +81,11 @@ ROBAS_DRO_EPSILON_SET = [
     0.1,
     0.15,
     0.2,
-    0.25
+    0.25,
+    0.3,
+    0.4,
+    0.5,
+    1.0
 ]
 
 def upper_triangular_size(dim: int) -> int:

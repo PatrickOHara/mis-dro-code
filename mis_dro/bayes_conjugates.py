@@ -23,6 +23,12 @@ def default_prior_params(prior: str, dim: int = 1) -> tuple:
     elif prior == "normal_known_var":
         mu_prior, std_prior = 0.0, DGP_NORMAL_KNOWN_VARIANCE_STD
         prior_params = (mu_prior, std_prior)
+    elif prior == "multivariate_normal_diag":
+        mu_prior = np.zeros(dim)
+        kappa_prior = np.ones(dim)
+        alpha_prior = np.ones(dim)
+        beta_prior = np.ones(dim)
+        prior_params = (mu_prior, kappa_prior, alpha_prior, beta_prior)
     else:
         raise NotImplementedError(f"Prior '{prior}' not implemented.")
     return prior_params
@@ -46,6 +52,21 @@ def get_posterior_params(
             alpha_posterior,
             beta_posterior,
         ) = normal_gamma_posterior(data, mu_prior, kappa_prior, alpha_prior, beta_prior)
+        post_params = (mu_posterior, kappa_posterior, alpha_posterior, beta_posterior)
+    elif posterior == "multivariate_normal_diag":
+        mu_prior, kappa_prior, alpha_prior, beta_prior = prior_params
+        dim = mu_prior.shape[0]
+        mu_posterior = np.zeros(dim)
+        kappa_posterior = np.zeros(dim)
+        alpha_posterior = np.zeros(dim)
+        beta_posterior = np.zeros(dim)
+        for i in range(dim):
+            (
+                mu_posterior[i],
+                kappa_posterior[i],
+                alpha_posterior[i],
+                beta_posterior[i],
+            ) = normal_gamma_posterior(data[:,i], mu_prior[i], kappa_prior[i], alpha_prior[i], beta_prior[i])
         post_params = (mu_posterior, kappa_posterior, alpha_posterior, beta_posterior)
     elif posterior == "normal_inverse_wishart":
         post_params = normal_inverse_wishart_posterior(data, *prior_params)
@@ -85,6 +106,17 @@ def derive_analytical_posterior_params(
         # so we take square root and inverse
         std = np.sqrt(beta_posterior / alpha_posterior)
         theta[0] = np.array([mu_posterior, std])
+        return theta
+    elif posterior == "multivariate_normal_diag":
+        mu_posterior, _, alpha_posterior, beta_posterior = posterior_params
+        dim = mu_posterior.shape[0]
+        theta = np.zeros((1, 2*dim))
+        # we want an analytical form for the precision, which is alpha over beta
+        # but the numpy normal dist function takes the standard deviation
+        # so we take square root and inverse
+        var = beta_posterior / alpha_posterior
+        theta[0,:dim] = mu_posterior.flatten()
+        theta[0,dim:] = var.flatten()
         return theta
     elif posterior == "normal_inverse_wishart":
         mu_post, kappa_post, _, Psi_post = posterior_params
@@ -138,6 +170,25 @@ def sample_posterior(
             beta_posterior,
             generator=generator,
         )
+    if posterior == "multivariate_normal_diag":
+        samples = np.zeros(dim, 2)
+        for i in range(dim):
+            (
+                mu_posterior,
+                kappa_posterior,
+                alpha_posterior,
+                beta_posterior,
+            ) = posterior_params[i,:]
+            samples[i,:] = normal_gamma_rvs(
+                num_posterior_samples,
+                mu_posterior,
+                kappa_posterior,
+                alpha_posterior,
+                beta_posterior,
+                generator=generator,
+            )
+        return samples
+
     if posterior == "normal_inverse_wishart":
         return normal_inverse_wishart_samples(num_posterior_samples, *posterior_params, generator=generator)
     if posterior == "inverse_wishart":
@@ -167,6 +218,9 @@ def get_log_partition_constant(posterior: str, posterior_params: list) -> float:
     elif posterior == "normal_gamma":
         _, kappa_posterior, alpha_posterior, _ = posterior_params
         return get_normal_gamma_constant(alpha_posterior, kappa_posterior)
+    elif posterior == "multivariate_normal_diag":
+        _, kappa_posterior, alpha_posterior, _ = posterior_params
+        return np.sum(0.5 * (1 / kappa_posterior + np.log(alpha_posterior) - sp.special.digamma(alpha_posterior)))
     elif posterior == "normal_inverse_wishart":
         mu_post, kappa_post, _, _ = posterior_params
         dim = mu_post.shape[0]
@@ -364,7 +418,20 @@ def posterior_predictive_params(posterior: str, posterior_params: tuple) -> np.a
 
         dof = 2 * alpha_posterior   # degrees of freedom for student t
         return np.array([[mu_posterior, scale, dof]])
-
+    
+    if posterior == "multivariate_normal_diag":
+        mu_posterior, kappa_posterior, alpha_posterior, beta_posterior = posterior_params
+        dim = mu_posterior.shape[0]
+        scale = np.zeros(dim)
+        dof = np.zeros(dim)
+        pp_params = np.zeros((1, 3*dim))
+        for i in range(dim):
+            scale[i] = np.sqrt((beta_posterior[i] * (kappa_posterior[i] + 1)) / (alpha_posterior[i] * kappa_posterior[i]))
+            dof[i] = 2 * alpha_posterior[i]
+        pp_params[0,:dim] = mu_posterior
+        pp_params[0, dim:2*dim] = scale
+        pp_params[0, 2*dim:] = dof
+        return pp_params
     if posterior == "normal_inverse_wishart":
         # NOTE eq. (3.182), Chapter 3.4.4.3, Murphy (2023) "Probabilistic Machine Learning: Advanced Topics".
         mu_posterior, kappa_posterior, nu_posterior, Psi_posterior = posterior_params
@@ -401,6 +468,15 @@ def sample_posterior_predictive(
     if likelihood == "normal" and posterior == "normal_gamma":
         mu, scale, df = theta_sample[0]
         return sp.stats.t.rvs(df, loc=mu, scale=scale, size=(num_likelihood_samples, dim), random_state=generator)
+    if likelihood == "multivariate_normal_diag" and posterior == "multivariate_normal_diag":
+        pp_params = theta_sample[0,:]
+        loc = pp_params[:dim]
+        scale = pp_params[dim:2*dim]
+        df = pp_params[2*dim:]
+        samples = np.zeros((num_likelihood_samples, dim))
+        for i in range(dim):
+            samples[:,i] = sp.stats.t.rvs(df[i], loc=loc[i], scale=scale[i], size=(num_likelihood_samples,), random_state=generator)
+        return samples
     if likelihood == "multivariate_normal" and posterior == "normal_inverse_wishart":
         pp_params = theta_sample[0]
         loc = pp_params[:dim]

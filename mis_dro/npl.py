@@ -60,7 +60,8 @@ def sample_npl(
     elif likelihood == "multivariate_normal":
         d = data.shape[1]
         model = multivariate_GaussianModel(m, d, known_cov=False)
-        p = d + upper_triangular_size(d)
+        #p = d + upper_triangular_size(d)
+        p = 2*d
     else:
         raise NotImplementedError(
             f"Posterior '{likelihood}' is not implemented for '{inference}' inference."
@@ -83,7 +84,7 @@ def sample_npl(
 class Npl:
     """This class contains functions to perform NPL inference (for alpha = 0 in the DP prior) for the Exponential distribution model."""
 
-    def __init__(self, X, B, p, m, model, seed, l=-1, loss_fn="npl_wlb", eta: float = 0.1):
+    def __init__(self, X, B, p, m, model, seed, l=-1, loss_fn="npl_wlb", eta: float = 0.0001): 
         """
         Args:
             X: Data set
@@ -118,7 +119,7 @@ class Npl:
         data X and Dirichlet weights"""
         # FIXME pass eta as a parameter via the experiment setup
         # return self.minimise_MMD(self.X, weights, key)
-        return self.minimise_MMD(self.X, weights, key, eta=self.eta)
+        return self.minimise_MMD(self.X, weights, key)
 
     def draw_samples(self, n_jobs: int = -1, random_state=None):
         """Draws B samples in parallel from the nonparametric posterior"""
@@ -179,11 +180,11 @@ class Npl:
             + (1 / (self.n * (self.n - 1))) * sum3
         )
 
-    def minimise_MMD(self, data, weights, key, Nstep=1000, eta=0.1, batch_size=10):
+    def minimise_MMD(self, data, weights, key, Nstep=1000, batch_size=10):
         """Function to minimise the MMD using adam optimisation in JAX"""
 
-        key, key1, key2 = jax.random.split(key, num=2 + 1)
-        params = self.model.init_params(data)
+        key, key1, key2, key3 = jax.random.split(key, num=3 + 1)
+        params = self.model.init_params(data, key3)
         config.update("jax_enable_x64", True)
         num_batches = self.n // batch_size
 
@@ -193,14 +194,14 @@ class Npl:
                 theta, key
             )  # Returnes self.m random samples from the model with parameter theta
 
-            # # FIXME handle dimensions
-            # if self.d > 1:
-            #     # Compute kernel Gram matrices
-            #     kyy = k_comp(y, y) #, self.l
-            #     kxy = k_comp(y, x) #, self.l
-            # else:
-            kyy = k_jax(y, y, self.l)
-            kxy = k_jax(y, x, self.l)
+            # # # FIXME handle dimensions
+            if self.d > 1:
+                 # Compute kernel Gram matrices
+                 kyy = k_comp(y, y) #, self.l
+                 kxy = k_comp(y, x) #, self.l
+            else:
+                kyy = k_jax(y, y, self.l)
+                kxy = k_jax(y, x, self.l)
 
             # first sum
             diag_elements = jnp.diag_indices_from(kyy)
@@ -209,11 +210,11 @@ class Npl:
 
             # second sum
             sum2 = jnp.sum(kxy)
-
+            mmd = (1 / (self.m * (self.m - 1))) * sum1 - (2 / (n * self.m)) * sum2
             # Return first two terms of squared MMD; note that the third term does not depend on theta!
-            return (1 / (self.m * (self.m - 1))) * sum1 - (2 / (n * self.m)) * sum2
+            return mmd
 
-        opt_init, opt_update, get_params = optimizers.adam(step_size=eta)
+        opt_init, opt_update, get_params = optimizers.adam(step_size=self.eta)
         opt_state = opt_init(params)
         itercount = itertools.count()
 
@@ -277,6 +278,8 @@ class Npl:
                 false_func,
                 [value, smallest_loss, best_theta, opt_state],
             )
+            # print(best_theta)
+
             
             
        

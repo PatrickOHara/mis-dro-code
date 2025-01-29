@@ -31,6 +31,7 @@ from .constants import (
     NUM_REPLICATIONS,
     NUM_TEST_OBSERVATIONS,
     NUM_CERTIFY,
+    IN_SAMPLE_TIME_WINDOW,
     MAX_PARAMS_OOM,
     ROBAS_NEWSVENDOR_NUM_REPLICATIONS,
 )
@@ -78,7 +79,7 @@ def setup_kl_dro_bas(
 
 @app.command(name="setup-mmd")
 def setup_mmd_dro_bas(
-    experiment_name: ExperimentName, experiment_dir: Path, npl_samples_dir: Path, batch_size: int, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), overwrite: bool = False, njobs: int = -1,
+    experiment_name: ExperimentName, experiment_dir: Path, npl_samples_dir: Path, batch_size: int, dataset_dir: Path = Path("~/misdro/datasets/mmc2"), overwrite: bool = False, njobs: int = -1,
 ):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
@@ -238,8 +239,10 @@ def run(
             newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim,
         )
     elif algorithm == "kl_pp" and dataset == "portfolio":
-        problem = get_kl_bdro_problem(portfolio_objective_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim)
+        problem = get_kl_bdro_problem(portfolio_objective_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim, is_portfolio=True)
     elif algorithm in ("kl_bdro", "kl_dro_bas") and dataset == "portfolio" and likelihood == "multivariate_normal":
+        problem = get_kl_portfolio_problem(dim, num_posterior_samples)
+    elif algorithm in ("kl_bdro", "kl_dro_bas") and dataset == "portfolio" and likelihood == "multivariate_normal_diag":
         problem = get_kl_portfolio_problem(dim, num_posterior_samples)
     elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
         dim_theta = dim
@@ -371,7 +374,12 @@ def run_replication(
         )
     elif dataset == "portfolio":
         # NOTE shape of data (N, D) where N is number of weeks and D is the number of stocks
-        data, data_eval = portfolio_dataset(dgp, replication, dataset_dir)
+        if dgp == "DowJones-crash":
+            CRASH_WINDOW_ID = 75    # NOTE use 72 for long term evaluation of crash
+            CRASH_OOS_TIME_WINDOW = IN_SAMPLE_TIME_WINDOW  # NOTE use 4 years for long term
+            data, data_eval = portfolio_dataset(dgp, CRASH_WINDOW_ID, dataset_dir, out_of_sample_time_window=CRASH_OOS_TIME_WINDOW)
+        else:
+            data, data_eval = portfolio_dataset(dgp, replication, dataset_dir)
     else:
         raise NotImplementedError(f"Dataset not implemented: {dataset}")
     dgp_time = (datetime.now() - dgp_start).total_seconds()
@@ -400,7 +408,7 @@ def run_replication(
         path_to_csv = npl_uuid_dir / f"npl_sample_{replication}.csv"
         theta_sample = pd.read_csv(path_to_csv, index_col=False, header=None).values
         assert num_posterior_samples == theta_sample.shape[0]
-        assert dim == theta_sample.shape[1]
+        # assert dim == theta_sample.shape[1] ?????
     elif inference == "empirical":
         # empirical does not have a posterior
         theta_sample = np.nan * np.ones(num_posterior_samples)
@@ -418,6 +426,8 @@ def run_replication(
         xi = sample_posterior_predictive(likelihood, posterior, theta_sample, dim, num_likelihood_samples, generator=generator).reshape((1, num_likelihood_samples, dim))
     elif inference == "bayes" and dataset == "portfolio" and likelihood == "multivariate_normal":
         pass    # no need to sample from likelihood cause we have closed form
+    elif inference == "bayes" and dataset == "portfolio" and likelihood == "multivariate_normal_diag":
+        pass    # no need to sample from likelihood cause we have closed form
     else:
         xi = sample_likelihood(
             likelihood,
@@ -425,13 +435,14 @@ def run_replication(
             dim,
             num_likelihood_samples,
             generator=generator,
+            inference=inference
         )
     likelihood_time = (datetime.now() - likelihood_start).total_seconds()
 
     # 4. run the chosen DRO algorithm
     solve_start = datetime.now()
     solution = np.nan
-    if dataset == "portfolio" and algorithm in ("kl_bdro", "kl_dro_bas") and likelihood == "multivariate_normal":
+    if dataset == "portfolio" and algorithm in ("kl_bdro", "kl_dro_bas"): #and likelihood == "multivariate_normal":
         # if epsilon - log_partition_constant < 0:
         #     # NOTE the optimisation problem is unbounded below
         #     solution = np.inf * np.ones(dim)
@@ -442,7 +453,8 @@ def run_replication(
         problem.param_dict["mu_post"].value = theta_sample[0, :dim]
         for i in range(num_posterior_samples):
             # get a PSD covariance from the upper triangular vector
-            cov = reconstruct_covariance_from_triu(theta_sample[i, dim:], dim)
+            # cov = reconstruct_covariance_from_triu(theta_sample[i, dim:], dim)
+            cov = np.diag(theta_sample[i, dim:])
             # then take the square root of the covariance and set to parameter value
             problem.param_dict[f"sqrt_cov_post_{i}"].value = sp.linalg.sqrtm(cov)
 
@@ -552,7 +564,13 @@ def sample_npl_for_experiment(
                 dgp, npl_row["num_observations"], dim=npl_row["dim"], contamination=npl_row["contamination"], generator=generator
             )
         elif dataset == "portfolio":
-            data, _ = portfolio_dataset(dgp, replication, dataset_dir)
+            if dgp == "DowJones-crash":
+                CRASH_WINDOW_ID = 75    # NOTE use 72 for long term evaluation of crash
+                CRASH_OOS_TIME_WINDOW = IN_SAMPLE_TIME_WINDOW  # NOTE use 4 years for long term
+                data, _ = portfolio_dataset(dgp, CRASH_WINDOW_ID, dataset_dir, out_of_sample_time_window=CRASH_OOS_TIME_WINDOW)
+            else:
+                data, _ = portfolio_dataset(dgp, replication, dataset_dir)
+            # data, _ = portfolio_dataset(dgp, replication, dataset_dir)
         else:
             raise NotImplementedError(f"Dataset not implemented: {dataset}")
 

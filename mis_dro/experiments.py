@@ -27,7 +27,7 @@ from .constants import (
     OUT_OF_SAMPLE_TIME_WINDOW,
     ROBAS_DRO_EPSILON_SET,
 )
-from .dataset import get_num_time_windows
+from .dataset import get_num_time_windows, get_portfolio_returns_df
 
 
 class ExperimentName(StrEnum):
@@ -39,6 +39,8 @@ class ExperimentName(StrEnum):
     mmd_newsvendor_1d_missp = "mmd_newsvendor_1d_missp"
     compare_solve = "compare_solve"
     mmd_newsvendor_5d = "mmd_newsvendor_5d"
+    mmd_portfolio_crash = "mmd_portfolio_crash"
+    kl_portfolio_crash = "kl_portfolio_crash"
     mmd_portfolio = "mmd_portfolio"
     kl_portfolio = "kl_portfolio"
     kl_newsvendor_exp_1d = "kl_newsvendor_exp_1d"
@@ -58,6 +60,8 @@ def get_experiment(experiment_name: ExperimentName, dataset_dir: Optional[Path] 
         ExperimentName.mmd_newsvendor_1d_missp: mmd_newsvendor_1d_missp,
         ExperimentName.compare_solve: compare_solve,
         ExperimentName.mmd_newsvendor_5d: mmd_newsvendor_5d,
+        ExperimentName.mmd_portfolio_crash: mmd_portfolio_crash,
+        ExperimentName.kl_portfolio_crash: kl_portfolio_crash,
         ExperimentName.mmd_portfolio: mmd_portfolio,
         ExperimentName.kl_portfolio: kl_portfolio,
         ExperimentName.kl_newsvendor_exp_1d: kl_newsvendor_exp_1d,
@@ -467,7 +471,7 @@ def mmd_portfolio(mmc2_dir: Path) -> List[Dict]:
     for (algorithm, likelihood), epsilon in itertools.product(
         [
             ("dro_bas_mmd", "multivariate_normal"),
-            ("empirical_mmd", "empirical"),
+            # ("empirical_mmd", "empirical"),
         ],
         epsilon_set,
     ):
@@ -483,7 +487,7 @@ def mmd_portfolio(mmc2_dir: Path) -> List[Dict]:
             "dim": num_stocks,
             "epsilon": epsilon,
             "inference": inference,
-            "lengthscale": -1.0,        
+            "lengthscale": 0.01,        
             "likelihood": likelihood,
             "num_certify_points": NUM_CERTIFY,
             "num_likelihood_samples": num_likelihood_samples,
@@ -500,8 +504,9 @@ def mmd_portfolio(mmc2_dir: Path) -> List[Dict]:
 def kl_portfolio(mmc2_dir: Path) -> List[Dict]:
     """KL Portfolio experiment with DRO-BAS vs BDRO"""
     experiment = []
+    mmc2_dir = Path("/dcs/pg23/u1604520/misdro/datasets/mmc2")
     for algorithm, dgp, epsilon in itertools.product(
-        ["kl_dro_bas", "kl_bdro", "kl_pp"],
+        ["kl_dro_bas"], #, "kl_bdro", "kl_pp"],
         ["DowJones"],
         PORTFOLIO_EPSILON_SET,
     ):
@@ -533,14 +538,14 @@ def kl_portfolio(mmc2_dir: Path) -> List[Dict]:
                 "ignore_dpp": True,
                 "inference": "bayes",
                 "lengthscale": -1.0,
-                "likelihood": "multivariate_normal",
+                "likelihood": "multivariate_normal_diag",
                 "njobs": 1,
                 "num_likelihood_samples": num_likelihood_samples,
                 "num_observations": IN_SAMPLE_TIME_WINDOW,
                 "num_posterior_samples": num_posterior_samples,
                 "num_replications": num_time_windows,
                 "num_test_observations": OUT_OF_SAMPLE_TIME_WINDOW,
-                "posterior": "normal_inverse_wishart",
+                "posterior": "multivariate_normal_diag",
                 "uuid": str(uuid4()),  # uniquely identify a run
             }
             experiment.append(params)
@@ -581,3 +586,104 @@ def compare_solve() -> List[Dict]:
         }
         experiment.append(params)
     return experiment
+
+def mmd_portfolio_crash() -> List[Dict]: #mmc2_dir: Path
+    """MMD portfolio experiment"""
+    experiment = []
+    # dgp = "DowJones"
+    num_likelihood_samples = 10  
+    num_posterior_samples = 110
+    dgp = "DowJones-crash"
+    epsilon_set = []
+    for epsilon in ROBAS_DRO_EPSILON_SET:
+        if epsilon <= 2:
+            epsilon_set.append(epsilon)
+    mmc2_dir =  Path("~/misdro/datasets/mmc2")# remove before pushing
+    returns_df = get_portfolio_returns_df(mmc2_dir, dgp)
+    num_stocks = len(returns_df.columns)
+    # NOTE when using empirical, set likelihood to 'empirical'
+    for (algorithm, likelihood), epsilon in itertools.product(
+        [
+            ("dro_bas_mmd", "multivariate_normal"),
+            # ("empirical_mmd", "empirical"),
+        ],
+        epsilon_set,
+    ):
+        if likelihood == "empirical":
+            inference = "empirical"
+        else:
+            inference = "npl_mmd"
+        params = {
+            "algorithm": algorithm,
+            "contamination": 0.0,
+            "dataset": "portfolio",
+            "dgp": dgp,
+            "dim": num_stocks,
+            "epsilon": epsilon,
+            "inference": inference,
+            "lengthscale": -1.0,        
+            "likelihood": likelihood,
+            "num_certify_points": NUM_CERTIFY,
+            "num_likelihood_samples": num_likelihood_samples,
+            "num_observations": IN_SAMPLE_TIME_WINDOW,
+            "num_posterior_samples": num_posterior_samples,
+            "num_replications": 1,
+            "num_test_observations": IN_SAMPLE_TIME_WINDOW,
+            "posterior": "npl",
+            "uuid": str(uuid4()),  # uniquely identify a run
+        }
+        experiment.append(params)
+    return experiment
+
+def kl_portfolio_crash() -> List[Dict]:  #mmc2_dir: Path
+    """Portfolio experiment with a stock crash"""
+    experiment = []
+    dgp = "DowJones-crash"
+    num_samples = 1100
+    mmc2_dir =  Path("~/misdro/datasets/mmc2")# remove before pushing
+    for algorithm, epsilon in itertools.product(
+        ["kl_pp"], #["kl_dro_bas"], #, "kl_bdro", "kl_pp"],
+        PORTFOLIO_EPSILON_SET,
+    ):
+        returns_df = get_portfolio_returns_df(mmc2_dir, dgp)
+        num_stocks = len(returns_df.columns)
+        params = {
+            "algorithm": algorithm,
+            "contamination": 0.0,
+            "dataset": "portfolio",
+            "dgp": dgp,
+            "dim": num_stocks,
+            "epsilon": epsilon,
+            "ignore_dpp": True,
+            "inference": "bayes",
+            "lengthscale": -1.0,
+            "likelihood": "multivariate_normal_diag",
+            "njobs": 1,
+            "num_likelihood_samples": get_num_likelihood_samples("portfolio", num_samples, algorithm),
+            "num_observations": IN_SAMPLE_TIME_WINDOW,
+            "num_posterior_samples": get_num_posterior_samples("portfolio", num_samples, algorithm),
+            "num_replications": 1,
+            "num_test_observations": IN_SAMPLE_TIME_WINDOW,
+            "posterior": "multivariate_normal_diag",
+            "uuid": str(uuid4()),  # uniquely identify a run
+        }
+        experiment.append(params)
+    return experiment
+
+def get_num_likelihood_samples(dataset: str, num_total_samples: int, algorithm: str) -> int:
+    if algorithm == "kl_bdro" and dataset == "portfolio":
+        return 1
+    if algorithm == "kl_bdro":
+        return int(np.sqrt(num_total_samples))
+    if algorithm in ("kl_dro_bas", "kl_pp"):
+        return num_total_samples
+    raise NotImplementedError()
+
+def get_num_posterior_samples(dataset: str, num_total_samples: int, algorithm: str) -> int:
+    if algorithm == "kl_bdro" and dataset == "portfolio":
+        return num_total_samples
+    if algorithm == "kl_bdro":
+        return int(np.sqrt(num_total_samples))
+    if algorithm in ("kl_dro_bas", "kl_pp"):
+        return 1
+    raise NotImplementedError()

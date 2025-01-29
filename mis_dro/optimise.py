@@ -11,6 +11,7 @@ def get_kl_bdro_problem(
     num_posterior_samples: int,
     num_likelihood_samples: int,
     dim: int = 1,
+    is_portfolio: bool = False,
 ) -> cp.Problem:
     """Bayesian DRO as a cvxpy optimisaton problem.
 
@@ -70,6 +71,9 @@ def get_kl_bdro_problem(
         x >= SMALLEST_X,
         # x <= LARGEST_X,   # NOTE this can cause some unexpected behaviour for large epsilon
     ] + [decision_objective(x, xi[i]) <= t[i] for i in range(num_posterior_samples)]
+
+    if is_portfolio:
+        constraints.append(cp.sum(x) == 1)
 
     return cp.Problem(bdro_obj, constraints)
 

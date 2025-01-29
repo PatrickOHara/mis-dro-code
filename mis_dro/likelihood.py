@@ -37,13 +37,19 @@ def sample_likelihood(
                 theta_sample[i, 1],
                 size=(num_likelihood_samples, dim),
             )
+    elif likelihood == "multivariate_normal_diag":
+        for i in range(num_posterior_samples):
+            mu = theta_sample[i, :dim]
+            vec_cov = theta_sample[i, dim:]
+            cov = np.diag(vec_cov)
+            xi[i] = generator.multivariate_normal(mu, cov, size=num_likelihood_samples)
     elif likelihood == "multivariate_normal":
         for i in range(num_posterior_samples):
             mu = theta_sample[i,:dim]
             vec_cov = theta_sample[i,dim:]
             if inference == "bayes":
                 cov = reconstruct_covariance_from_triu(vec_cov, dim)
-            elif inference == "npl":
+            elif inference == "npl_mmd":
                 cov = cholesky_param_to_covariance(dim, vec_cov)
             else:
                 raise ValueError(f"Not a valid inference: {inference}")
@@ -78,12 +84,13 @@ def reconstruct_covariance_from_triu(vec_triu: np.array, dim: int):
 
 def cholesky_param_to_covariance(dim, L_flat):
     # Reshape the flat array into a lower triangular matrix
-    L = np.zeros((dim, dim))
-    tril_indices = np.tril_indices(dim)
-    L[tril_indices] = L_flat
+    # L = np.zeros((dim, dim))
+    # tril_indices = np.tril_indices(dim)
+    # L[tril_indices] = L_flat
 
     # Diagonal elements of L should be strictly positive to ensure positive definiteness
-    L[np.diag_indices(dim)] = np.exp(np.diag(L))
-
+    # L[np.diag_indices(dim)] = np.exp(np.diag(L))
+    cov = np.diag(np.exp(L_flat))
     # Return the covariance matrix
-    return L @ L.T
+    return cov #L @ L.T
+
