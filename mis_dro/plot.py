@@ -35,12 +35,11 @@ CB_color_cycle = [
 class AlgorithmColor(StrEnum):
     """Colors of algorithm lines"""
     dro_bas_mmd = "#377eb8"   #"#f781bf"
-    kl_bdro = "#FF800E"
-    # kl_dro_bas = "#8A2BE2" 
-    kl_dro_bas = "#4daf4a"
+    kl_bdro = "#ff7f00"
+    kl_dro_bas = "#984ea3"
     kl_empirical = "#999999"
     empirical_mmd = "#999999"
-    kl_pp = "#984ea3"
+    kl_pp = "#4daf4a"
 
 
 
