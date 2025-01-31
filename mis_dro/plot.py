@@ -17,18 +17,31 @@ class AlgorithmLineStyle(StrEnum):
     empirical_mmd = "dotted"
     kl_pp = "dotted"
 
-CB_color_cycle = ['#377eb8', '#ff7f00', '#4daf4a',
-                  '#f781bf', '#a65628', '#984ea3',
-                  '#999999', '#e41a1c', '#dede00']
+# Color blind palette from https://gist.github.com/thriveth/8560036
+CB_color_cycle = [
+    '#377eb8', # blue
+    '#ff7f00', # orange
+    '#4daf4a', # green
+    '#f781bf', # pink
+    '#a65628', # brown
+    '#984ea3', # purple
+    '#999999', # gray
+    '#e41a1c', # red
+    '#dede00', # yellow
+]
+
 
 class AlgorithmColor(StrEnum):
     """Colors of algorithm lines"""
-    dro_bas_mmd = "#008080"   #"#f781bf"
+    dro_bas_mmd = "#377eb8"   #"#f781bf"
     kl_bdro = "#FF800E"
     # kl_dro_bas = "#8A2BE2" 
-    kl_dro_bas = "#006BA4"
+    kl_dro_bas = "#4daf4a"
+    kl_empirical = "#999999"
     empirical_mmd = "#999999"
-    kl_pp = "red"
+    kl_pp = "#984ea3"
+
+
 
 
 
@@ -130,7 +143,7 @@ def mean_variance_plot(
         axis.plot(var, out_of_sample_mean[i], markersize=4, fillstyle=fillstyles[i], **kwargs, label=local_label, alpha=alpha)
 
     # plot the lines
-    axis.plot(out_of_sample_var, out_of_sample_mean, linestyle=kwargs["linestyle"], markersize=0, color=kwargs["color"], label='_nolegend_', alpha=alpha)
+    axis.plot(out_of_sample_var, out_of_sample_mean, linestyle=kwargs["linestyle"], markersize=0, color=kwargs["color"], label='_nolegend_', alpha=alpha, lw=2)
 
     # label the points with epsilon values
     if is_labelled:
