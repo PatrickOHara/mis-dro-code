@@ -204,7 +204,7 @@ def portfolio_contaminated_multivariate_normal(num_observations: int, contaminat
     n_real = num_observations - cont_size
     dgp_mean = np.array([2.5, 0.5, -1.0, -3.0, 3.5])
     # dgp_mean = np.zeros(5)
-    dgp_mean_outl = dgp_mean + np.array([0.0, 50.0, 50.0, 50.0, 0.0])
+    dgp_mean_outl = dgp_mean + np.array([2.5, 50.0, 50.0, 50.0, 3.5])
     dgp_cov = np.diag(np.array([5.0, 10.0, 15.0, 20.0, 30.0]))
     # dgp_cov = np.diag(np.array([1.0, 2.0, 3.0, 4.0, 5.0]))
     data = multivariate_normal.rvs(dgp_mean, dgp_cov, size=n_real, random_state=random_state)
