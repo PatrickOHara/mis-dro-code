@@ -114,9 +114,6 @@ def algorithm_inference_style(algorithm: str, inference: str, label_inference: b
     }
 
 
-
-
-
 def mean_variance_plot(
     axis: mpl.axis.Axis,
     df: pd.DataFrame,
@@ -125,7 +122,8 @@ def mean_variance_plot(
     offset: float = 1.0,
     special_epsilons: list[float] = [0.1, 0.5],
     var_col: float = "out_of_sample_var",
-    add_log_partition_function: float = 0.0,
+    add_log_partition_function: bool = False,
+    minimise: bool = True,
     **kwargs,
 ) -> None:
     """Plot mean-variance trade-off."""
@@ -153,25 +151,29 @@ def mean_variance_plot(
         for i, epsilon in enumerate(epsilon_list):
             if i == 0 or i == len(epsilon_list) - 1 or epsilon in special_epsilons:
                 # if line is blue then put text on bottom left
-                if kwargs["color"] == AlgorithmColor.kl_dro_bas:
+                if kwargs["color"] in (AlgorithmColor.kl_dro_bas, AlgorithmColor.kl_empirical):
                     ha = "right"
-                    va = "top"
+                    va = "top" if minimise else "bottom"
                     local_offset = -offset
 
                 # else if line is black then put text on top right
                 elif kwargs["color"] == AlgorithmColor.kl_bdro:
                     ha = "left"
-                    va = "bottom"
+                    va = "bottom" if minimise else "top"
                     local_offset = offset
                 else:
                     ha = "left"
-                    va = "bottom"
+                    va = "bottom" if minimise else "top"
                     local_offset = offset
 
+                if add_log_partition_function:
+                    epsilon_label = "$G +" + str(np.round(epsilon, 5)) + "$"
+                else:
+                    epsilon_label = str(np.round(epsilon, 5))
                 axis.text(
                     out_of_sample_var[i] + local_offset,
                     out_of_sample_mean[i] + local_offset,
-                    np.round(epsilon + add_log_partition_function, 5),
+                    epsilon_label,
                     ha=ha,
                     va=va,
                     color=kwargs["color"],
