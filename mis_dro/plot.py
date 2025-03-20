@@ -13,22 +13,33 @@ class AlgorithmLineStyle(StrEnum):
     bdro_grid_search = "dashed"
     kl_bdro = "dotted"
     kl_dro_bas = "dotted"
+    kl_empirical = "dotted"
     dro_bas_mmd = "dotted"
     empirical_mmd = "dotted"
     kl_pp = "dotted"
 
-CB_color_cycle = ['#377eb8', '#ff7f00', '#4daf4a',
-                  '#f781bf', '#a65628', '#984ea3',
-                  '#999999', '#e41a1c', '#dede00']
+# Color blind palette from https://gist.github.com/thriveth/8560036
+CB_color_cycle = [
+    '#377eb8', # blue
+    '#ff7f00', # orange
+    '#4daf4a', # green
+    '#f781bf', # pink
+    '#a65628', # brown
+    '#984ea3', # purple
+    '#999999', # gray
+    '#e41a1c', # red
+    '#dede00', # yellow
+]
+
 
 class AlgorithmColor(StrEnum):
     """Colors of algorithm lines"""
     dro_bas_mmd = "#008080"   #"#f781bf"
-    kl_bdro = "#FF800E"
-    # kl_dro_bas = "#8A2BE2" 
-    kl_dro_bas = "#006BA4"
+    kl_bdro = "#ff7f00"
+    kl_dro_bas = "#984ea3"
+    kl_empirical = "#999999"
     empirical_mmd = "#999999"
-    kl_pp = "red"
+    kl_pp = "#4daf4a"
 
 
 
@@ -41,6 +52,7 @@ class AlgorithmName(StrEnum):
     kl_bdro = "BDRO"
     kl_dro_bas = "DRO-BAS$_{PE}$"
     kl_pp = "DRO-BAS$_{PP}$"
+    kl_empirical = "Empirical KL"
 
 
 
@@ -83,6 +95,7 @@ ALGORITHM_INFERENCE_MARKERS = {
     ("kl_bdro", "npl_mmd"): "x",
     ("dro_bas_mmd", "npl_mmd"): "*",
     ("empirical_mmd", "empirical"): "+",
+    ("kl_empirical", "empirical"): "x",
 }
 
 
@@ -100,9 +113,6 @@ def algorithm_inference_style(algorithm: str, inference: str, label_inference: b
     }
 
 
-
-
-
 def mean_variance_plot(
     axis: mpl.axis.Axis,
     df: pd.DataFrame,
@@ -111,7 +121,8 @@ def mean_variance_plot(
     offset: float = 1.0,
     special_epsilons: list[float] = [0.1, 0.5],
     var_col: float = "out_of_sample_var",
-    add_log_partition_function: float = 0.0,
+    add_log_partition_function: bool = False,
+    minimise: bool = True,
     **kwargs,
 ) -> None:
     """Plot mean-variance trade-off."""
@@ -139,25 +150,29 @@ def mean_variance_plot(
         for i, epsilon in enumerate(epsilon_list):
             if i == 0 or i == len(epsilon_list) - 1 or epsilon in special_epsilons:
                 # if line is blue then put text on bottom left
-                if kwargs["color"] == AlgorithmColor.kl_dro_bas:
+                if kwargs["color"] in (AlgorithmColor.kl_dro_bas, AlgorithmColor.kl_empirical):
                     ha = "right"
-                    va = "top"
+                    va = "top" if minimise else "bottom"
                     local_offset = -offset
 
                 # else if line is black then put text on top right
                 elif kwargs["color"] == AlgorithmColor.kl_bdro:
                     ha = "left"
-                    va = "bottom"
+                    va = "bottom" if minimise else "top"
                     local_offset = offset
                 else:
                     ha = "left"
-                    va = "bottom"
+                    va = "bottom" if minimise else "top"
                     local_offset = offset
 
+                if add_log_partition_function:
+                    epsilon_label = "$G +" + str(np.round(epsilon, 5)) + "$"
+                else:
+                    epsilon_label = str(np.round(epsilon, 5))
                 axis.text(
                     out_of_sample_var[i] + local_offset,
                     out_of_sample_mean[i] + local_offset,
-                    np.round(epsilon + add_log_partition_function, 5),
+                    epsilon_label,
                     ha=ha,
                     va=va,
                     color=kwargs["color"],

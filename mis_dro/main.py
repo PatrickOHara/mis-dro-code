@@ -26,6 +26,7 @@ from .bayes_conjugates import (
 from .constants import (
     CONTAMINATION_LEVEL,
     IN_SAMPLE_TIME_WINDOW,
+    NPL_ETA,
     NUM_LIKELIHOOD_SAMPLES,
     NUM_OBSERVATIONS,
     NUM_POSTERIOR_SAMPLES,
@@ -42,6 +43,7 @@ from .newsvendor import newsvendor_cost_cvxpy
 from .npl import sample_npl
 from .optimise import get_kl_bdro_problem, DRO_BAS_MMD
 from .portfolio import get_kl_portfolio_problem, bdro_portfolio_posterior_samples, portfolio_objective_cvxpy
+from .preprocessing import normalise_by_dimension
 from .gaussian_kernel import *
 
 app = typer.Typer(name="misdro")
@@ -143,17 +145,31 @@ def generate_csv(experiment_dir: Path, npl_samples_dir: Optional[Path] = None):
     experiment_filepath = experiment_dir / "experiment.json"
     with open(experiment_filepath, "r", encoding="utf-8") as json_file:
         experiment = json.load(json_file)
-    df = pd.DataFrame(experiment).set_index("uuid")
-    result_df = pd.concat(
-        [
-            pd.read_csv(
-                experiment_dir / f"{uuid}.csv", index_col=["uuid", "replication"]
-            )
-            for uuid in df.index
-            if (experiment_dir / f"{uuid}.csv").exists()
-        ]
-    )
-    result_df = result_df.join(df, on="uuid")
+    experiment_df = pd.DataFrame(experiment).set_index("uuid")
+    print("Loading and concatenating", len(experiment_df), "CSV files into a pandas dataframe...")
+    result_df = pd.DataFrame()
+    result_list = []
+    failed_uuid_list = []
+    missing_uuid_list = []
+    for uuid in experiment_df.index:
+        if (experiment_dir / f"{uuid}.csv").exists():
+            try:
+                result_list.append(pd.read_csv(
+                    experiment_dir / f"{uuid}.csv", index_col=["uuid", "replication"]
+                ))
+            except pd.errors.ParserError:
+                failed_uuid_list.append(uuid)
+        else:
+            missing_uuid_list.append(uuid)
+
+    print("The following UUIDs did not have a CSV file:")
+    print(missing_uuid_list)
+    print()
+    print("The following UUIDs failed due to a pandas.errors.ParserError:")
+    print(failed_uuid_list)
+    result_df = pd.concat([result_df] + result_list)
+
+    result_df = result_df.join(experiment_df, on="uuid")
     result_df = result_df.reset_index()
     if npl_samples_dir:
         # load the settings for the NPL sampling
@@ -192,12 +208,13 @@ def run_experiment(
 
 
 @app.command(name="batch")
-def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool = False, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), npl_samples_dir: Optional[Path] = None):
-    print(datetime.now(), "Running batch from index", start)
+def batch(experiment_dir: Path, batch_id: int, batch_size: int, only_missing: bool = False, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), npl_samples_dir: Optional[Path] = None):
+    print(datetime.now(), "Running batch from array index", batch_id)
     print()
     filepath = experiment_dir / "experiment.json"
     with open(filepath, "r", encoding="utf-8") as json_file:
         experiment = json.load(json_file)
+    start = batch_id * batch_size
     batch_experiment = experiment[start: min(start + batch_size, len(experiment))]
     for params in batch_experiment:
         if not ((experiment_dir / params["uuid"]).exists() and only_missing):
@@ -229,11 +246,13 @@ def run(
     dgp: str = "truncated_normal",
     dim: int = 1,
     epsilon: float = 1.0,
+    eta: float = NPL_ETA,
     ignore_dpp: bool = False,
     inference: str = "bayes",
     lengthscale: float = -1.0,
     likelihood: str = "exponential",
     njobs: int = -1,
+    normalise: bool = False,
     npl_samples_dir: Optional[Path] = None,
     num_likelihood_samples: int = NUM_LIKELIHOOD_SAMPLES,
     num_observations: int = NUM_OBSERVATIONS,
@@ -249,12 +268,14 @@ def run(
     if uuid:
         print(uuid)
     print("DGP:", dgp, " - ALGORITHM:", algorithm, " - NUM LIKELIHOOD SAMPLES:", num_likelihood_samples, " - POSTERIOR:", posterior, "- DATASET:", dataset, "- DIM:", dim)
-    if algorithm in ("kl_bdro", "kl_dro_bas", "kl_pp") and dataset == "newsvendor":
+    if algorithm in ("kl_bdro", "kl_dro_bas", "kl_pp", "kl_empirical") and dataset == "newsvendor":
         problem = get_kl_bdro_problem(
             newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim,
         )
     elif algorithm == "kl_pp" and dataset == "portfolio":
         problem = get_kl_bdro_problem(portfolio_objective_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim, is_portfolio=True)
+    elif algorithm == "kl_empirical" and dataset == "portfolio":
+        problem = get_kl_bdro_problem(portfolio_objective_cvxpy, 1, num_observations, dim=dim, is_portfolio=True)
     elif algorithm in ("kl_bdro", "kl_dro_bas") and dataset == "portfolio" and likelihood == "multivariate_normal":
         problem = get_kl_portfolio_problem(dim, num_posterior_samples)
     elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
@@ -285,15 +306,6 @@ def run(
             ignore_dpp = True
             njobs = 1
 
-    if inference in ("npl_wlb", "npl_mmd"):
-        posterior_df = pd.read_csv(npl_samples_dir / "npl_settings.csv").set_index(POSTERIOR_GB_COLS)
-        npl_params = dict(zip(POSTERIOR_GB_COLS, [contamination, dataset, dgp, dim, inference, lengthscale, likelihood, num_observations, num_posterior_samples, num_replications, posterior]))
-        print(npl_params)
-        npl_uuid = get_npl_uuid(posterior_df, npl_params)
-        npl_uuid_dir = npl_samples_dir / npl_uuid
-    else:
-        npl_uuid_dir = None
-
     params = {
         "algorithm": algorithm,
         "contamination": contamination,
@@ -302,20 +314,32 @@ def run(
         "dgp": dgp,
         "dim": dim,
         "epsilon": epsilon,
+        "eta": eta,
         "ignore_dpp": ignore_dpp,
         "inference": inference,
         "lengthscale": lengthscale,
         "likelihood": likelihood,
-        "npl_uuid_dir": npl_uuid_dir,
+        "normalise": normalise,
         "num_certify_points": num_certify_points,
         "num_likelihood_samples": num_likelihood_samples,
         "num_observations": num_observations,
         "num_posterior_samples": num_posterior_samples,
+        "num_replications": num_replications,
         "num_test_observations": num_test_observations,
         "posterior": posterior,
         "uuid": uuid,
         "verbose": verbose,
     }
+
+    if inference in ("npl_wlb", "npl_mmd"):
+        posterior_df = pd.read_csv(npl_samples_dir / "npl_settings.csv").set_index(POSTERIOR_GB_COLS)
+        npl_params = {key: params[key] for key in POSTERIOR_GB_COLS}
+        npl_uuid = get_npl_uuid(posterior_df, npl_params)
+        params["npl_uuid_dir"] = npl_samples_dir / npl_uuid
+    else:
+        params["npl_uuid_dir"] = None
+    params.pop("num_replications")  # popped because we don't need to pass this to the run_replication method, but it is needed above for getting the npl_uuid
+
     if njobs == 1:
         all_solve_start = datetime.now()
         list_of_replication_stats = []
@@ -359,10 +383,12 @@ def run_replication(
     dgp: str = "truncated_normal",
     dim: int = 1,
     epsilon: float = 1.0,
+    eta: float = NPL_ETA,
     ignore_dpp: bool = False,
     inference: str = "bayes",
     lengthscale: float = -1.0,
     likelihood: str = "exponential",
+    normalise: bool = False,
     npl_uuid_dir: Optional[Path] = None,
     num_certify_points: int = NUM_CERTIFY,
     num_likelihood_samples: int = NUM_LIKELIHOOD_SAMPLES,
@@ -393,6 +419,9 @@ def run_replication(
             data, data_eval = portfolio_dataset(dgp, CRASH_WINDOW_ID, dataset_dir, out_of_sample_time_window=CRASH_OOS_TIME_WINDOW)
         else:
             data, data_eval = portfolio_dataset(dgp, replication, dataset_dir)
+        # NOTE only normalise training data
+        if normalise:
+            data = normalise_by_dimension(data)
     else:
         raise NotImplementedError(f"Dataset not implemented: {dataset}")
     dgp_time = (datetime.now() - dgp_start).total_seconds()
@@ -446,6 +475,7 @@ def run_replication(
             dim,
             num_likelihood_samples,
             generator=generator,
+            inference=inference,
         )
     likelihood_time = (datetime.now() - likelihood_start).total_seconds()
 
@@ -471,7 +501,7 @@ def run_replication(
         problem.solve(solver=cp.MOSEK, verbose=verbose, ignore_dpp=ignore_dpp, accept_unknown=True)
         solution = problem.var_dict["x"].value
         setup_time = problem.solver_stats.setup_time
-    elif algorithm in ("kl_bdro", "kl_dro_bas", "kl_pp"):
+    elif algorithm in ("kl_bdro", "kl_dro_bas", "kl_pp", "kl_empirical"):
         if epsilon - log_partition_constant < 0:
             # NOTE the optimisation problem is unbounded below
             solution = np.inf * np.ones(dim)
@@ -480,6 +510,7 @@ def run_replication(
         else:
             # set parameters then solve
             problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon - log_partition_constant])
+            xi = xi.reshape((num_posterior_samples, num_likelihood_samples, dim))
             for i in range(num_posterior_samples):
                 problem.param_dict[f"xi_{i}"].value = xi[i]
             # NOTE the MOSEK 'accept_unknown' argument is needed due to https://github.com/cvxpy/cvxpy/pull/2117
@@ -539,7 +570,21 @@ def run_replication(
         "out_of_sample_cost": list(out_of_sample_cost),
     }
 
-POSTERIOR_GB_COLS = ["contamination", "dataset", "dgp", "dim", "inference", "lengthscale", "likelihood", "num_observations", "num_posterior_samples", "num_replications", "posterior"]
+POSTERIOR_GB_COLS = [
+    "contamination",
+    "dataset",
+    "dgp",
+    "dim",
+    "eta",
+    "inference", 
+    "lengthscale",
+    "likelihood",
+    "normalise",
+    "num_observations",
+    "num_posterior_samples",
+    "num_replications",
+    "posterior"
+]
 
 def get_npl_uuid(posterior_settings_df: pd.DataFrame, params: dict) -> str:
     params_tuple = tuple([params[key] for key in POSTERIOR_GB_COLS])
@@ -574,6 +619,8 @@ def sample_npl_for_experiment(
             )
         elif dataset == "portfolio":
             data, _ = portfolio_dataset(dgp, replication, dataset_dir)
+            if npl_row["normalise"]:
+                data = normalise_by_dimension(data)
         else:
             raise NotImplementedError(f"Dataset not implemented: {dataset}")
 
@@ -590,6 +637,7 @@ def sample_npl_for_experiment(
             lengthscale=npl_row["lengthscale"],
             generator=generator,
             dim=npl_row["dim"],
+            eta=npl_row["eta"],
         )
         npl_finish = datetime.now()
         total_seconds =  (datetime.now() - npl_start).total_seconds()
