@@ -209,11 +209,17 @@ def data_generation_gamma(num_observations: int, a: float, random_state: Optiona
 
     return gamma_samples
 
-def portfolio_dataset(dgp: str, time_window_id: int, mmc2_dir: Path) -> tuple[np.ndarray, np.ndarray]:
+def portfolio_dataset(
+    dgp: str,
+    time_window_id: int,
+    mmc2_dir: Path,
+    in_sample_time_window: int = IN_SAMPLE_TIME_WINDOW,
+    out_of_sample_time_window: int = OUT_OF_SAMPLE_TIME_WINDOW,
+) -> tuple[np.ndarray, np.ndarray]:
     """Gets the training and test datasets for the porfolio problem.
 
     Args:
-        dgp: Options include 'DowJones', 'FF49Industries', 'FTSE100', 'NASDAQ100', 'NASDAQComp', 'SP500'
+        dgp: Options include 'DowJones', 'DowJones-crash', 'FF49Industries', 'FTSE100', 'NASDAQ100', 'NASDAQComp', 'SP500'
         time_window_id: The ID of the time window.
         mmc2_dir: Path to the directory downloaded from 'data-in-brief' webpage below
 
@@ -224,16 +230,26 @@ def portfolio_dataset(dgp: str, time_window_id: int, mmc2_dir: Path) -> tuple[np
     Notes:
         Download data from https://www.data-in-brief.com/article/S2352-3409(16)30399-7/fulltext
     """
-    returns_df = pd.read_excel(mmc2_dir / "Datasets" / dgp / f"{dgp}.xlsx", sheet_name="Assets_Returns", header=None)
+    returns_df = get_portfolio_returns_df(mmc2_dir, dgp)
     num_time_windows = get_num_time_windows(len(returns_df))
     assert time_window_id < num_time_windows
-    start_training_week = time_window_id * OUT_OF_SAMPLE_TIME_WINDOW # inclusive
-    end_training_week = start_training_week + IN_SAMPLE_TIME_WINDOW # not inclusive
+    start_training_week = time_window_id * 12 # inclusive
+    end_training_week = start_training_week + in_sample_time_window # not inclusive
     start_test_week = end_training_week # inclusive
-    end_test_week = start_test_week + OUT_OF_SAMPLE_TIME_WINDOW # not inclusive
+    end_test_week = start_test_week + out_of_sample_time_window # not inclusive
     training_data = returns_df.iloc[start_training_week: end_training_week].values
     test_data = returns_df.iloc[start_test_week: end_test_week].values
     return training_data, test_data
 
-def get_num_time_windows(num_weeks: int) -> int:
-    return math.floor((num_weeks - IN_SAMPLE_TIME_WINDOW) / OUT_OF_SAMPLE_TIME_WINDOW)
+def get_portfolio_returns_df(mmc2_dir: Path, dgp: str) -> pd.DataFrame:
+    dgp_temp = dgp
+    if dgp == "DowJones-crash":
+        dgp_temp = "DowJones"
+    return pd.read_excel(mmc2_dir / "Datasets" / dgp_temp / f"{dgp_temp}.xlsx", sheet_name="Assets_Returns", header=None)
+
+def get_num_time_windows(
+    num_weeks: int,
+    in_sample_time_window: int = IN_SAMPLE_TIME_WINDOW,
+    out_of_sample_time_window: int = OUT_OF_SAMPLE_TIME_WINDOW
+) -> int:
+    return math.floor((num_weeks - in_sample_time_window) / out_of_sample_time_window)
