@@ -48,7 +48,7 @@ app = typer.Typer(name="misdro")
 
 @app.command(name="setup-kl")
 def setup_kl_dro_bas(
-    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, dataset_dir: Path = Path("~/misdro/datasets/mmc2"), overwrite: bool = False
+    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), overwrite: bool = False
 ):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
@@ -78,7 +78,7 @@ def setup_kl_dro_bas(
 
 @app.command(name="setup-mmd")
 def setup_mmd_dro_bas(
-    experiment_name: ExperimentName, experiment_dir: Path, npl_samples_dir: Path, batch_size: int, dataset_dir: Path = Path("~/misdro/datasets/mmc2"), overwrite: bool = False, njobs: int = -1,
+    experiment_name: ExperimentName, experiment_dir: Path, npl_samples_dir: Path, batch_size: int, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), overwrite: bool = False, njobs: int = -1,
 ):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
@@ -134,25 +134,6 @@ def setup_mmd_dro_bas(
         npl_slurm_string = npl_slurm_string.format(num_npl_batches=num_npl_batches, npl_samples_dir=npl_samples_dir, dataset_dir=dataset_dir)
         (npl_samples_dir / f"sample_npl_{experiment_name}.slurm").write_text(npl_slurm_string)
 
-
-# @app.command(name="csv")
-# def generate_csv(experiment_dir: Path):
-#     """Write a CSV file with all the results"""
-#     experiment_filepath = experiment_dir / "experiment.json"
-#     with open(experiment_filepath, "r", encoding="utf-8") as json_file:
-#         experiment = json.load(json_file)
-#     df = pd.DataFrame(experiment).set_index("uuid")
-#     result_df = pd.concat(
-#         [
-#             pd.read_csv(
-#                 experiment_dir / f"{uuid}.csv", index_col=["uuid", "replication"]
-#             )
-#             for uuid in df.index
-#             if (experiment_dir / f"{uuid}.csv").exists()
-#         ]
-#     )
-#     result_df = result_df.join(df, on="uuid")
-#     result_df.to_csv(experiment_dir / "results.csv", index=True)
 @app.command(name="csv")
 def generate_csv(experiment_dir: Path, npl_samples_dir: Optional[Path] = None):
     """Write a CSV file with all the results"""
@@ -197,7 +178,7 @@ def run_experiment(
     algorithm: str,
     only_missing: bool = False, #NOTE if the experiment runs out of memory set this to true to true 
     njobs: int = -1,
-    dataset_dir: Path = Path("~/misdro/datasets/mmc2"),
+    dataset_dir: Path = Path("~/datasets/misdro/mmc2"),
 ):
     """When using SLURM, this function is called to run an experiment"""
     print(datetime.now(), "- Running algorithm", algorithm, "with DGP", dgp, "from experiment directory", experiment_dir)
@@ -211,7 +192,7 @@ def run_experiment(
 
 
 @app.command(name="batch")
-def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool = False, dataset_dir: Path = Path("~/misdro/datasets/mmc2"), npl_samples_dir: Optional[Path] = None):
+def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool = False, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), npl_samples_dir: Optional[Path] = None):
     print(datetime.now(), "Running batch from index", start)
     print()
     filepath = experiment_dir / "experiment.json"
@@ -223,7 +204,7 @@ def batch(experiment_dir: Path, start: int, batch_size: int, only_missing: bool 
             run(experiment_dir, dataset_dir=dataset_dir, npl_samples_dir=npl_samples_dir, **params)
 
 @app.command(name="uuid")
-def run_uuid(experiment_dir: Path, uuid: UUID, dataset_dir: Path = Path("~/misdro/datasets/mmc2"), npl_samples_dir: Optional[Path] = None, njobs: int = -1, verbose: bool = False) -> None:
+def run_uuid(experiment_dir: Path, uuid: UUID, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), npl_samples_dir: Optional[Path] = None, njobs: int = -1, verbose: bool = False) -> None:
     """Run DRO for only one specified uuid parameters"""
     filepath = experiment_dir / "experiment.json"
     with open(filepath, "r", encoding="utf-8") as json_file:
