@@ -138,13 +138,13 @@ def setup_mmd_dro_bas(
         npl_slurm_string = npl_slurm_string.format(num_npl_batches=num_npl_batches, npl_samples_dir=npl_samples_dir, dataset_dir=dataset_dir)
         (npl_samples_dir / f"sample_npl_{experiment_name}.slurm").write_text(npl_slurm_string)
 
-
 @app.command(name="csv")
 def generate_csv(experiment_dir: Path, npl_samples_dir: Optional[Path] = None):
     """Write a CSV file with all the results"""
     experiment_filepath = experiment_dir / "experiment.json"
     with open(experiment_filepath, "r", encoding="utf-8") as json_file:
         experiment = json.load(json_file)
+
     experiment_df = pd.DataFrame(experiment).set_index("uuid")
     print("Loading and concatenating", len(experiment_df), "CSV files into a pandas dataframe...")
     result_df = pd.DataFrame()
@@ -168,14 +168,15 @@ def generate_csv(experiment_dir: Path, npl_samples_dir: Optional[Path] = None):
     print("The following UUIDs failed due to a pandas.errors.ParserError:")
     print(failed_uuid_list)
     result_df = pd.concat([result_df] + result_list)
-
     result_df = result_df.join(experiment_df, on="uuid")
     result_df = result_df.reset_index()
     if npl_samples_dir:
         # load the settings for the NPL sampling
         settings_df = pd.read_csv(npl_samples_dir / "npl_settings.csv")
+        # filter df because the empirical method doesn't produce anything and we get an error
+        filtered_settings_df = settings_df[settings_df["inference"] == "npl_mmd"]
         # then, for each npl_uuid, load the times taken for each replication
-        times_df = pd.concat([pd.read_csv(npl_samples_dir / npl_uuid / f"npl_times_{npl_uuid}.csv") for npl_uuid in settings_df["npl_uuid"]])
+        times_df = pd.concat([pd.read_csv(npl_samples_dir / npl_uuid / f"npl_times_{npl_uuid}.csv") for npl_uuid in filtered_settings_df["npl_uuid"]])
         # now merge the times and the npl_uuids together
         result_df = result_df.merge(settings_df, how="left", on=POSTERIOR_GB_COLS)
         result_df = result_df.merge(times_df, on=["npl_uuid", "replication"], how="left", suffixes=('', '_drop'))
@@ -444,7 +445,7 @@ def run_replication(
         elif algorithm == "kl_pp":
             theta_sample = posterior_predictive_params(posterior, theta_posterior)
         else:
-            theta_sample = sample_posterior(posterior, theta_posterior, num_likelihood_samples, generator=generator)
+            theta_sample = sample_posterior(posterior, theta_posterior, num_posterior_samples, generator=generator)
     elif inference in ("npl_wlb", "npl_mmd"):
         # get the posterior 
         path_to_csv = npl_uuid_dir / f"npl_sample_{replication}.csv"
@@ -474,6 +475,7 @@ def run_replication(
             theta_sample,
             dim,
             num_likelihood_samples,
+            num_posterior_samples,
             generator=generator,
             inference=inference,
         )
