@@ -44,7 +44,7 @@ def sample_likelihood(
             vec_cov = theta_sample[i,dim:]
             if inference == "bayes":
                 cov = reconstruct_covariance_from_triu(vec_cov, dim)
-            elif inference == "npl":
+            elif inference == "npl_mmd":
                 cov = cholesky_param_to_covariance(dim, vec_cov)
             else:
                 raise ValueError(f"Not a valid inference: {inference}")

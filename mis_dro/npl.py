@@ -13,7 +13,7 @@ from jax import vmap, value_and_grad, jit, config
 from jax.example_libraries import optimizers
 from .gaussian_kernel import k, k_jax, k_comp
 from .models import *
-from .constants import upper_triangular_size
+from .constants import upper_triangular_size, NPL_ETA
 
 
 def sample_npl(
@@ -26,6 +26,7 @@ def sample_npl(
     dim: int = 1,
     generator: Optional[np.random.Generator] = None,
     p: int = 1,
+    eta: float = NPL_ETA,
 ) -> np.ndarray:
     """Wrapper function for sampling from the NPL posterior with either WLL or MMD loss function
 
@@ -74,6 +75,7 @@ def sample_npl(
         seed,
         l=lengthscale,
         loss_fn=inference,
+        eta=eta,
     )
     npl_toy.draw_samples(random_state=generator)
     theta_sample = npl_toy.sample
@@ -83,7 +85,7 @@ def sample_npl(
 class Npl:
     """This class contains functions to perform NPL inference (for alpha = 0 in the DP prior) for the Exponential distribution model."""
 
-    def __init__(self, X, B, p, m, model, seed, l=-1, loss_fn="npl_wlb", eta: float = 0.1):
+    def __init__(self, X, B, p, m, model, seed, l=-1, loss_fn="npl_wlb", eta: float = NPL_ETA):
         """
         Args:
             X: Data set
@@ -111,7 +113,7 @@ class Npl:
         self.model = model
         self.seed = seed
         self.sample = None
-        self.eta = eta
+        self.eta = jnp.float64(eta) # NOTE this cast seems to fix a bug, but does create a warning - dunno why?!
 
     def draw_single_mmd_sample(self, weights, key):
         """Draws a single sample from the nonparametric posterior specified via
@@ -193,14 +195,14 @@ class Npl:
                 theta, key
             )  # Returnes self.m random samples from the model with parameter theta
 
-            # # FIXME handle dimensions
-            # if self.d > 1:
-            #     # Compute kernel Gram matrices
-            #     kyy = k_comp(y, y) #, self.l
-            #     kxy = k_comp(y, x) #, self.l
-            # else:
-            kyy = k_jax(y, y, self.l)
-            kxy = k_jax(y, x, self.l)
+            # FIXME handle dimensions
+            if self.d > 1:
+                # Compute kernel Gram matrices
+                kyy = k_comp(y, y) #, self.l
+                kxy = k_comp(y, x) #, self.l
+            else:
+                kyy = k_jax(y, y, self.l)
+                kxy = k_jax(y, x, self.l)
 
             # first sum
             diag_elements = jnp.diag_indices_from(kyy)
