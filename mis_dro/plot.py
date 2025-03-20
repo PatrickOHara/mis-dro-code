@@ -34,7 +34,7 @@ CB_color_cycle = [
 
 class AlgorithmColor(StrEnum):
     """Colors of algorithm lines"""
-    dro_bas_mmd = "#008080"   #"#f781bf"
+    dro_bas_mmd = "#377eb8"   #"#f781bf"
     kl_bdro = "#ff7f00"
     kl_dro_bas = "#984ea3"
     kl_empirical = "#999999"
@@ -47,7 +47,7 @@ class AlgorithmName(StrEnum):
     """Consistent algorithm line styles"""
 
     bdro_grid_search = "BDRO grid search"
-    dro_bas_mmd = "RoBAS"
+    dro_bas_mmd = "DRO-RoBAS"
     empirical_mmd = "Empirical MMD"
     kl_bdro = "BDRO"
     kl_dro_bas = "DRO-BAS$_{PE}$"
@@ -69,6 +69,7 @@ class NiceNameDGP(StrEnum):
     bimodal_univariate_gaussian = "Bimodal Normal DGP"
     bimodal_multivariate_gaussian = "Bimodal 5D Normal DGP"
     contaminated_normal = "Contaminated Normal DGP"
+    portfolio_contaminated_multivariate_normal = "Contaminated 5D Normal DGP"
 
 
 
