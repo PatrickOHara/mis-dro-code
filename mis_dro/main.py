@@ -231,6 +231,7 @@ def run(
     epsilon: float = 1.0,
     ignore_dpp: bool = False,
     inference: str = "bayes",
+    kernel_name: str = "k_jax",
     lengthscale: float = -1.0,
     likelihood: str = "exponential",
     njobs: int = -1,
@@ -287,7 +288,7 @@ def run(
 
     if inference in ("npl_wlb", "npl_mmd"):
         posterior_df = pd.read_csv(npl_samples_dir / "npl_settings.csv").set_index(POSTERIOR_GB_COLS)
-        npl_params = dict(zip(POSTERIOR_GB_COLS, [contamination, dataset, dgp, dim, inference, lengthscale, likelihood, num_observations, num_posterior_samples, num_replications, posterior]))
+        npl_params = dict(zip(POSTERIOR_GB_COLS, [contamination, dataset, dgp, dim, inference, kernel_name, lengthscale, likelihood, num_observations, num_posterior_samples, num_replications, posterior]))
         print(npl_params)
         npl_uuid = get_npl_uuid(posterior_df, npl_params)
         npl_uuid_dir = npl_samples_dir / npl_uuid
@@ -539,7 +540,7 @@ def run_replication(
         "out_of_sample_cost": list(out_of_sample_cost),
     }
 
-POSTERIOR_GB_COLS = ["contamination", "dataset", "dgp", "dim", "inference", "lengthscale", "likelihood", "num_observations", "num_posterior_samples", "num_replications", "posterior"]
+POSTERIOR_GB_COLS = ["contamination", "dataset", "dgp", "dim", "inference", "kernel_name", "lengthscale", "likelihood", "num_observations", "num_posterior_samples", "num_replications", "posterior"]
 
 def get_npl_uuid(posterior_settings_df: pd.DataFrame, params: dict) -> str:
     params_tuple = tuple([params[key] for key in POSTERIOR_GB_COLS])
@@ -590,6 +591,7 @@ def sample_npl_for_experiment(
             lengthscale=npl_row["lengthscale"],
             generator=generator,
             dim=npl_row["dim"],
+            kernel_name=npl_row["kernel_name"],
         )
         npl_finish = datetime.now()
         total_seconds =  (datetime.now() - npl_start).total_seconds()
