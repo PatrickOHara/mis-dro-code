@@ -71,6 +71,8 @@ def sample_dgp(
     if dgp == "cont_multivariate_normal":
         return cont_multivariate_normal(
             num_observations, contamination, random_state=generator)
+    if dgp == "portfolio_contaminated_multivariate_normal":
+        return portfolio_contaminated_multivariate_normal(num_observations, contamination, random_state=generator)
     if dgp == "contaminated_normal":
         return contaminated_normal(
             num_observations, contamination, random_state=generator)
@@ -188,6 +190,23 @@ def cont_multivariate_normal(num_observations: int, contamination: float, random
     dgp_mean = np.array([10.0, 20.0, 30.0, 35.0, 22.0]) #10
     dgp_mean_outl = dgp_mean + 30
     dgp_cov = (DGP_STD_TRUNCATED_NORMAL**2)*np.eye(5)
+    data = multivariate_normal.rvs(dgp_mean, dgp_cov, size=n_real, random_state=random_state)
+    outl = multivariate_normal.rvs(dgp_mean_outl, dgp_cov, size=cont_size, random_state=random_state)
+    data = np.concatenate((data, outl), axis=0)
+    random_state.shuffle(data)  # shuffles the data in-place
+    return data
+
+def portfolio_contaminated_multivariate_normal(num_observations: int, contamination: float, random_state: Optional[np.random.Generator] = None):
+    """Portfolio contamination dataset"""
+    if not random_state:
+        random_state = np.random.default_rng()
+    cont_size = int(np.floor(contamination * num_observations))
+    n_real = num_observations - cont_size
+    dgp_mean = np.array([2.5, 0.5, -1.0, -3.0, 3.5])
+    # dgp_mean = np.zeros(5)
+    dgp_mean_outl = dgp_mean + np.array([2.5, 50.0, 50.0, 50.0, 3.5])
+    dgp_cov = np.diag(np.array([5.0, 10.0, 15.0, 20.0, 30.0]))
+    # dgp_cov = np.diag(np.array([1.0, 2.0, 3.0, 4.0, 5.0]))
     data = multivariate_normal.rvs(dgp_mean, dgp_cov, size=n_real, random_state=random_state)
     outl = multivariate_normal.rvs(dgp_mean_outl, dgp_cov, size=cont_size, random_state=random_state)
     data = np.concatenate((data, outl), axis=0)

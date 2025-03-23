@@ -10,6 +10,7 @@ def sample_likelihood(
     theta_sample: np.ndarray,
     dim: int,
     num_likelihood_samples: int,
+    num_posterior_samples: int,
     generator: Optional[np.random.Generator],
     inference: str = "bayes",
 ) -> np.ndarray:
@@ -20,7 +21,7 @@ def sample_likelihood(
     """
     if not generator:
         generator = np.random.default_rng()
-    num_posterior_samples = theta_sample.shape[0]
+    # num_posterior_samples = theta_sample.shape[0]
     xi = np.zeros([num_posterior_samples, num_likelihood_samples, dim])
     if likelihood == "exponential":
         for i in range(num_posterior_samples):
@@ -43,7 +44,7 @@ def sample_likelihood(
             vec_cov = theta_sample[i,dim:]
             if inference == "bayes":
                 cov = reconstruct_covariance_from_triu(vec_cov, dim)
-            elif inference == "npl":
+            elif inference == "npl_mmd":
                 cov = cholesky_param_to_covariance(dim, vec_cov)
             else:
                 raise ValueError(f"Not a valid inference: {inference}")
@@ -54,7 +55,7 @@ def sample_likelihood(
             cov = (5**2)*np.eye(dim)
             # vec_triu = theta_sample[i,dim:]
             # cov = reconstruct_covariance_from_triu(vec_triu, dim)
-            xi[i] = generator.multivariate_normal(mu, cov, size=num_likelihood_samples)
+            xi[i] = generator.multivariate_normal(mu, cov, size=num_likelihood_samples).reshape((num_likelihood_samples,dim))
     elif likelihood == "normal_known_var":
         for i in range(num_posterior_samples):
             xi[i] = generator.normal(
