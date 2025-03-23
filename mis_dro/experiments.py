@@ -608,6 +608,7 @@ def mmd_portfolio_synthetic() -> List[Dict]:
             "epsilon": epsilon,
             "eta": eta,
             "inference": inference,
+            "kernel_name": "k_comp",
             "lengthscale": -1.0,
             "likelihood": likelihood,
             "normalise": False,
