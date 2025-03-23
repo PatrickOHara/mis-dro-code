@@ -167,7 +167,6 @@ def generate_csv(experiment_dir: Path, npl_samples_dir: Optional[Path] = None):
     print("The following UUIDs failed due to a pandas.errors.ParserError:")
     print(failed_uuid_list)
     result_df = pd.concat([result_df] + result_list)
-
     result_df = result_df.join(experiment_df, on="uuid")
     result_df = result_df.reset_index()
     if npl_samples_dir:

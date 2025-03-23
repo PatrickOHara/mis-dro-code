@@ -59,6 +59,8 @@ class AlgorithmName(StrEnum):
 
 class NiceNameDGP(StrEnum):
     contaminated_exp = "Contaminated Exp"
+    contaminated_exp_large_outliers = "Large Outliers Exp"
+    contaminated_exp_small_outliers = "Small Outliers Exp"
     exponential = "Exponential DGP"
     normal = "Normal DGP"
     multivariate_normal = "5D Normal DGP"
@@ -67,7 +69,7 @@ class NiceNameDGP(StrEnum):
     bimodal_univariate_gaussian = "Bimodal 1D Normal"
     bimodal_multivariate_gaussian = "Bimodal 5D Normal"
     contaminated_normal = "Contaminated Normal"
-    portfolio_contaminated_multivariate_normal = "Contaminated Normal"
+    portfolio_contaminated_multivariate_normal = "Contaminated 5D Normal"
 
 
 
