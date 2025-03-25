@@ -144,7 +144,6 @@ def generate_csv(experiment_dir: Path, npl_samples_dir: Optional[Path] = None):
     experiment_filepath = experiment_dir / "experiment.json"
     with open(experiment_filepath, "r", encoding="utf-8") as json_file:
         experiment = json.load(json_file)
-
     experiment_df = pd.DataFrame(experiment).set_index("uuid")
     print("Loading and concatenating", len(experiment_df), "CSV files into a pandas dataframe...")
     result_df = pd.DataFrame()
@@ -250,6 +249,7 @@ def run(
     eta: float = NPL_ETA,
     ignore_dpp: bool = False,
     inference: str = "bayes",
+    kernel_name: str = "k_jax",
     lengthscale: float = -1.0,
     likelihood: str = "exponential",
     njobs: int = -1,
@@ -582,7 +582,8 @@ POSTERIOR_GB_COLS = [
     "dgp",
     "dim",
     "eta",
-    "inference", 
+    "inference",
+    "kernel_name",
     "lengthscale",
     "likelihood",
     "normalise",
@@ -643,6 +644,7 @@ def sample_npl_for_experiment(
             lengthscale=npl_row["lengthscale"],
             generator=generator,
             dim=npl_row["dim"],
+            kernel_name=npl_row["kernel_name"],
             eta=npl_row["eta"],
         )
         npl_finish = datetime.now()
