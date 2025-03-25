@@ -556,7 +556,7 @@ def run_replication(
         setup_time = 0.0  # can't really measure this easily
     elif algorithm == "wasserstein_empirical":
         setup_time = 0.0
-        solution = empirical_wasserstein_dro_newsvendor(xi, epsilon, p=2)
+        solution = np.array([empirical_wasserstein_dro_newsvendor(xi, epsilon, p=2)])
     else:
         raise ValueError("Please choose a valid algorithm")
     solve_time = (datetime.now() - solve_start).total_seconds()

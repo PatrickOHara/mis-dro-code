@@ -27,6 +27,10 @@ def newsvendor_cost_cvxpy(x, xi):
 
 def empirical_wasserstein_dro_newsvendor(data, epsilon, p: int = 2, b: float = BACKORDER_COST, h: float = HOLDING_COST):
     """Univariate empirical Wasserstein distributionally robust newsvendor problem"""
+    if len(data.shape) > 1 and data.shape[1] > 1:
+        raise ValueError("Data must be univariate")
+    if len(data.shape) == 2:
+        data = data.flatten()
     len_data = len(data)
     if p == 1:
         # put data in ascending order
