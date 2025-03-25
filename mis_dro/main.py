@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import scipy as sp
 import typer
+from sklearn.model_selection import KFold
 
 from bayesian_dro.Bayesian_DRO_continuous import main_Bayesian_DRO
 from .bayes_conjugates import (
@@ -37,6 +38,7 @@ from .constants import (
     ROBAS_NEWSVENDOR_NUM_REPLICATIONS,
 )
 from .dataset import sample_dgp, portfolio_dataset, get_num_time_windows
+from .epsilon import get_num_observations_in_train_split
 from .experiments import ExperimentName, get_experiment
 from .likelihood import sample_likelihood, reconstruct_covariance_from_triu
 from .newsvendor import newsvendor_cost_cvxpy, empirical_wasserstein_dro_newsvendor
@@ -45,6 +47,7 @@ from .optimise import get_kl_bdro_problem, DRO_BAS_MMD
 from .portfolio import get_kl_portfolio_problem, bdro_portfolio_posterior_samples, portfolio_objective_cvxpy
 from .preprocessing import normalise_by_dimension
 from .gaussian_kernel import *
+
 
 app = typer.Typer(name="misdro")
 
@@ -245,7 +248,7 @@ def run(
     dataset_dir: Optional[Path] = None,
     dgp: str = "truncated_normal",
     dim: int = 1,
-    epsilon: float = 1.0,
+    epsilon: Optional[float] = 1.0,
     eta: float = NPL_ETA,
     ignore_dpp: bool = False,
     inference: str = "bayes",
@@ -262,12 +265,30 @@ def run(
     num_test_observations: int = NUM_TEST_OBSERVATIONS,
     num_certify_points: int = NUM_CERTIFY,
     posterior: str = "gamma",
+    do_cross_validation: bool = False,
+    n_splits: Optional[int] = None,
+    split_idx: Optional[int] = None,
     uuid: str = str(uuid4()),
     verbose: bool = False,
 ):
     """Run Newsvendor Misspecified Bayesian DRO"""
     if uuid:
         print(uuid)
+
+    use_cv_epsilon = do_cross_validation and n_splits is not None and split_idx is None and epsilon is None
+
+    if do_cross_validation and n_splits is not None and split_idx is not None and epsilon is not None:
+        num_training_observations = get_num_observations_in_train_split(n_splits, split_idx, num_observations)
+        num_test_observations = num_observations - num_training_observations
+    elif use_cv_epsilon and split_idx is None and not do_cross_validation:
+        num_training_observations = num_observations
+        # TODO get the best epsilon for each replication from the cross-validation - store in array
+        epsilons_for_replications = np.ones(num_replications)
+    elif do_cross_validation:
+        raise ValueError("Something went wrong in the previous logic.")
+    else:
+        num_training_observations = num_observations
+    
     print("DGP:", dgp, " - ALGORITHM:", algorithm, " - NUM LIKELIHOOD SAMPLES:", num_likelihood_samples, " - POSTERIOR:", posterior, "- DATASET:", dataset, "- DIM:", dim)
     if algorithm in ("kl_bdro", "kl_dro_bas", "kl_pp", "kl_empirical") and dataset == "newsvendor":
         problem = get_kl_bdro_problem(
@@ -276,7 +297,7 @@ def run(
     elif algorithm == "kl_pp" and dataset in ("portfolio", "portfolio_synthetic"):
         problem = get_kl_bdro_problem(portfolio_objective_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim, is_portfolio=True)
     elif algorithm == "kl_empirical" and dataset in ("portfolio", "portfolio_synthetic"):
-        problem = get_kl_bdro_problem(portfolio_objective_cvxpy, 1, num_observations, dim=dim, is_portfolio=True)
+        problem = get_kl_bdro_problem(portfolio_objective_cvxpy, 1, num_training_observations, dim=dim, is_portfolio=True)
     elif algorithm in ("kl_bdro", "kl_dro_bas") and dataset in ("portfolio", "portfolio_synthetic") and likelihood == "multivariate_normal":
         problem = get_kl_portfolio_problem(dim, num_posterior_samples)
     elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
@@ -284,7 +305,7 @@ def run(
         if algorithm == "dro_bas_mmd":
             n_samples = num_posterior_samples*num_likelihood_samples
         elif algorithm == "empirical_mmd":
-            n_samples = num_observations
+            n_samples = num_training_observations
         if dataset == "newsvendor":
             kdro_class = DRO_BAS_MMD(dim_theta, dim, newsvendor_cost_cvxpy)
             problem = kdro_class.get_newsvendor_problem(n_samples, num_certify_points)
@@ -332,6 +353,10 @@ def run(
         "num_replications": num_replications,
         "num_test_observations": num_test_observations,
         "posterior": posterior,
+        "do_cross_validation": do_cross_validation,
+        "n_splits": n_splits,
+        "split_idx": split_idx,
+        "use_cv_epsilon": use_cv_epsilon,
         "uuid": uuid,
         "verbose": verbose,
     }
@@ -354,6 +379,8 @@ def run(
         list_of_replication_stats = []
         print(all_solve_start, "- Running all replications in series.")
         for j in range(num_replications):
+            if use_cv_epsilon:
+                params["epsilon"] = epsilons_for_replications[j]
             list_of_replication_stats.append(run_replication(j, problem, **params))
         all_solve_end = datetime.now()
         print(all_solve_end, "- Finished solving all replications in series. Total solve time is", (all_solve_end - all_solve_start).total_seconds())
@@ -403,6 +430,10 @@ def run_replication(
     num_posterior_samples: int = NUM_POSTERIOR_SAMPLES,
     num_test_observations: int = NUM_TEST_OBSERVATIONS,
     posterior: str = "gamma",
+    do_cross_validation: bool = False,
+    n_splits: Optional[int] = None,
+    split_idx: Optional[int] = None,
+    use_cv_epsilon: bool = False,
     uuid: str = str(uuid4()),
     verbose: bool = False,
 ):
@@ -415,9 +446,18 @@ def run_replication(
         data = sample_dgp(
             dgp, num_observations, dim=dim, contamination=contamination, generator=generator
         )
-        data_eval = sample_dgp(
-            dgp, num_test_observations, dim=dim, contamination=0.0, generator=generator
-        )
+        if do_cross_validation and not use_cv_epsilon:
+            # NOTE we use a different random number generator for CV because we do not want to contaminate the test samples
+            # and because we want to reproduce the same CV splits for each replication
+            cv_generator = np.random.default_rng(seed=replication + 1000)
+            kf = KFold(n_splits=n_splits, shuffle=True, random_state=cv_generator)
+            train_index, test_index = list(kf.split(data))[split_idx]
+            data = data[train_index]
+            data_eval = data[test_index]
+        else:
+            data_eval = sample_dgp(
+                dgp, num_test_observations, dim=dim, contamination=0.0, generator=generator
+            )
     elif dataset == "portfolio":
         # NOTE shape of data (N, D) where N is number of weeks and D is the number of stocks
         if dgp == "DowJones-crash":
