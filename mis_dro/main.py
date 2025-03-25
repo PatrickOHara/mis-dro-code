@@ -39,7 +39,7 @@ from .constants import (
 from .dataset import sample_dgp, portfolio_dataset, get_num_time_windows
 from .experiments import ExperimentName, get_experiment
 from .likelihood import sample_likelihood, reconstruct_covariance_from_triu
-from .newsvendor import newsvendor_cost_cvxpy
+from .newsvendor import newsvendor_cost_cvxpy, empirical_wasserstein_dro_newsvendor
 from .npl import sample_npl
 from .optimise import get_kl_bdro_problem, DRO_BAS_MMD
 from .portfolio import get_kl_portfolio_problem, bdro_portfolio_posterior_samples, portfolio_objective_cvxpy
@@ -293,6 +293,9 @@ def run(
             problem = kdro_class.get_portfolio_problem(n_samples, num_certify_points)
         else:
             raise ValueError(f"Objective not implemented for dataset '{dataset}'")
+    elif algorithm == "wasserstein_empirical":
+        # NOTE we don't need a problem here - solution is found using bisection search
+        problem = None
     else:
         raise NotImplementedError(f"Algorithm {algorithm} not implemented.")
     # If the number of parameters is small enough, then use Disciplined Parametrized Programming (DPP)
@@ -318,6 +321,7 @@ def run(
         "eta": eta,
         "ignore_dpp": ignore_dpp,
         "inference": inference,
+        "kernel_name": kernel_name,
         "lengthscale": lengthscale,
         "likelihood": likelihood,
         "normalise": normalise,
@@ -340,6 +344,10 @@ def run(
     else:
         params["npl_uuid_dir"] = None
     params.pop("num_replications")  # popped because we don't need to pass this to the run_replication method, but it is needed above for getting the npl_uuid
+    # we don't need the following parameters to run optimisation - they are only used for sampling from NPL
+    params.pop("lengthscale", None)
+    params.pop("kernel_name", None)
+    params.pop("eta", None)
 
     if njobs == 1:
         all_solve_start = datetime.now()
@@ -384,10 +392,8 @@ def run_replication(
     dgp: str = "truncated_normal",
     dim: int = 1,
     epsilon: float = 1.0,
-    eta: float = NPL_ETA,
     ignore_dpp: bool = False,
     inference: str = "bayes",
-    lengthscale: float = -1.0,
     likelihood: str = "exponential",
     normalise: bool = False,
     npl_uuid_dir: Optional[Path] = None,
@@ -548,6 +554,9 @@ def run_replication(
     elif algorithm == "bdro_grid_search":
         solution = main_Bayesian_DRO(xi, epsilon)
         setup_time = 0.0  # can't really measure this easily
+    elif algorithm == "wasserstein_empirical":
+        setup_time = 0.0
+        solution = empirical_wasserstein_dro_newsvendor(xi, epsilon, p=2)
     else:
         raise ValueError("Please choose a valid algorithm")
     solve_time = (datetime.now() - solve_start).total_seconds()
