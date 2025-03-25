@@ -48,11 +48,13 @@ class ExperimentName(StrEnum):
     kl_portfolio_synthetic = "kl_portfolio_synthetic"
     kl_newsvendor_exp_1d = "kl_newsvendor_exp_1d"
     mmd_newsvendor_exp_1d = "mmd_newsvendor_exp_1d"
+    cv_kl_newsvendor_1d = "cv_kl_newsvendor_1d"
 
     def is_portfolio(self) -> bool:
         return self in (ExperimentName.kl_portfolio, ExperimentName.mmd_portfolio, ExperimentName.kl_portfolio_crash, ExperimentName.mmd_portfolio_crash)
 
-
+    def is_cross_validation(self) -> bool:
+        return self in (ExperimentName.cv_kl_newsvendor_1d)
 
 def get_experiment(experiment_name: ExperimentName, dataset_dir: Optional[Path] = None) -> List[Dict]:
     """Returns the experiment associated with the name"""
@@ -71,6 +73,7 @@ def get_experiment(experiment_name: ExperimentName, dataset_dir: Optional[Path] 
         ExperimentName.kl_newsvendor_exp_1d: kl_newsvendor_exp_1d,
         ExperimentName.mmd_newsvendor_exp_1d: mmd_newsvendor_exp_1d,
         ExperimentName.mmd_portfolio_synthetic: mmd_portfolio_synthetic,
+        ExperimentName.cv_kl_newsvendor_1d: cv_kl_newsvendor_1d,
     }
     try:
         if experiment_name.is_portfolio():
@@ -199,6 +202,79 @@ def kl_newsvendor_1d() -> List[Dict]:
                 "posterior": posterior,
                 "uuid": str(uuid4()),  # uniquely identify a run
             }
+            experiment.append(params)
+    return experiment
+
+def cv_kl_newsvendor_1d() -> List[Dict]:
+    """Cross-validation KL univariate newsvendor for selecting epsilon"""
+    experiment = []
+    for algorithm, num_observations, (dgp, likelihood, posterior) in itertools.product(
+        ["kl_pp", "kl_dro_bas", "kl_bdro"],
+        [100], # FIXME?
+        [
+            ("normal", "normal", "normal_gamma"),
+            # ("truncated_normal", "normal", "normal_gamma"),
+            # ("exponential", "exponential", "gamma"),
+            # ("contaminated_exp", "exponential", "gamma"),
+        ],
+    ):
+        if algorithm in ("wasserstein_empirical", "kl_empirical"):
+            total_model_samples_list = [0]
+            likelihood = "empirical"
+            posterior = "empirical"
+            inference = "empirical"
+            if algorithm == "wasserstein_empirical":
+                epsilon_list = WASSERSTEIN_DRO_EPSILON_SET
+            elif algorithm == "kl_empirical":
+                epsilon_list = BAS_DRO_EPSILON_SET
+        else:
+            total_model_samples_list = BAS_TOTAL_MODEL_SAMPLES
+            inference = "bayes"
+            epsilon_list = BAS_DRO_EPSILON_SET
+        contamination = 0.0
+        if dgp == "contaminated_exp":
+            contamination = CONTAMINATION_LEVEL
+        NUM_SPLITS = 10
+        for total_model_samples in total_model_samples_list:
+            base_params = {
+                "algorithm": algorithm,
+                "contamination": contamination,
+                "dataset": "newsvendor",
+                "dgp": dgp,
+                "dim": 1,
+                "ignore_dpp": True,
+                "inference": inference,
+                "lengthscale": -1.0,
+                "likelihood": likelihood,
+                "njobs": 1,
+                "num_likelihood_samples": get_num_likelihood_samples("newsvendor", num_observations, total_model_samples, algorithm),
+                "num_observations": num_observations,
+                "num_posterior_samples": get_num_posterior_samples("newsvendor", total_model_samples, algorithm),
+                # "num_replications": BAS_NUM_REPLICATIONS, # FIXME
+                "num_replications": 200,
+                "num_test_observations": NUM_TEST_OBSERVATIONS,
+                "posterior": posterior,
+                "do_cross_validation": True,
+                "n_splits": NUM_SPLITS,
+            }
+            cv_uuid_list = []
+            for epsilon in epsilon_list:
+                for split_idx in range(NUM_SPLITS):
+                    fold_params = base_params.copy()
+                    fold_params["uuid"] = str(uuid4())
+                    fold_params["epsilon"] = epsilon
+                    fold_params["n_splits"] = NUM_SPLITS
+                    fold_params["split_idx"] = split_idx
+                    fold_params["use_cv_epsilon"] = False
+                    fold_params["cv_uuid_list"] = []
+                    experiment.append(fold_params)
+                    cv_uuid_list.append(fold_params["uuid"])
+            params = base_params.copy()
+            params["uuid"] = str(uuid4())
+            params["epsilon"] = None    # this must be calculated later using CV!
+            params["split_idx"] = None  # not needed because we will calculate epsilon using all splits
+            params["use_cv_epsilon"] = True     # we will exploit the CV epsilon
+            params["cv_uuid_list"] = cv_uuid_list   #NOTE point to all the UUIDs across all folds and epsilons 
             experiment.append(params)
     return experiment
 
