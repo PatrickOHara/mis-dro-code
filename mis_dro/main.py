@@ -38,7 +38,7 @@ from .constants import (
     ROBAS_NEWSVENDOR_NUM_REPLICATIONS,
 )
 from .dataset import sample_dgp, portfolio_dataset, get_num_time_windows
-from .epsilon import get_num_observations_in_train_split
+from .epsilon import get_num_observations_in_train_split, get_kde_epsilon_cross_validation
 from .experiments import ExperimentName, get_experiment
 from .likelihood import sample_likelihood, reconstruct_covariance_from_triu
 from .newsvendor import newsvendor_cost_cvxpy, empirical_wasserstein_dro_newsvendor
@@ -291,6 +291,7 @@ def run(
     split_idx: Optional[int] = None,
     use_cv_epsilon: bool = False,
     cv_uuid_list: list[str] = [],
+    kde_epsilon: bool = False,
     uuid: str = str(uuid4()),
     verbose: bool = False,
 ):
@@ -414,6 +415,7 @@ def run(
         "n_splits": n_splits,
         "split_idx": split_idx,
         "use_cv_epsilon": use_cv_epsilon,
+        "kde_epsilon": kde_epsilon,
         "uuid": uuid,
         "verbose": verbose,
     }
@@ -475,7 +477,7 @@ def run_replication(
     dataset_dir: Optional[Path] = None,
     dgp: str = "truncated_normal",
     dim: int = 1,
-    epsilon: float = 1.0,
+    epsilon: Optional[float] = 1.0, # pass None if using kde_epsilon
     ignore_dpp: bool = False,
     inference: str = "bayes",
     likelihood: str = "exponential",
@@ -491,6 +493,7 @@ def run_replication(
     n_splits: Optional[int] = None,
     split_idx: Optional[int] = None,
     use_cv_epsilon: bool = False,
+    kde_epsilon: bool = False,
     uuid: str = str(uuid4()),
     verbose: bool = False,
 ):
@@ -503,18 +506,9 @@ def run_replication(
         data = sample_dgp(
             dgp, num_observations, dim=dim, contamination=contamination, generator=generator
         )
-        if do_cross_validation and not use_cv_epsilon:
-            # NOTE we use a different random number generator for CV because we do not want to contaminate the test samples
-            # and because we want to reproduce the same CV splits for each replication
-            cv_random_state = np.random.RandomState(seed=replication + 1000)
-            kf = KFold(n_splits=n_splits, shuffle=True, random_state=cv_random_state)
-            train_index, test_index = list(kf.split(data))[split_idx]
-            data_eval = data[test_index]
-            data = data[train_index]
-        else:
-            data_eval = sample_dgp(
-                dgp, num_test_observations, dim=dim, contamination=0.0, generator=generator
-            )
+        data_eval = sample_dgp(
+            dgp, num_test_observations, dim=dim, contamination=0.0, generator=generator
+        )
     elif dataset == "portfolio":
         # NOTE shape of data (N, D) where N is number of weeks and D is the number of stocks
         if dgp == "DowJones-crash":
@@ -528,7 +522,25 @@ def run_replication(
             data = normalise_by_dimension(data)
     else:
         raise NotImplementedError(f"Dataset not implemented: {dataset}")
+
+    if do_cross_validation and not use_cv_epsilon:
+        # NOTE we use a different random number generator for CV because we do not want to contaminate the test samples
+        # and because we want to reproduce the same CV splits for each replication
+        cv_random_state = np.random.RandomState(seed=replication + 1000)
+        kf = KFold(n_splits=n_splits, shuffle=True, random_state=cv_random_state)
+        train_index, test_index = list(kf.split(data))[split_idx]
+        data_eval = data[test_index]
+        data = data[train_index]
+
     dgp_time = (datetime.now() - dgp_start).total_seconds()
+
+    # try to find the best epsilon using a KDE estimate of the empirical distribution
+    # and the Monte-Carlo approximation of the KL divergence
+    if kde_epsilon and inference == "bayes" and algorithm in ("kl_pp", "kl_dro_bas"):
+        assert n_splits is not None
+        cv_seed = 2000 + replication
+        epsilon = get_kde_epsilon_cross_validation(data, algorithm, posterior, likelihood, n_splits, cv_seed)
+
 
     # 2. sample from the posterior
     posterior_start = datetime.now()

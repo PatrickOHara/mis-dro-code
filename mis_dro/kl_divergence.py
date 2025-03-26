@@ -3,6 +3,8 @@
 from typing import Optional
 import numpy as np
 import scipy as sp
+from sklearn.neighbors import KernelDensity
+
 
 def kl_divergence_monte_carlo(
     p: sp.stats.rv_continuous,
@@ -30,6 +32,27 @@ def kl_divergence_monte_carlo(
     p_samples = p.rvs(num_samples, random_state=generator)
     # then calculate the expectation using the samples
     return np.mean(np.log(p.pdf(p_samples) / q.pdf(p_samples)))
+
+def kl_divergence_gaussian_kde_monte_carlo(
+    observations: np.ndarray,
+    q: sp.stats.rv_continuous,
+) -> float:
+    """KL divergence approximation using Monte Carlo and Gaussian KDE.
+
+    Args:
+        observations: Data with shape (num_observations, dim)
+        q: scipy continuous distribution
+
+    Returns:
+        KL divergence between observations and q
+
+    Notes:
+        The KL is the integral of p(x) log(p(x)/q(x)).
+        This can be written as the expected value under p(x) of the log term.
+        We sample from p(x) then evaluate the expectation of the log term under these samples.
+    """
+    kde = sp.stats.gaussian_kde(observations.T)
+    return np.mean(np.log(kde.pdf(observations.T) / q.pdf(observations)))
 
 def kl_divergence_approx_histogram(p_samples, q_samples, nbins=100):
     
