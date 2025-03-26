@@ -317,29 +317,49 @@ def run(
         experiment_df = pd.DataFrame(experiment).set_index("uuid")
         result_df = result_df.join(experiment_df, on="uuid")
 
-        # group by replication and get the OOS mean and variance
-        gb = result_df.groupby(["epsilon", "replication"])
-        agg_df = gb.agg(
-            out_of_sample_mean = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.mean(np.concatenate(x.values))),
-            out_of_sample_var = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.var(np.concatenate(x.values), ddof=1)),        
-        )
+        epsilons_for_replications = np.zeros(num_replications)
 
-        epsilons_for_replications = np.ones(num_replications)
+        # each replication may have a different epsilon
         for replication in range(num_replications):
-            replication_df = agg_df.loc[agg_df.index.get_level_values("replication") == replication]
-            assert len(replication_df)
-            if dataset == "newsvendor":
-                is_pareto_front = is_minimise_pareto_front(replication_df["out_of_sample_var"].values, replication_df["out_of_sample_mean"].values)
-            elif dataset == "portfolio":
-                is_pareto_front = is_maximise_pareto_front(agg_df["out_of_sample_var"], agg_df["out_of_sample_mean"])
-            else:
-                raise NotImplementedError(dataset)
-            assert len(is_pareto_front), "There is not at least one pareto optimal point"
-            pareto_df = replication_df[is_pareto_front]
-            # take the mean of the epsilons in the Pareto df
-            print("Pareto frontier:")
-            print(pareto_df)
-            epsilons_for_replications[replication] = np.mean(pareto_df.index.get_level_values("epsilon"))
+            replication_df = result_df.loc[result_df.index.get_level_values("replication") == replication]
+            best_epsilon_for_each_split = np.zeros(n_splits)
+            # for each split, get the epsilon that achieves the minimum OOS cost
+            for split in range(n_splits):
+                split_df = replication_df.loc[replication_df["split_idx"] == split]
+                split_df["out_of_sample_mean"] = split_df["out_of_sample_cost"].apply(np.mean).values
+                if dataset == "newsvendor":
+                    epsilon = split_df.loc[split_df["out_of_sample_mean"]==split_df["out_of_sample_mean"].min()].iloc[0]["epsilon"]
+                elif dataset == "portfolio":
+                    epsilon = split_df.loc[split_df["out_of_sample_mean"]==split_df["out_of_sample_mean"].max()].iloc[0]["epsilon"]
+                best_epsilon_for_each_split[split] = epsilon
+                print("split =",split, ". Epsilon =", epsilon)
+            # then take the average of the epsilon values that achieve this minimum
+            epsilons_for_replications[replication] = np.median(best_epsilon_for_each_split)
+            print("Best epsilon for replication is", epsilons_for_replications[replication])
+
+        # group by replication and get the OOS mean and variance
+        # gb = result_df.groupby(["epsilon", "replication"])
+        # agg_df = gb.agg(
+        #     out_of_sample_mean = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.mean(np.concatenate(x.values))),
+        #     out_of_sample_var = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.var(np.concatenate(x.values), ddof=1)),        
+        # )
+
+        # for replication in range(num_replications):
+        #     replication_df = agg_df.loc[agg_df.index.get_level_values("replication") == replication]
+        #     assert len(replication_df)
+        #     if dataset == "newsvendor":
+        #         is_pareto_front = is_minimise_pareto_front(replication_df["out_of_sample_var"].values, replication_df["out_of_sample_mean"].values)
+        #         # one could do multiple things here - e.g. choose smallest OOS mean, smallest OOS variance, etc.
+        #     elif dataset == "portfolio":
+        #         is_pareto_front = is_maximise_pareto_front(replication_df["out_of_sample_var"].values, replication_df["out_of_sample_mean"].values)
+        #     else:
+        #         raise NotImplementedError(dataset)
+        #     assert len(is_pareto_front), "There is not at least one pareto optimal point"
+        #     pareto_df = replication_df[is_pareto_front]
+        #     # take the mean of the epsilons in the Pareto df
+        #     print("Pareto frontier:")
+        #     print(pareto_df)
+        #     epsilons_for_replications[replication] = np.mean(pareto_df.index.get_level_values("epsilon"))
 
         
     elif do_cross_validation:
