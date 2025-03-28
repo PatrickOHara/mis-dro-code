@@ -320,29 +320,49 @@ def run(
         epsilons_for_replications = np.zeros(num_replications)
 
         # each replication may have a different epsilon
-        for replication in range(num_replications):
-            replication_df = result_df.loc[result_df.index.get_level_values("replication") == replication]
-            best_epsilon_for_each_split = np.zeros(n_splits)
-            # for each split, get the epsilon that achieves the minimum OOS cost
-            for split in range(n_splits):
-                split_df = replication_df.loc[replication_df["split_idx"] == split]
-                split_df["out_of_sample_mean"] = split_df["out_of_sample_cost"].apply(np.mean).values
-                if dataset == "newsvendor":
-                    epsilon = split_df.loc[split_df["out_of_sample_mean"]==split_df["out_of_sample_mean"].min()].iloc[0]["epsilon"]
-                elif dataset == "portfolio":
-                    epsilon = split_df.loc[split_df["out_of_sample_mean"]==split_df["out_of_sample_mean"].max()].iloc[0]["epsilon"]
-                best_epsilon_for_each_split[split] = epsilon
-                print("split =",split, ". Epsilon =", epsilon)
-            # then take the average of the epsilon values that achieve this minimum
-            epsilons_for_replications[replication] = np.median(best_epsilon_for_each_split)
-            print("Best epsilon for replication is", epsilons_for_replications[replication])
+        # for replication in range(num_replications):
+        #     replication_df = result_df.loc[result_df.index.get_level_values("replication") == replication]
+        #     best_epsilon_for_each_split = np.zeros(n_splits)
+        #     # for each split, get the epsilon that achieves the minimum OOS cost
+        #     for split in range(n_splits):
+        #         split_df = replication_df.loc[replication_df["split_idx"] == split]
+        #         split_df["out_of_sample_mean"] = split_df["out_of_sample_cost"].apply(np.mean).values
+        #         if dataset == "newsvendor":
+        #             epsilon = split_df.loc[split_df["out_of_sample_mean"]==split_df["out_of_sample_mean"].min()].iloc[0]["epsilon"]
+        #         elif dataset == "portfolio":
+        #             epsilon = split_df.loc[split_df["out_of_sample_mean"]==split_df["out_of_sample_mean"].max()].iloc[0]["epsilon"]
+        #         best_epsilon_for_each_split[split] = epsilon
+        #         print("split =",split, ". Epsilon =", epsilon)
+        #     # then take the average of the epsilon values that achieve this minimum
+        #     epsilons_for_replications[replication] = np.median(best_epsilon_for_each_split)
+        #     print("Best epsilon for replication is", epsilons_for_replications[replication])
 
-        # group by replication and get the OOS mean and variance
+        # group by replication and epsilon and get the OOS mean and variance
         # gb = result_df.groupby(["epsilon", "replication"])
         # agg_df = gb.agg(
         #     out_of_sample_mean = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.mean(np.concatenate(x.values))),
         #     out_of_sample_var = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.var(np.concatenate(x.values), ddof=1)),        
         # )
+        # for replication in range(num_replications):
+        #     replication_df = agg_df.loc[agg_df.index.get_level_values("replication") == replication]
+        #     if dataset == "newsvendor":
+        #         epsilons_for_replications[replication] = replication_df.loc[replication_df["out_of_sample_mean"] == replication_df["out_of_sample_mean"].min()].index[0][0]
+        #     elif dataset == "portfolio":
+        #         epsilons_for_replications[replication] = replication_df.loc[replication_df["out_of_sample_mean"] == replication_df["out_of_sample_mean"].max()].index[0][0]
+
+        assert len(result_df["algorithm"].unique()) == 1
+        gb = result_df.groupby(["epsilon"])
+        agg_df = gb.agg(
+            out_of_sample_mean = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.mean(np.concatenate(x.values))),
+            out_of_sample_var = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.var(np.concatenate(x.values), ddof=1)),        
+        )
+
+        if dataset == "newsvendor":
+            epsilon = agg_df.loc[agg_df["out_of_sample_mean"] == agg_df["out_of_sample_mean"].min()].index[0]
+        elif dataset == "portfolio":
+            epsilon = agg_df.loc[agg_df["out_of_sample_mean"] == agg_df["out_of_sample_mean"].max()].index[0]
+        print("Epsilon:", epsilon)
+
 
         # for replication in range(num_replications):
         #     replication_df = agg_df.loc[agg_df.index.get_level_values("replication") == replication]
@@ -459,7 +479,8 @@ def run(
         print(all_solve_start, "- Running all replications in series.")
         for j in range(num_replications):
             if use_cv_epsilon:
-                params["epsilon"] = epsilons_for_replications[j]
+                # params["epsilon"] = epsilons_for_replications[j]
+                params["epsilon"] = epsilon
             list_of_replication_stats.append(run_replication(j, problem, **params))
         all_solve_end = datetime.now()
         print(all_solve_end, "- Finished solving all replications in series. Total solve time is", (all_solve_end - all_solve_start).total_seconds())

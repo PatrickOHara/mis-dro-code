@@ -51,6 +51,7 @@ class ExperimentName(StrEnum):
     cv_kl_newsvendor_1d = "cv_kl_newsvendor_1d"
     kde_epsilon_newsvendor_1d = "kde_epsilon_newsvendor_1d"
     cv_kl_portfolio = "cv_kl_portfolio"
+    kl_newsvendor_100 = "kl_newsvendor_100"
 
     def is_portfolio(self) -> bool:
         return self in (ExperimentName.kl_portfolio, ExperimentName.mmd_portfolio, ExperimentName.kl_portfolio_crash, ExperimentName.mmd_portfolio_crash, ExperimentName.cv_kl_portfolio)
@@ -78,6 +79,7 @@ def get_experiment(experiment_name: ExperimentName, dataset_dir: Optional[Path] 
         ExperimentName.cv_kl_newsvendor_1d: cv_kl_newsvendor_1d,
         ExperimentName.kde_epsilon_newsvendor_1d: kde_epsilon_newsvendor_1d,
         ExperimentName.cv_kl_portfolio: cv_kl_portfolio,
+        ExperimentName.kl_newsvendor_100: kl_newsvendor_100,
     }
     try:
         if experiment_name.is_portfolio():
@@ -250,6 +252,39 @@ def kde_epsilon_newsvendor_1d() -> List[Dict]:
             "uuid": str(uuid4()),  # uniquely identify a run
         }
         experiment.append(params)
+    return experiment
+
+def kl_newsvendor_100() -> List[Dict]:
+    """KL univariate newsvendor with 100 observations on normal DGP"""
+    experiment = []
+    for algorithm in ["kl_pp", "kl_dro_bas"]:
+        total_model_samples_list = BAS_TOTAL_MODEL_SAMPLES
+        dgp, likelihood, posterior = "normal", "normal", "normal_gamma"
+        inference = "bayes"
+        num_observations = 100  # we are comparing against CV, which uses more observations
+        epsilon_list = BAS_DRO_EPSILON_SET
+        for epsilon, total_model_samples in itertools.product(epsilon_list, total_model_samples_list):
+            params = {
+                "algorithm": algorithm,
+                "dataset": "newsvendor",
+                "dgp": dgp,
+                "dim": 1,
+                "epsilon": epsilon,
+                "ignore_dpp": True,
+                "inference": inference,
+                "lengthscale": -1.0,
+                "likelihood": likelihood,
+                "njobs": 1,
+                "num_likelihood_samples": get_num_likelihood_samples("newsvendor", num_observations, total_model_samples, algorithm),
+                "num_observations": num_observations,
+                "num_posterior_samples": get_num_posterior_samples("newsvendor", total_model_samples, algorithm),
+                # "num_replications": BAS_NUM_REPLICATIONS, # FIXME?
+                "num_replications": 200,
+                "num_test_observations": NUM_TEST_OBSERVATIONS,
+                "posterior": posterior,
+                "uuid": str(uuid4()),  # uniquely identify a run
+            }
+            experiment.append(params)
     return experiment
 
 
@@ -1028,3 +1063,4 @@ def compare_solve() -> List[Dict]:
         }
         experiment.append(params)
     return experiment
+# 
