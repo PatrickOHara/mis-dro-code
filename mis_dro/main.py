@@ -616,6 +616,18 @@ def run_replication(
         )
     likelihood_time = (datetime.now() - likelihood_start).total_seconds()
 
+    if algorithm == "kl_dro_bas" and (
+        dataset == "portfolio" or dataset == "portfolio_synthetic"
+        or (dataset == "newsvendor" and do_cross_validation)
+    ):
+        # NOTE under the above conditions, having values of epsilon just above
+        # the constant is benefitial for obtaining a small mean
+        epsilon_prime = epsilon
+    else:
+        # as in Corollary 3.7
+        # NOTE for BDRO and BAS-PP this is just equal to epsilon because log_partition_constant is zero
+        epsilon_prime = epsilon - log_partition_constant
+
     # 4. run the chosen DRO algorithm
     solve_start = datetime.now()
     solution = np.nan
@@ -624,13 +636,7 @@ def run_replication(
             and algorithm in ("kl_bdro", "kl_dro_bas")
             and likelihood == "multivariate_normal"
     ):
-        # if epsilon - log_partition_constant < 0:
-        #     # NOTE the optimisation problem is unbounded below
-        #     solution = np.inf * np.ones(dim)
-        #     solve_time = 0.0
-        #     setup_time = 0.0
-        # else:
-        problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon])
+        problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon_prime])
         problem.param_dict["mu_post"].value = theta_sample[0, :dim]
         for i in range(num_posterior_samples):
             # get a PSD covariance from the upper triangular vector
@@ -650,7 +656,7 @@ def run_replication(
             setup_time = 0.0
         else:
             # set parameters then solve
-            problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon - log_partition_constant])
+            problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon_prime])
             xi = xi.reshape((num_posterior_samples, num_likelihood_samples, dim))
             for i in range(num_posterior_samples):
                 problem.param_dict[f"xi_{i}"].value = xi[i]

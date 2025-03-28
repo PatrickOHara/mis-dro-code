@@ -36,7 +36,9 @@ def preprocess_results_df(results_df: pd.DataFrame, dgp: str, dataset: str = "ne
     # filter by the DGP and cases where the the log partition function is feasible for epsilon
     processed_df = processed_df.loc[processed_df["dgp"] == dgp]
     if dataset != "portfolio":
-        processed_df = processed_df.loc[processed_df["log_partition_constant"] < processed_df["epsilon"]]
+        if "use_cv_epsilon" not in processed_df.columns:
+            processed_df["use_cv_epsilon"] = False
+        processed_df = processed_df.loc[(processed_df["log_partition_constant"] < processed_df["epsilon"]) | (processed_df["use_cv_epsilon"])]
 
     # get useful stats such as the number of samples and total time spent sampling
     processed_df["num_total_samples"] = processed_df["num_posterior_samples"] * processed_df["num_likelihood_samples"]

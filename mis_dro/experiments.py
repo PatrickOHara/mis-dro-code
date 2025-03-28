@@ -261,8 +261,8 @@ def cv_kl_newsvendor_1d() -> List[Dict]:
         [100], # FIXME?
         [
             ("normal", "normal", "normal_gamma"),
-            # ("truncated_normal", "normal", "normal_gamma"),
-            # ("exponential", "exponential", "gamma"),
+            ("truncated_normal", "normal", "normal_gamma"),
+            ("exponential", "exponential", "gamma"),
             # ("contaminated_exp", "exponential", "gamma"),
         ],
     ):
