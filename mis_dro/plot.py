@@ -128,6 +128,7 @@ def mean_variance_plot(
     var_col: float = "out_of_sample_var",
     add_log_partition_function: bool = False,
     minimise: bool = True,
+    add_end_epsilons: bool = True,
     **kwargs,
 ) -> None:
     """Plot mean-variance trade-off."""
@@ -152,8 +153,10 @@ def mean_variance_plot(
 
     # label the points with epsilon values
     if is_labelled:
+        if add_end_epsilons:
+            special_epsilons += [epsilon_list[0], epsilon_list[-1]]
         for i, epsilon in enumerate(epsilon_list):
-            if i == 0 or i == len(epsilon_list) - 1 or epsilon in special_epsilons:
+            if epsilon in special_epsilons:
                 # if line is blue then put text on bottom left
                 if kwargs["color"] in (AlgorithmColor.kl_dro_bas, AlgorithmColor.kl_empirical):
                     ha = "right"

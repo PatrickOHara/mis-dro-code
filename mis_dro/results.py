@@ -27,6 +27,7 @@ def get_result_df_list(experiment_dir: Path, uuid_list: list[str]):
 
 def preprocess_results_df(results_df: pd.DataFrame, dgp: str, dataset: str = "newsvendor"):
     """Filter results, process columns, and create new columns"""
+    assert len(results_df)
     assert len(results_df["num_test_observations"].unique()) == 1
     assert len(results_df.loc[(results_df["dgp"] == dgp)]["dim"].unique()) == 1 
     num_test_observations = results_df["num_test_observations"].unique()[0]
@@ -65,6 +66,7 @@ def get_agg_df(results_df: pd.DataFrame, gb_cols: list[str]):
     agg_df = gb.agg(
         out_of_sample_mean = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.mean(np.concatenate(x.values))),
         out_of_sample_var = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.var(np.concatenate(x.values), ddof=1)),
+        out_of_sample_std = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.std(np.concatenate(x.values), ddof=1)),
         sum_of_in_group_var = pd.NamedAgg(column="in_group_var", aggfunc=lambda x: float(num_test_observations - 1) / float(num_replications * num_test_observations - 1) * np.sum(x.values)),
         var_of_in_group_mean = pd.NamedAgg(column="in_group_mean", aggfunc=lambda x: float(num_test_observations * (num_replications - 1)) / float(num_replications * num_test_observations - 1) * np.var(x, ddof=1)),
         mean_solve_time = pd.NamedAgg(column="solve_time", aggfunc=np.mean),

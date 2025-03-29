@@ -1063,4 +1063,3 @@ def compare_solve() -> List[Dict]:
         }
         experiment.append(params)
     return experiment
-# 
