@@ -26,7 +26,7 @@ from .constants import (
     IN_SAMPLE_TIME_WINDOW,
     OUT_OF_SAMPLE_TIME_WINDOW,
     ROBAS_DRO_EPSILON_SET,
-    SMALL_BAS_DRO_EPSILON_SET,
+    WASSERSTEIN_DRO_EPSILON_SET,
 )
 from .dataset import get_num_time_windows, get_portfolio_returns_df
 
@@ -132,7 +132,7 @@ def get_num_likelihood_samples(dataset: str, num_observations: int, num_total_sa
         return int(np.sqrt(num_total_samples))
     if algorithm in ("kl_dro_bas", "kl_pp"):
         return num_total_samples
-    if algorithm == "kl_empirical":
+    if algorithm in ("kl_empirical", "wasserstein_empirical"):
         return num_observations
     raise NotImplementedError()
 
@@ -143,38 +143,41 @@ def get_num_posterior_samples(dataset: str, num_total_samples: int, algorithm: s
         return int(np.sqrt(num_total_samples))
     if algorithm in ("kl_dro_bas", "kl_pp"):
         return 1
-    if algorithm == "kl_empirical":
+    if algorithm in ("wasserstein_empirical", "kl_empirical"):
         return 1
     raise NotImplementedError()
 
 def kl_newsvendor_1d() -> List[Dict]:
     """KL univariate newsvendor: compare our Bayesian ambiguity set against Bayesian DRO"""
     experiment = []
-    for algorithm, num_observations, (dgp, likelihood, posterior), epsilon in itertools.product(
-        ["kl_pp", "kl_dro_bas", "kl_bdro", "kl_empirical"],
+    for algorithm, num_observations, (dgp, likelihood, posterior) in itertools.product(
+        ["kl_pp", "kl_dro_bas", "kl_bdro", "kl_empirical", "wasserstein_empirical"],
         [NUM_OBSERVATIONS], # [5, 20, 100],
         [
-            ("normal", "normal", "normal_gamma"),
+            # ("normal", "normal", "normal_gamma"),
             # ("truncated_normal", "normal", "normal_gamma"),
             ("exponential", "exponential", "gamma"),
             # ("contaminated_exp", "exponential", "gamma"),
         ],
-        BAS_DRO_EPSILON_SET,
-        # SMALL_BAS_DRO_EPSILON_SET,
     ):
-        if algorithm == "kl_empirical":
+        if algorithm in ("wasserstein_empirical", "kl_empirical"):
             total_model_samples_list = [0]
             likelihood = "empirical"
             posterior = "empirical"
             inference = "empirical"
+            if algorithm == "wasserstein_empirical":
+                epsilon_list = WASSERSTEIN_DRO_EPSILON_SET
+            elif algorithm == "kl_empirical":
+                epsilon_list = BAS_DRO_EPSILON_SET
         else:
             # total_model_samples_list = BAS_TOTAL_MODEL_SAMPLES
             total_model_samples_list = [3600, 10000]
             inference = "bayes"
+            epsilon_list = BAS_DRO_EPSILON_SET
         contamination = 0.0
         if dgp == "contaminated_exp":
             contamination = CONTAMINATION_LEVEL
-        for total_model_samples in total_model_samples_list:
+        for epsilon, total_model_samples in itertools.product(epsilon_list, total_model_samples_list):
             params = {
                 "algorithm": algorithm,
                 "contamination": contamination,
@@ -190,7 +193,8 @@ def kl_newsvendor_1d() -> List[Dict]:
                 "num_likelihood_samples": get_num_likelihood_samples("newsvendor", num_observations, total_model_samples, algorithm),
                 "num_observations": num_observations,
                 "num_posterior_samples": get_num_posterior_samples("newsvendor", total_model_samples, algorithm),
-                "num_replications": BAS_NUM_REPLICATIONS,
+                # "num_replications": BAS_NUM_REPLICATIONS, # FIXME
+                "num_replications": 200,
                 "num_test_observations": NUM_TEST_OBSERVATIONS,
                 "posterior": posterior,
                 "uuid": str(uuid4()),  # uniquely identify a run

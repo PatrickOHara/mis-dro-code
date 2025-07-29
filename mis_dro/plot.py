@@ -17,6 +17,7 @@ class AlgorithmLineStyle(StrEnum):
     dro_bas_mmd = "dotted"
     empirical_mmd = "dotted"
     kl_pp = "dotted"
+    wasserstein_empirical = "dotted"
 
 # Color blind palette from https://gist.github.com/thriveth/8560036
 CB_color_cycle = [
@@ -38,6 +39,7 @@ class AlgorithmColor(StrEnum):
     kl_bdro = "#ff7f00"
     kl_dro_bas = "#984ea3"
     kl_empirical = "#999999"
+    wasserstein_empirical = "#a65628"
     empirical_mmd = "#999999"
     kl_pp = "#4daf4a"
 
@@ -53,6 +55,7 @@ class AlgorithmName(StrEnum):
     kl_dro_bas = "DRO-BAS$_{PE}$"
     kl_pp = "DRO-BAS$_{PP}$"
     kl_empirical = "Empirical KL"
+    wasserstein_empirical = "Empirical Wasserstein"
 
 
 
@@ -97,6 +100,7 @@ ALGORITHM_INFERENCE_MARKERS = {
     ("dro_bas_mmd", "npl_mmd"): "*",
     ("empirical_mmd", "empirical"): "+",
     ("kl_empirical", "empirical"): "x",
+    ("wasserstein_empirical", "empirical"): "+",
 }
 
 
