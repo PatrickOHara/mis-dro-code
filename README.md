@@ -34,12 +34,12 @@ pip install -r bayesian_dro/bdro_requirements.txt
 
 To run just one algorithm, you can use the CLI `misdro` with the `run` command:
 ```
-misdro run --num-posterior-samples 100 --posterior bayes --num-observations 10
+misdro run $EXPERIMENT_DIR --num-posterior-samples 100 --posterior bayes --num-observations 10
 ```
 
 To setup an experiment, including a custom SLURM file, you can use the `misdro setup` commmand. For example:
 ```
-misdro setup $EXPERIMENT_DIR
+misdro setup-kl kl_newsvendor_1d $EXPERIMENT_DIR $BATCH_SIZE
 ```
 where `$EXPERIMENT_DIR` is the filepath to a directory you want to store the experiment inside.
 A SLURM file is generated for each dataset.
