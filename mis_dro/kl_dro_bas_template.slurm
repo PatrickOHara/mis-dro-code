@@ -5,8 +5,7 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=10000
 #SBATCH --time=2-00:00:00
-#SBATCH --array=0-{num_batches}
-#SBATCH --exclude=sparrow,sparrow-02
+#SBATCH --array=0-{num_batches_minus_one}
 #
 #SBATCH --mail-type=END,FAIL,TIME_LIMIT_80 # Events to send email on, remove if you don't want this
 #SBATCH --output=joboutput_%j.out # Standard out from your job

@@ -5,6 +5,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import re
 
 
 class AlgorithmLineStyle(StrEnum):
@@ -228,7 +229,9 @@ def convert_str_to_float_list(str_list: str, list_len: int) -> list[float]:
     if str_list == "[]":
         return [np.nan for _ in range(list_len)]
     else:
-        return [float(x) for x in str_list.strip('[]').split(',')]
+        # TODO: James: double-check this change isn't problematic
+        return [float(re.sub(r'np\.float64\((.*?)\)', r'\1', x.strip())) for x in str_list.strip('[]').split(',')]
+        # return [float(x) for x in str_list.strip('[]').split(',')]
 
 def preprocess_results_df(results_df: pd.DataFrame, dgp: str, dataset: str = "newsvendor"):
     """Filter results, process columns, and create new columns"""
@@ -240,7 +243,7 @@ def preprocess_results_df(results_df: pd.DataFrame, dgp: str, dataset: str = "ne
     dim = processed_df.loc[(processed_df["dgp"] == dgp)]["dim"].unique()
     # filter by the DGP and cases where the the log partition function is feasible for epsilon
     processed_df = processed_df.loc[processed_df["dgp"] == dgp]
-    if dataset != "portfolio":
+    if dataset not in ["portfolio", "james"]:
         processed_df = processed_df.loc[processed_df["log_partition_constant"] < processed_df["epsilon"]]
 
     # get useful stats such as the number of samples and total time spent sampling

@@ -28,7 +28,7 @@ from .constants import (
     ROBAS_DRO_EPSILON_SET,
     SMALL_BAS_DRO_EPSILON_SET,
 )
-from .dataset import get_num_time_windows, get_portfolio_returns_df
+from .dataset import get_num_time_windows, get_portfolio_returns_df, get_num_time_windows_james, get_min_dim_james
 
 
 class ExperimentName(StrEnum):
@@ -48,13 +48,21 @@ class ExperimentName(StrEnum):
     kl_portfolio_synthetic = "kl_portfolio_synthetic"
     kl_newsvendor_exp_1d = "kl_newsvendor_exp_1d"
     mmd_newsvendor_exp_1d = "mmd_newsvendor_exp_1d"
+    kl_portfolio_james = "kl_portfolio_james"
+    # mmd_portfolio_james = "mmd_portfolio_james"
 
     def is_portfolio(self) -> bool:
         return self in (ExperimentName.kl_portfolio, ExperimentName.mmd_portfolio, ExperimentName.kl_portfolio_crash, ExperimentName.mmd_portfolio_crash)
+    
+    def is_james(self) -> bool:
+        return self in (
+            ExperimentName.kl_portfolio_james,
+            # ExperimentName.mmd_portfolio_james
+        )
 
 
 
-def get_experiment(experiment_name: ExperimentName, dataset_dir: Optional[Path] = None) -> List[Dict]:
+def get_experiment(experiment_name: ExperimentName, dataset_dir_james, dataset_dir: Optional[Path] = None, dim: Optional[int] = None) -> List[Dict]:
     """Returns the experiment associated with the name"""
     function_lookup = {
         ExperimentName.kl_newsvendor_1d: kl_newsvendor_1d,
@@ -71,12 +79,17 @@ def get_experiment(experiment_name: ExperimentName, dataset_dir: Optional[Path] 
         ExperimentName.kl_newsvendor_exp_1d: kl_newsvendor_exp_1d,
         ExperimentName.mmd_newsvendor_exp_1d: mmd_newsvendor_exp_1d,
         ExperimentName.mmd_portfolio_synthetic: mmd_portfolio_synthetic,
+        ExperimentName.kl_portfolio_james: kl_portfolio_james,
+        # ExperimentName.mmd_portfolio_james: mmd_portfolio_james,
     }
     try:
         if experiment_name.is_portfolio():
             # NOTE portfolio setup requires a dataset_dir argument
             return function_lookup[experiment_name](dataset_dir)
-        return function_lookup[experiment_name]()
+        elif experiment_name.is_james():
+            return function_lookup[experiment_name](dataset_dir_james, dim)
+        else:
+            return function_lookup[experiment_name]()
     except KeyError as e:
         raise KeyError(
             f"Please add {experiment_name} as a key in the function lookup dictionary"
@@ -811,6 +824,108 @@ def kl_portfolio(mmc2_dir: Path) -> List[Dict]:
             }
             experiment.append(params)
     return experiment
+
+def kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
+    """KL Portfolio experiment with DRO-BAS vs BDRO"""
+    if dim:
+        assert dim <= get_min_dim_james(dataset_dir_james)
+    experiment = []
+    for algorithm, dgp, epsilon in itertools.product(
+        ["kl_dro_bas", "kl_bdro", "kl_pp", "kl_empirical"],
+        ["james"],
+        PORTFOLIO_EPSILON_SET,
+    ):
+        if algorithm == "kl_empirical":
+            total_model_samples_list = [0]
+            likelihood = "empirical"
+            posterior = "empirical"
+            inference = "empirical"
+        else:
+            if algorithm == "kl_dro_bas":
+                total_model_samples_list = [1]
+            elif algorithm == "kl_pp":
+                total_model_samples_list = [900, 3600]
+            elif algorithm == "kl_bdro":
+                total_model_samples_list = [900]
+            else:
+                raise ValueError("Provide a supported algorithm")
+            likelihood = "multivariate_normal"
+            posterior = "normal_inverse_wishart"
+            inference = "bayes"
+        for num_samples in total_model_samples_list:
+            params = {
+                "algorithm": algorithm,
+                "contamination": 0.0,
+                "dataset": "james",
+                "dataset_dir_james": dataset_dir_james,
+                "dgp": dgp,
+                "dim": dim,
+                "epsilon": epsilon,
+                "ignore_dpp": True,
+                "inference": inference,
+                "likelihood": likelihood,
+                "njobs": 1,
+                "normalise": False, # TODO: double-check this one
+                "num_likelihood_samples": get_num_likelihood_samples("portfolio", 52, num_samples, algorithm),
+                "num_observations": 52,
+                "num_posterior_samples": get_num_posterior_samples("portfolio", num_samples, algorithm),
+                "num_replications": get_num_time_windows_james(dataset_dir_james),
+                "num_test_observations": 13, # TODO: dynamically measure the length of a test window
+                "posterior": posterior,
+                "uuid": str(uuid4()),  # uniquely identify a run
+            }
+            experiment.append(params)
+    return experiment
+
+# def mmd_portfolio_james(dim: int) -> List[Dict]:
+#     assert dim <= get_min_dim_james()
+#     experiment = []
+#     dgp = "james"
+#     # James: TODO: check the below two, maybe they're specific to the old data?
+#     num_likelihood_samples = 10
+#     num_posterior_samples = 90
+#     epsilon_set = []
+#     for epsilon in ROBAS_DRO_EPSILON_SET:
+#         if epsilon <= 0.2:  # James: TODO: why this condition? (Taken from mmd_portfolio)
+#             epsilon_set.append(epsilon)
+#     for (algorithm, likelihood), epsilon, in itertools.product(
+#         [
+#             ("dro_bas_mmd", "multivariate_normal"),
+#             ("empirical_mmd", "empirical"),
+#         ],
+#         epsilon_set,
+#     ):
+#         if likelihood == "empirical":
+#             inference = "empirical"
+#             eta_set = [np.nan]
+#         else:
+#             inference = "npl_mmd"
+#             eta_set = [0.1]
+#         for eta in eta_set:
+#             params = {
+#                 "algorithm": algorithm,
+#                 "contamination": 0.0,
+#                 "dataset": "james",
+#                 "dgp": dgp,
+#                 "dim": dim,
+#                 "epsilon": epsilon,
+#                 "eta": eta,
+#                 "inference": inference,
+#                 "kernel_name": "k_comp",        
+#                 "lengthscale": -1.0,
+#                 "likelihood": likelihood,
+#                 "normalise": False,
+#                 "num_certify_points": NUM_CERTIFY,  # James: TODO: check if num_certify_points should change now that you've appropriated mmd_portfolio
+#                 "num_likelihood_samples": num_likelihood_samples,
+#                 "num_observations": IN_SAMPLE_TIME_WINDOW,
+#                 "num_posterior_samples": num_posterior_samples,
+#                 "num_replications": get_num_time_windows_james(),
+#                 "num_test_observations": OUT_OF_SAMPLE_TIME_WINDOW,
+#                 "posterior": "npl",
+#                 "uuid": str(uuid4()),  # uniquely identify a run
+#             }
+#             experiment.append(params)
+#     return experiment
 
 def compare_solve() -> List[Dict]:
     """Compares the original grid-search algorithm and cvxpy algorithms"""

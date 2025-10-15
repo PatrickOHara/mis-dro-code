@@ -37,11 +37,11 @@ To run just one algorithm, you can use the CLI `misdro` with the `run` command:
 misdro run --num-posterior-samples 100 --posterior bayes --num-observations 10
 ```
 
-To setup an experiment, including a custom SLURM file, you can use the `misdro setup` commmand. For example:
+To setup an experiment, including a custom SLURM file, you can use the `misdro setup-kl` or `misdro setup-mmd` commmand. For example:
 ```
-misdro setup $EXPERIMENT_DIR
+misdro setup-kl $EXPERIMENT_DIR $BATCH_SIZE
 ```
-where `$EXPERIMENT_DIR` is the filepath to a directory you want to store the experiment inside.
+where `$EXPERIMENT_DIR` is the filepath to a directory you want to store the experiment inside and `$BATCH_SIZE` is the number of experiments each SLURM Array Task should run.
 A SLURM file is generated for each dataset.
 Each SLURM file will be put inside `$EXPERIMENT_DIR` along with a `experiment.json` file containing all of the parameters for the experiment.
 You can run a slurm file:

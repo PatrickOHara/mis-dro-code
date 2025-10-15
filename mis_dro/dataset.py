@@ -13,6 +13,7 @@ from sklearn.datasets import make_spd_matrix
 from bayesian_dro.Bayesian_DRO_continuous import data_generation, DGP_STD_TRUNCATED_NORMAL
 from .constants import IN_SAMPLE_TIME_WINDOW, OUT_OF_SAMPLE_TIME_WINDOW, DGP_NORMAL_KNOWN_VARIANCE_STD
 
+import pickle
 
 def sample_dgp(
     dgp: str,
@@ -272,3 +273,30 @@ def get_num_time_windows(
     out_of_sample_time_window: int = OUT_OF_SAMPLE_TIME_WINDOW
 ) -> int:
     return math.floor((num_weeks - in_sample_time_window) / out_of_sample_time_window)
+
+def portfolio_dataset_james(
+    time_window_id: int,
+    dataset_dir_james
+) -> tuple[np.ndarray, np.ndarray]:
+    with open(dataset_dir_james, 'rb') as f:
+        windows = pickle.load(f)
+    num_time_windows = len(windows)
+    assert time_window_id < num_time_windows
+    window = windows[time_window_id]
+    training_data = window[0].values
+    test_data = window[1].values
+    return training_data, test_data
+
+def get_num_time_windows_james(dataset_dir_james) -> int:
+    with open(dataset_dir_james, 'rb') as f:
+        windows = pickle.load(f)
+    return len(windows)
+
+def get_min_dim_james(dataset_dir_james) -> int:
+    with open(dataset_dir_james, 'rb') as f:
+        windows = pickle.load(f)
+    min_dim = float('inf')
+    for window in windows:
+        training_data = window[0]
+        min_dim = min(min_dim, len(training_data.iloc[0]))
+    return min_dim

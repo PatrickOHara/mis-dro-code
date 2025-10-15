@@ -36,7 +36,7 @@ from .constants import (
     MAX_PARAMS_OOM,
     ROBAS_NEWSVENDOR_NUM_REPLICATIONS,
 )
-from .dataset import sample_dgp, portfolio_dataset, get_num_time_windows
+from .dataset import sample_dgp, portfolio_dataset, portfolio_dataset_james, get_num_time_windows
 from .experiments import ExperimentName, get_experiment
 from .likelihood import sample_likelihood, reconstruct_covariance_from_triu
 from .newsvendor import newsvendor_cost_cvxpy
@@ -51,14 +51,14 @@ app = typer.Typer(name="misdro")
 
 @app.command(name="setup-kl")
 def setup_kl_dro_bas(
-    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), overwrite: bool = False
+    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, dataset_dir_james, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), dim: Optional[int] = None, overwrite: bool = False
 ):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
         experiment_dir.mkdir(parents=False, exist_ok=False)
 
     # get the experiment from the name
-    experiment = get_experiment(experiment_name, dataset_dir=dataset_dir)
+    experiment = get_experiment(experiment_name, dataset_dir_james, dim=dim)
 
     # write experiment file to JSON
     filepath = experiment_dir / "experiment.json"
@@ -74,7 +74,7 @@ def setup_kl_dro_bas(
     ) as slurm_file:
         slurm_string = slurm_file.read()
     dgp_string = slurm_string.format(
-        experiment_dir=experiment_dir, num_batches=num_batches, batch_size=batch_size
+        experiment_dir=experiment_dir, num_batches_minus_one=num_batches-1, batch_size=batch_size
     )
     (experiment_dir / f"{experiment_name}.slurm").write_text(dgp_string)
 
@@ -107,7 +107,7 @@ def setup_mmd_dro_bas(
     ) as slurm_file:
         slurm_string = slurm_file.read()
     slurm_string = slurm_string.format(
-        experiment_dir=experiment_dir, njobs=njobs, num_batches=num_batches, batch_size=batch_size
+        experiment_dir=experiment_dir, njobs=njobs, num_batches_minus_one=num_batches-1, batch_size=batch_size
     )
     slurm_string += f" --npl-samples-dir {npl_samples_dir}"
     (experiment_dir / f"{experiment_name}.slurm").write_text(slurm_string)
@@ -130,12 +130,12 @@ def setup_mmd_dro_bas(
         posterior_settings_df.to_csv(npl_samples_dir / "npl_settings.csv", index=False)
 
         # then create SLURM file ready to sample the NPL on the cluster
-        num_npl_batches = len(posterior_settings_df) - 1
+        num_npl_batches = len(posterior_settings_df)
         with open(
             Path(__file__).parent / "sample_npl.slurm", "r", encoding="utf-8"
         ) as npl_slurm_file:
             npl_slurm_string = npl_slurm_file.read()
-        npl_slurm_string = npl_slurm_string.format(num_npl_batches=num_npl_batches, npl_samples_dir=npl_samples_dir, dataset_dir=dataset_dir)
+        npl_slurm_string = npl_slurm_string.format(num_npl_batches_minus_one=num_npl_batches-1, npl_samples_dir=npl_samples_dir, dataset_dir=dataset_dir)
         (npl_samples_dir / f"sample_npl_{experiment_name}.slurm").write_text(npl_slurm_string)
 
 @app.command(name="csv")
@@ -239,12 +239,13 @@ def run_uuid(experiment_dir: Path, uuid: UUID, dataset_dir: Path = Path("~/datas
 @app.command(name="run")
 def run(
     experiment_dir: Path,
+    dataset_dir_james,
     algorithm: str = "kl_bdro",
     contamination: float = CONTAMINATION_LEVEL,
     dataset: str = "newsvendor",
     dataset_dir: Optional[Path] = None,
     dgp: str = "truncated_normal",
-    dim: int = 1,
+    dim: Optional[int] = 1,
     epsilon: float = 1.0,
     eta: float = NPL_ETA,
     ignore_dpp: bool = False,
@@ -269,7 +270,9 @@ def run(
     if uuid:
         print(uuid)
     print("DGP:", dgp, " - ALGORITHM:", algorithm, " - NUM LIKELIHOOD SAMPLES:", num_likelihood_samples, " - POSTERIOR:", posterior, "- DATASET:", dataset, "- DIM:", dim)
-    if algorithm in ("kl_bdro", "kl_dro_bas", "kl_pp", "kl_empirical") and dataset == "newsvendor":
+    if dataset == "james" and (algorithm in ("kl_pp", "kl_empirical") or algorithm in ("kl_bdro", "kl_dro_bas") and likelihood == "multivariate_normal"):
+        problem = None
+    elif algorithm in ("kl_bdro", "kl_dro_bas", "kl_pp", "kl_empirical") and dataset == "newsvendor":
         problem = get_kl_bdro_problem(
             newsvendor_cost_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim,
         )
@@ -288,8 +291,8 @@ def run(
         if dataset == "newsvendor":
             kdro_class = DRO_BAS_MMD(dim_theta, dim, newsvendor_cost_cvxpy)
             problem = kdro_class.get_newsvendor_problem(n_samples, num_certify_points)
-        elif dataset in ("portfolio", "portfolio_synthetic"):
-            kdro_class = DRO_BAS_MMD(dim_theta, dim, portfolio_objective_cvxpy)
+        elif dataset in ("portfolio", "portfolio_synthetic", "james"):
+            kdro_class = DRO_BAS_MMD(dim_theta, dim, portfolio_objective_cvxpy) # TODO: James: are there cases in which dim_theta and dim should be different?
             problem = kdro_class.get_portfolio_problem(n_samples, num_certify_points)
         else:
             raise ValueError(f"Objective not implemented for dataset '{dataset}'")
@@ -312,12 +315,14 @@ def run(
         "contamination": contamination,
         "dataset": dataset,
         "dataset_dir": dataset_dir,
+        "dataset_dir_james": dataset_dir_james,
         "dgp": dgp,
         "dim": dim,
         "epsilon": epsilon,
         "eta": eta,
         "ignore_dpp": ignore_dpp,
         "inference": inference,
+        "kernel_name": kernel_name, # James
         "lengthscale": lengthscale,
         "likelihood": likelihood,
         "normalise": normalise,
@@ -340,6 +345,7 @@ def run(
     else:
         params["npl_uuid_dir"] = None
     params.pop("num_replications")  # popped because we don't need to pass this to the run_replication method, but it is needed above for getting the npl_uuid
+    params.pop("kernel_name")   # NOTE: James: popped because currently it's used to get npl_uuid but not used in run_replication. TODO: see if that should change
 
     if njobs == 1:
         all_solve_start = datetime.now()
@@ -376,13 +382,14 @@ def run(
 
 def run_replication(
     replication: int,
-    problem: cp.Problem,
+    problem: Optional[cp.Problem],
+    dataset_dir_james,
     algorithm: str = "kl_bdro",
     contamination: float = CONTAMINATION_LEVEL,
     dataset: str = "newsvendor",
     dataset_dir: Optional[Path] = None,
     dgp: str = "truncated_normal",
-    dim: int = 1,
+    dim: Optional[int] = 1,
     epsilon: float = 1.0,
     eta: float = NPL_ETA,
     ignore_dpp: bool = False,
@@ -402,6 +409,7 @@ def run_replication(
 ):
     """Run a single replication where the seed is given by the replication number"""
     # 1. generate dataset
+    # Also, get dim in case of James dataset
     dgp_start = datetime.now()
     generator = np.random.default_rng(seed=replication)
     if dataset == "newsvendor" or dataset == "portfolio_synthetic":
@@ -412,6 +420,11 @@ def run_replication(
         data_eval = sample_dgp(
             dgp, num_test_observations, dim=dim, contamination=0.0, generator=generator
         )
+    elif dataset == "james":
+        data, data_eval = portfolio_dataset_james(time_window_id=replication, dataset_dir_james=dataset_dir_james)
+        dim = data.shape[1]
+        if normalise:
+            data = normalise_by_dimension(data)
     elif dataset == "portfolio":
         # NOTE shape of data (N, D) where N is number of weeks and D is the number of stocks
         if dgp == "DowJones-crash":
@@ -439,7 +452,7 @@ def run_replication(
             theta_sample = derive_analytical_posterior_params(
                 posterior, theta_posterior
             )
-        elif algorithm == "kl_bdro" and dataset in ("portfolio", "portfolio_synthetic") and posterior == "normal_inverse_wishart":
+        elif algorithm == "kl_bdro" and dataset in ("portfolio", "portfolio_synthetic", "james") and posterior == "normal_inverse_wishart":
             mu_post, _, iota_post, Psi_post = theta_posterior
             theta_sample = bdro_portfolio_posterior_samples(num_posterior_samples, mu_post, iota_post, Psi_post, generator=generator)
         elif algorithm == "kl_pp":
@@ -467,7 +480,7 @@ def run_replication(
         xi = data
     elif inference == "bayes" and algorithm == "kl_pp":
         xi = sample_posterior_predictive(likelihood, posterior, theta_sample, dim, num_likelihood_samples, generator=generator).reshape((1, num_likelihood_samples, dim))
-    elif inference == "bayes" and dataset in ("portfolio", "portfolio_synthetic") and likelihood == "multivariate_normal":
+    elif inference == "bayes" and dataset in ("portfolio", "portfolio_synthetic", "james") and likelihood == "multivariate_normal":
         pass    # no need to sample from likelihood cause we have closed form
     else:
         xi = sample_likelihood(
@@ -481,11 +494,20 @@ def run_replication(
         )
     likelihood_time = (datetime.now() - likelihood_start).total_seconds()
 
-    # 4. run the chosen DRO algorithm
+    # 4. Instantiate problem object if doing so in each run
+    if dataset == "james":
+        if algorithm == "kl_pp":
+            problem = get_kl_bdro_problem(portfolio_objective_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim, is_portfolio=True)
+        elif algorithm == "kl_empirical":
+            problem = get_kl_bdro_problem(portfolio_objective_cvxpy, 1, num_observations, dim=dim, is_portfolio=True)
+        elif algorithm in ("kl_bdro", "kl_dro_bas") and likelihood == "multivariate_normal":
+            problem = get_kl_portfolio_problem(dim, num_posterior_samples)
+
+    # 5. run the chosen DRO algorithm
     solve_start = datetime.now()
     solution = np.nan
     if (
-            (dataset == "portfolio" or dataset == "portfolio_synthetic")
+            dataset in ("portfolio" "portfolio_synthetic", "james")
             and algorithm in ("kl_bdro", "kl_dro_bas")
             and likelihood == "multivariate_normal"
     ):
@@ -557,7 +579,7 @@ def run_replication(
     else:
         if dataset == "newsvendor":
             out_of_sample_cost = newsvendor_cost_cvxpy(solution, data_eval.reshape((num_test_observations, dim))).value
-        elif dataset in ("portfolio", "portfolio_synthetic"):
+        elif dataset in ("portfolio", "portfolio_synthetic", "james"):
             out_of_sample_cost = data_eval @ solution
         else:
             raise NotImplementedError(f"Out-of-sample cost for dataset '{dataset}' not implemented")
@@ -624,6 +646,8 @@ def sample_npl_for_experiment(
             data = sample_dgp(
                 dgp, npl_row["num_observations"], dim=npl_row["dim"], contamination=npl_row["contamination"], generator=generator
             )
+        elif dataset == "james":
+            data, _ = portfolio_dataset_james(time_window_id=replication, dim=npl_row["dim"])
         elif dataset == "portfolio":
             data, _ = portfolio_dataset(dgp, replication, dataset_dir)
             if npl_row["normalise"]:
