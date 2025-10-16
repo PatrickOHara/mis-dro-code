@@ -21,7 +21,7 @@ def mean_variance_opt(Sigma: np.ndarray, mu: np.ndarray, risk_aversion: float):
     res = minimize(objective, w0, method='SLSQP', bounds=bounds, constraints=constraints)
     return res.x
 
-djia_windows_filename_markowitz = "/dcs/pg24/u5674159/own-djia-data/windows_rebalance_dates_20080220_to_20250430_inclusive_every_13_weeks_markowitz.pkl"
+djia_windows_filename_markowitz = "/dcs/pg24/u5674159/mis-dro-code/james-data/windows_rebalance_dates_20080220_to_20250430_inclusive_every_13_weeks_markowitz.pkl"
 with open(djia_windows_filename_markowitz, 'rb') as f:
     windows = pickle.load(f)
 
