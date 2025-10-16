@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 #SBATCH --job-name=markowitz
-#SBATCH --partition=cpu-batch
+#SBATCH --partition=parrot
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=10000
 #SBATCH --time=2-00:00:00
