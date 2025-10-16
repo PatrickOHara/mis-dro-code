@@ -21,7 +21,7 @@ def mean_variance_opt(Sigma: np.ndarray, mu: np.ndarray, risk_aversion: float):
     res = minimize(objective, w0, method='SLSQP', bounds=bounds, constraints=constraints)
     return res.x
 
-djia_windows_filename_markowitz = "/dcs/pg24/u5674159/mis-dro-code/james-data/windows_rebalance_dates_20080220_to_20250430_inclusive_every_13_weeks_markowitz.pkl"
+djia_windows_filename_markowitz = "/dcs/pg24/u5674159/mis-dro-code/james-data/windows_rebalance_dates_20080220_to_20250430_inclusive_every_13_weeks.pkl"
 with open(djia_windows_filename_markowitz, 'rb') as f:
     windows = pickle.load(f)
 
@@ -45,7 +45,7 @@ for risk_aversion_hyperparameter in lambdas:
         Sigma_mu_calculation_start = datetime.now()
 
         # Take the mean for each stock to get mu (make sure to do this properly, considering dimensionality etc.)
-        mu = training_df.mean(axis=0)
+        mu = training_df.mean(axis=0) ** len(test_df)
 
         # Create a covariance matrix (Sigma) out of the 13-weekly returns (make sure to do this properly, considering dimensionality etc.)
         Sigma = training_df.cov()
