@@ -26,10 +26,14 @@ with open(djia_windows_filename_markowitz, 'rb') as f:
     windows = pickle.load(f)
 
 lambdas = [
+    0.1,
+    0.5,
     1,
     5,
     10,
-    50
+    50,
+    100,
+    500
 ]
 
 results_for_all_lambas = {}
