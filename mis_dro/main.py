@@ -647,7 +647,7 @@ def sample_npl_for_experiment(
                 dgp, npl_row["num_observations"], dim=npl_row["dim"], contamination=npl_row["contamination"], generator=generator
             )
         elif dataset == "james":
-            raise NotImplementedError("Here, portfolio_dataset_james is being supplied with dim in spite of this no longer being one of its parameters")
+            raise NotImplementedError("Here, portfolio_dataset_james is being supplied with dim in spite of this no longer being one of its")
             # data, _ = portfolio_dataset_james(time_window_id=replication, dim=npl_row["dim"])
         elif dataset == "portfolio":
             data, _ = portfolio_dataset(dgp, replication, dataset_dir)
