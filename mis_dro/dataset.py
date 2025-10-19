@@ -274,15 +274,22 @@ def get_num_time_windows(
 ) -> int:
     return math.floor((num_weeks - in_sample_time_window) / out_of_sample_time_window)
 
-def portfolio_dataset_james(
+def get_window_of_train_and_test_dataframes(
     time_window_id: int,
     dataset_dir_james
-) -> tuple[np.ndarray, np.ndarray]:
+) -> list[pd.DataFrame, pd.DataFrame]:
     with open(dataset_dir_james, 'rb') as f:
         windows = pickle.load(f)
     num_time_windows = len(windows)
     assert time_window_id < num_time_windows
-    window = windows[time_window_id]
+    return windows[time_window_id]
+
+
+def portfolio_dataset_james(
+    time_window_id: int,
+    dataset_dir_james
+) -> tuple[np.ndarray, np.ndarray]:
+    window = get_window_of_train_and_test_dataframes(time_window_id, dataset_dir_james)
     training_data = window[0].values
     test_data = window[1].values
     return training_data, test_data
