@@ -897,50 +897,59 @@ def cv_kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
         likelihood = "multivariate_normal"
         posterior = "normal_inverse_wishart"
         inference = "bayes"
-        total_model_samples = 900   # TODO: consider changing this
+
+        # TODO: instead of defaulting total_model_samples to 900, I am using the same total_model_samples as in kl_portfolio_james, as I am not sure why this was hardcoded to 900 in origina/cross-validation (might be good to find out) and I need some level of consistency with kl_portfolio_james for comparison's sake
+        if algorithm == "kl_dro_bas":
+            total_model_samples_list = [1]
+        elif algorithm == "kl_pp":
+            total_model_samples_list = [900, 3600]
+        elif algorithm == "kl_bdro":
+            total_model_samples_list = [900]
+
         NUM_SPLITS = 1  # NOTE: changed from 10
-        base_params = {
-            "algorithm": algorithm,
-            "contamination": 0.0,
-            "dataset": "james", # NOTE: changed from portfolio
-            "dataset_dir_james": dataset_dir_james, # NOTE: added
-            "dgp": dgp,
-            "dim": dim,
-            "ignore_dpp": True,
-            "inference": inference,
-            "likelihood": likelihood,
-            "njobs": 1,
+        for total_model_samples in total_model_samples_list:
+            base_params = {
+                "algorithm": algorithm,
+                "contamination": 0.0,
+                "dataset": "james", # NOTE: changed from portfolio
+                "dataset_dir_james": dataset_dir_james, # NOTE: added
+                "dgp": dgp,
+                "dim": dim,
+                "ignore_dpp": True,
+                "inference": inference,
+                "likelihood": likelihood,
+                "njobs": 1,
 
-            # TODO: the below may have to change
-            "num_likelihood_samples": get_num_likelihood_samples("newsvendor", IN_SAMPLE_TIME_WINDOW, total_model_samples, algorithm),
-            "num_posterior_samples": get_num_posterior_samples("newsvendor", total_model_samples, algorithm),
+                # TODO: I have changed the below, but should I let Patrick know that he may need to change "newsvendor" for his results, and are my changes acceptable?
+                "num_likelihood_samples": get_num_likelihood_samples("portfolio", 52, total_model_samples, algorithm),
+                "num_posterior_samples": get_num_posterior_samples("portfolio", total_model_samples, algorithm),
 
-            "num_observations": 52, # NOTE: now hard-coded
-            "num_replications": get_num_time_windows_james(dataset_dir_james),  # NOTE: changed
-            "num_test_observations": 13,
-            "posterior": posterior,
-            "do_cross_validation": True,
-            "n_splits": NUM_SPLITS,
-        }
-        cv_uuid_list = []
-        for epsilon in (10**pow for pow in range(-5, 1)):   # NOTE: changed the epsilons
-            for split_idx in range(NUM_SPLITS):
-                fold_params = base_params.copy()
-                fold_params["uuid"] = str(uuid4())
-                fold_params["epsilon"] = epsilon
-                fold_params["n_splits"] = NUM_SPLITS
-                fold_params["split_idx"] = split_idx
-                fold_params["use_cv_epsilon"] = False
-                fold_params["cv_uuid_list"] = []
-                experiment.append(fold_params)
-                cv_uuid_list.append(fold_params["uuid"])
-        params = base_params.copy()
-        params["uuid"] = str(uuid4())
-        params["epsilon"] = None    # this must be calculated later using CV!
-        params["split_idx"] = None  # not needed because we will calculate epsilon using all splits
-        params["use_cv_epsilon"] = True     # we will exploit the CV epsilon
-        params["cv_uuid_list"] = cv_uuid_list   #NOTE point to all the UUIDs across all folds and epsilons 
-        experiment.append(params)
+                "num_observations": 52, # NOTE: now hard-coded
+                "num_replications": get_num_time_windows_james(dataset_dir_james),  # NOTE: changed
+                "num_test_observations": 13,
+                "posterior": posterior,
+                "do_cross_validation": True,
+                "n_splits": NUM_SPLITS,
+            }
+            cv_uuid_list = []
+            for epsilon in (10**pow for pow in range(-5, 1)):   # NOTE: changed the epsilons
+                for split_idx in range(NUM_SPLITS):
+                    fold_params = base_params.copy()
+                    fold_params["uuid"] = str(uuid4())
+                    fold_params["epsilon"] = epsilon
+                    fold_params["n_splits"] = NUM_SPLITS
+                    fold_params["split_idx"] = split_idx
+                    fold_params["use_cv_epsilon"] = False
+                    fold_params["cv_uuid_list"] = []
+                    experiment.append(fold_params)
+                    cv_uuid_list.append(fold_params["uuid"])
+            params = base_params.copy()
+            params["uuid"] = str(uuid4())
+            params["epsilon"] = None    # this must be calculated later using CV!
+            params["split_idx"] = None  # not needed because we will calculate epsilon using all splits
+            params["use_cv_epsilon"] = True     # we will exploit the CV epsilon
+            params["cv_uuid_list"] = cv_uuid_list   #NOTE point to all the UUIDs across all folds and epsilons 
+            experiment.append(params)
     return experiment
 
 # def mmd_portfolio_james(dim: int) -> List[Dict]:
