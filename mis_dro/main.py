@@ -37,6 +37,7 @@ from .constants import (
     ROBAS_NEWSVENDOR_NUM_REPLICATIONS,
 )
 from .dataset import sample_dgp, portfolio_dataset, portfolio_dataset_james, get_num_time_windows
+from .epsilon import get_num_observations_in_train_split
 from .experiments import ExperimentName, get_experiment
 from .likelihood import sample_likelihood, reconstruct_covariance_from_triu
 from .newsvendor import newsvendor_cost_cvxpy
@@ -45,6 +46,7 @@ from .optimise import get_kl_bdro_problem, DRO_BAS_MMD
 from .portfolio import get_kl_portfolio_problem, bdro_portfolio_posterior_samples, portfolio_objective_cvxpy
 from .preprocessing import normalise_by_dimension
 from .gaussian_kernel import *
+from .results import get_result_df_list, convert_str_to_float_list
 
 app = typer.Typer(name="misdro")
 
@@ -65,8 +67,54 @@ def setup_kl_dro_bas(
     with open(filepath, "w", encoding="utf-8") as json_file:
         json.dump(experiment, json_file, indent=4)
 
-    # for the given batch size, how many batches do we need?
-    num_batches = math.ceil(float(len(experiment)) / float(batch_size))
+    if not experiment_name.is_cross_validation():
+
+        # for the given batch size, how many batches do we need?
+        num_batches = math.ceil(float(len(experiment)) / float(batch_size))
+
+        # setup SLURM file
+        # TODO: may need to change this given modifications I have made to kl_dro_bas_template.slurm
+        with open(
+            Path(__file__).parent / "kl_dro_bas_template.slurm", "r", encoding="utf-8"
+        ) as slurm_file:
+            slurm_string = slurm_file.read()
+        dgp_string = slurm_string.format(
+            experiment_dir=experiment_dir, num_batches=num_batches, batch_size=batch_size
+        )
+        (experiment_dir / f"{experiment_name}.slurm").write_text(dgp_string)
+
+    else:
+
+        # separate into two experiments which need separate SLURM files: 
+        # A runs all the splits across all epsilons,
+        # B uses the epsilons calculated by cross-validation
+        fold_experiment = [params for params in experiment if params["do_cross_validation"] and not params["use_cv_epsilon"]]
+
+        # TODO: may need to change this given modifications I have made to kl_dro_bas_template.slurm
+        fold_num_batches = math.ceil(float(len(fold_experiment)) / float(batch_size))
+        with open(
+            Path(__file__).parent / "kl_dro_bas_template.slurm", "r", encoding="utf-8"
+        ) as slurm_file:
+            slurm_string = slurm_file.read()
+        fold_string = slurm_string.format(
+            experiment_dir=experiment_dir, num_batches=fold_num_batches, batch_size=batch_size
+        )
+        fold_string += " --do-cross-validation --no-use-cv-epsilon"
+        (experiment_dir / f"do_cross_validation.slurm").write_text(fold_string)
+
+        use_cv_epsilon_experiment = [params for params in experiment if params["do_cross_validation"] and params["use_cv_epsilon"]]
+
+        # TODO: may need to change this given modifications I have made to kl_dro_bas_template.slurm
+        use_cv_epsilon_num_batches = math.ceil(float(len(use_cv_epsilon_experiment)) / float(batch_size))
+        with open(
+            Path(__file__).parent / "kl_dro_bas_template.slurm", "r", encoding="utf-8"
+        ) as slurm_file:
+            slurm_string = slurm_file.read()
+        use_cv_epsilon_string = slurm_string.format(
+            experiment_dir=experiment_dir, num_batches=use_cv_epsilon_num_batches, batch_size=batch_size
+        )
+        use_cv_epsilon_string += " --do-cross-validation --use-cv-epsilon"
+        (experiment_dir / f"use_cv_epsilon.slurm").write_text(use_cv_epsilon_string)
 
     # setup SLURM file
     with open(
@@ -147,25 +195,10 @@ def generate_csv(experiment_dir: Path, npl_samples_dir: Optional[Path] = None):
     experiment_df = pd.DataFrame(experiment).set_index("uuid")
     print("Loading and concatenating", len(experiment_df), "CSV files into a pandas dataframe...")
     result_df = pd.DataFrame()
-    result_list = []
-    failed_uuid_list = []
-    missing_uuid_list = []
-    for uuid in experiment_df.index:
-        if (experiment_dir / f"{uuid}.csv").exists():
-            try:
-                result_list.append(pd.read_csv(
-                    experiment_dir / f"{uuid}.csv", index_col=["uuid", "replication"]
-                ))
-            except pd.errors.ParserError:
-                failed_uuid_list.append(uuid)
-        else:
-            missing_uuid_list.append(uuid)
 
-    print("The following UUIDs did not have a CSV file:")
-    print(missing_uuid_list)
-    print()
-    print("The following UUIDs failed due to a pandas.errors.ParserError:")
-    print(failed_uuid_list)
+    # TODO: replaced stuff with this, make sure no breaking changes and check if get_result_df_list source code must be changed
+    result_list = get_result_df_list(experiment_dir, experiment_df.index)
+
     result_df = pd.concat([result_df] + result_list)
     result_df = result_df.join(experiment_df, on="uuid")
     result_df = result_df.reset_index()
@@ -208,12 +241,20 @@ def run_experiment(
 
 
 @app.command(name="batch")
-def batch(experiment_dir: Path, batch_id: int, batch_size: int, only_missing: bool = False, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), npl_samples_dir: Optional[Path] = None):
+def batch(experiment_dir: Path, batch_id: int, batch_size: int, only_missing: bool = False, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), npl_samples_dir: Optional[Path] = None, do_cross_validation: bool = False, use_cv_epsilon: bool = False):
     print(datetime.now(), "Running batch from array index", batch_id)
     print()
     filepath = experiment_dir / "experiment.json"
     with open(filepath, "r", encoding="utf-8") as json_file:
         experiment = json.load(json_file)
+    if do_cross_validation and not use_cv_epsilon:
+        # only keep parameters where do_cross_validation is set to True
+        experiment = [params for params in experiment if params["do_cross_validation"] and not params["use_cv_epsilon"]]
+        print(len(experiment), "params to run in this cross-validation batch.")
+    elif do_cross_validation and use_cv_epsilon:
+        experiment = [params for params in experiment if params["do_cross_validation"] and params["use_cv_epsilon"]]
+        print(len(experiment), "params to run in this 'use_cv_epsilon' batch.")
+
     start = batch_id * batch_size
     batch_experiment = experiment[start: min(start + batch_size, len(experiment))]
     for params in batch_experiment:
@@ -246,7 +287,7 @@ def run(
     dataset_dir: Optional[Path] = None,
     dgp: str = "truncated_normal",
     dim: Optional[int] = 1,
-    epsilon: float = 1.0,
+    epsilon: Optional[float] = 1.0,
     eta: float = NPL_ETA,
     ignore_dpp: bool = False,
     inference: str = "bayes",
@@ -263,12 +304,64 @@ def run(
     num_test_observations: int = NUM_TEST_OBSERVATIONS,
     num_certify_points: int = NUM_CERTIFY,
     posterior: str = "gamma",
+    do_cross_validation: bool = False,
+    n_splits: Optional[int] = None,
+    split_idx: Optional[int] = None,
+    use_cv_epsilon: bool = False,
+    cv_uuid_list: list[str] = [],
     uuid: str = str(uuid4()),
     verbose: bool = False,
 ):
     """Run Newsvendor Misspecified Bayesian DRO"""
     if uuid:
         print(uuid)
+
+    if do_cross_validation and n_splits is not None and split_idx is not None and epsilon is not None:
+
+        # TODO: probably must change num_training_observations source code, or just do your thing here under your own boolean
+        num_training_observations = get_num_observations_in_train_split(n_splits, split_idx, num_observations)
+        num_test_observations = num_observations - num_training_observations
+        print(f"Doing {n_splits}-fold cross-validation on split {split_idx}: training/test set size is {num_training_observations}/{num_test_observations}.")
+
+    elif use_cv_epsilon and split_idx is None and do_cross_validation:
+        num_training_observations = num_observations
+        # TODO get the best epsilon for each replication from the cross-validation - store in array
+        # load the results df for each UUID in cv_uuid_list
+        result_list = get_result_df_list(experiment_dir, cv_uuid_list)
+        result_df = pd.concat(result_list)
+
+        # TODO: this convert_str_to_float_list is from results.py and looks as the one in plot.py originally did; I had to change the latter, so maybe I will need to change the former?
+        result_df["out_of_sample_cost"] = result_df["out_of_sample_cost"].map(lambda x: convert_str_to_float_list(x, num_test_observations))
+
+        experiment_filepath = experiment_dir / "experiment.json"
+        with open(experiment_filepath, "r", encoding="utf-8") as json_file:
+            experiment = json.load(json_file)
+        experiment_df = pd.DataFrame(experiment).set_index("uuid")
+        result_df = result_df.join(experiment_df, on="uuid")
+
+        # TODO: there was unused logic here featuring epsilons_for_replications, see if you can use it
+
+        # TODO: not so sure what agg does but I think this is for finding a single epsilon with the best mean and variance across **all* windows, which is what we don't want
+        assert len(result_df["algorithm"].unique()) == 1
+        gb = result_df.groupby(["epsilon"])
+        agg_df = gb.agg(
+            out_of_sample_mean = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.mean(np.concatenate(x.values))),
+            out_of_sample_var = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.var(np.concatenate(x.values), ddof=1)),        
+        )
+
+        # TODO: this is just selecting a single epsilon, not what we want
+        if dataset == "portfolio" or dataset == "james":
+            epsilon = agg_df.loc[agg_df["out_of_sample_mean"] == agg_df["out_of_sample_mean"].max()].index[0]
+        print("Epsilon:", epsilon)
+
+        # TODO: there was unused logic here about the Pareto front, see if you should include it
+
+
+    elif do_cross_validation:
+        raise ValueError("Something went wrong in the previous logic.")
+    else:
+        num_training_observations = num_observations
+
     print("DGP:", dgp, " - ALGORITHM:", algorithm, " - NUM LIKELIHOOD SAMPLES:", num_likelihood_samples, " - POSTERIOR:", posterior, "- DATASET:", dataset, "- DIM:", dim)
     if dataset == "james" and (algorithm in ("kl_pp", "kl_empirical") or algorithm in ("kl_bdro", "kl_dro_bas") and likelihood == "multivariate_normal"):
         problem = None
@@ -279,7 +372,7 @@ def run(
     elif algorithm == "kl_pp" and dataset in ("portfolio", "portfolio_synthetic"):
         problem = get_kl_bdro_problem(portfolio_objective_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim, is_portfolio=True)
     elif algorithm == "kl_empirical" and dataset in ("portfolio", "portfolio_synthetic"):
-        problem = get_kl_bdro_problem(portfolio_objective_cvxpy, 1, num_observations, dim=dim, is_portfolio=True)
+        problem = get_kl_bdro_problem(portfolio_objective_cvxpy, 1, num_training_observations, dim=dim, is_portfolio=True)
     elif algorithm in ("kl_bdro", "kl_dro_bas") and dataset in ("portfolio", "portfolio_synthetic") and likelihood == "multivariate_normal":
         problem = get_kl_portfolio_problem(dim, num_posterior_samples)
     elif algorithm in ("dro_bas_mmd", "empirical_mmd"):
@@ -287,7 +380,7 @@ def run(
         if algorithm == "dro_bas_mmd":
             n_samples = num_posterior_samples*num_likelihood_samples
         elif algorithm == "empirical_mmd":
-            n_samples = num_observations
+            n_samples = num_training_observations
         if dataset == "newsvendor":
             kdro_class = DRO_BAS_MMD(dim_theta, dim, newsvendor_cost_cvxpy)
             problem = kdro_class.get_newsvendor_problem(n_samples, num_certify_points)
@@ -333,6 +426,10 @@ def run(
         "num_replications": num_replications,
         "num_test_observations": num_test_observations,
         "posterior": posterior,
+        "do_cross_validation": do_cross_validation,
+        "n_splits": n_splits,
+        "split_idx": split_idx,
+        "use_cv_epsilon": use_cv_epsilon,
         "uuid": uuid,
         "verbose": verbose,
     }
@@ -346,12 +443,16 @@ def run(
         params["npl_uuid_dir"] = None
     params.pop("num_replications")  # popped because we don't need to pass this to the run_replication method, but it is needed above for getting the npl_uuid
     params.pop("kernel_name")   # NOTE: James: popped because currently it's used to get npl_uuid but not used in run_replication. TODO: see if that should change
+    # TODO: consider popping lengthscale, kernel_name and eta, if they are only used in NPL sampling and this isn't done in run
 
     if njobs == 1:
         all_solve_start = datetime.now()
         list_of_replication_stats = []
         print(all_solve_start, "- Running all replications in series.")
         for j in range(num_replications):
+            if use_cv_epsilon:
+                # TODO: for each window (j), bestow upon it the best epsilon for that window specifically
+                pass
             list_of_replication_stats.append(run_replication(j, problem, **params))
         all_solve_end = datetime.now()
         print(all_solve_end, "- Finished solving all replications in series. Total solve time is", (all_solve_end - all_solve_start).total_seconds())
@@ -379,7 +480,7 @@ def run(
     print()
     df.to_csv(csv_filepath, index=False)
 
-
+# TODO: consider removing eta and lengthscale from the parameters here, if they are only used in NPL sampling and that's not done in run_replication
 def run_replication(
     replication: int,
     problem: Optional[cp.Problem],
@@ -390,7 +491,7 @@ def run_replication(
     dataset_dir: Optional[Path] = None,
     dgp: str = "truncated_normal",
     dim: Optional[int] = 1,
-    epsilon: float = 1.0,
+    epsilon: Optional[float] = 1.0,
     eta: float = NPL_ETA,
     ignore_dpp: bool = False,
     inference: str = "bayes",
@@ -404,6 +505,10 @@ def run_replication(
     num_posterior_samples: int = NUM_POSTERIOR_SAMPLES,
     num_test_observations: int = NUM_TEST_OBSERVATIONS,
     posterior: str = "gamma",
+    do_cross_validation: bool = False,
+    n_splits: Optional[int] = None,
+    split_idx: Optional[int] = None,
+    use_cv_epsilon: bool = False,
     uuid: str = str(uuid4()),
     verbose: bool = False,
 ):
@@ -438,6 +543,19 @@ def run_replication(
             data = normalise_by_dimension(data)
     else:
         raise NotImplementedError(f"Dataset not implemented: {dataset}")
+    
+    if do_cross_validation and not use_cv_epsilon:
+
+        # TODO: don't need the below to set train_index and test_index, because I have chosen to just select the last 20% (or whatever) for validation
+        # NOTE we use a different random number generator for CV because we do not want to contaminate the test samples
+        # and because we want to reproduce the same CV splits for each replication
+        cv_random_state = np.random.RandomState(seed=replication + 1000)
+        kf = KFold(n_splits=n_splits, shuffle=True, random_state=cv_random_state)
+        train_index, test_index = list(kf.split(data))[split_idx]
+
+        data_eval = data[test_index]
+        data = data[train_index]
+
     dgp_time = (datetime.now() - dgp_start).total_seconds()
 
     # 2. sample from the posterior
@@ -495,6 +613,7 @@ def run_replication(
     likelihood_time = (datetime.now() - likelihood_start).total_seconds()
 
     # 4. Instantiate problem object if doing so in each run
+    # TODO: may need to change num_observations and other numbers of samples below in the case of cross-validation
     if dataset == "james":
         if algorithm == "kl_pp":
             problem = get_kl_bdro_problem(portfolio_objective_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim, is_portfolio=True)
@@ -502,6 +621,18 @@ def run_replication(
             problem = get_kl_bdro_problem(portfolio_objective_cvxpy, 1, num_observations, dim=dim, is_portfolio=True)
         elif algorithm in ("kl_bdro", "kl_dro_bas") and likelihood == "multivariate_normal":
             problem = get_kl_portfolio_problem(dim, num_posterior_samples)
+
+    if algorithm == "kl_dro_bas" and (
+        dataset == "portfolio" or dataset == "portfolio_synthetic" or dataset == "james"
+        or (dataset == "newsvendor" and do_cross_validation)
+    ):
+        # NOTE under the above conditions, having values of epsilon just above
+        # the constant is benefitial for obtaining a small mean
+        epsilon_prime = epsilon
+    else:
+        # as in Corollary 3.7
+        # NOTE for BDRO and BAS-PP this is just equal to epsilon because log_partition_constant is zero
+        epsilon_prime = epsilon - log_partition_constant
 
     # 5. run the chosen DRO algorithm
     solve_start = datetime.now()
@@ -517,7 +648,7 @@ def run_replication(
         #     solve_time = 0.0
         #     setup_time = 0.0
         # else:
-        problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon])
+        problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon_prime])
         problem.param_dict["mu_post"].value = theta_sample[0, :dim]
         for i in range(num_posterior_samples):
             # get a PSD covariance from the upper triangular vector
@@ -537,7 +668,7 @@ def run_replication(
             setup_time = 0.0
         else:
             # set parameters then solve
-            problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon - log_partition_constant])
+            problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon_prime])
             xi = xi.reshape((num_posterior_samples, num_likelihood_samples, dim))
             for i in range(num_posterior_samples):
                 problem.param_dict[f"xi_{i}"].value = xi[i]

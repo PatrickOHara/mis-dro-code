@@ -50,15 +50,25 @@ class ExperimentName(StrEnum):
     mmd_newsvendor_exp_1d = "mmd_newsvendor_exp_1d"
     kl_portfolio_james = "kl_portfolio_james"
     # mmd_portfolio_james = "mmd_portfolio_james"
+    cv_kl_portfolio_james = "cv_kl_portfolio_james"
 
     def is_portfolio(self) -> bool:
-        return self in (ExperimentName.kl_portfolio, ExperimentName.mmd_portfolio, ExperimentName.kl_portfolio_crash, ExperimentName.mmd_portfolio_crash)
+        return self in (
+            ExperimentName.kl_portfolio,
+            ExperimentName.mmd_portfolio,
+            ExperimentName.kl_portfolio_crash,
+            ExperimentName.mmd_portfolio_crash,
+            ExperimentName.cv_kl_portfolio_james
+        )
     
     def is_james(self) -> bool:
         return self in (
             ExperimentName.kl_portfolio_james,
             # ExperimentName.mmd_portfolio_james
         )
+    
+    def is_cross_validation(self) -> bool:
+        return self in (ExperimentName.cv_kl_portfolio_james)
 
 
 
@@ -81,6 +91,7 @@ def get_experiment(experiment_name: ExperimentName, dataset_dir_james, dataset_d
         ExperimentName.mmd_portfolio_synthetic: mmd_portfolio_synthetic,
         ExperimentName.kl_portfolio_james: kl_portfolio_james,
         # ExperimentName.mmd_portfolio_james: mmd_portfolio_james,
+        ExperimentName.cv_kl_portfolio_james: cv_kl_portfolio_james,
     }
     try:
         if experiment_name.is_portfolio():
@@ -870,11 +881,66 @@ def kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
                 "num_observations": 52,
                 "num_posterior_samples": get_num_posterior_samples("portfolio", num_samples, algorithm),
                 "num_replications": get_num_time_windows_james(dataset_dir_james),
-                "num_test_observations": 13, # TODO: dynamically measure the length of a test window
+                "num_test_observations": 13, # TODO: dynamically measure the length of a test window here and in cv_kl_portfolio_james
                 "posterior": posterior,
                 "uuid": str(uuid4()),  # uniquely identify a run
             }
             experiment.append(params)
+    return experiment
+
+# NOTE: parameters changed
+def cv_kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
+    """Cross-validation KL univariate portfolio for selecting epsilon"""
+    experiment = []
+    dgp = "james"   # NOTE: changes from DowJones
+    for algorithm in ["kl_dro_bas", "kl_bdro", "kl_pp"]:
+        likelihood = "multivariate_normal"
+        posterior = "normal_inverse_wishart"
+        inference = "bayes"
+        total_model_samples = 900   # TODO: consider changing this
+        NUM_SPLITS = 1  # NOTE: changed from 10
+        base_params = {
+            "algorithm": algorithm,
+            "contamination": 0.0,
+            "dataset": "james", # NOTE: changed from portfolio
+            "dataset_dir_james": dataset_dir_james, # NOTE: added
+            "dgp": dgp,
+            "dim": dim,
+            "ignore_dpp": True,
+            "inference": inference,
+            "likelihood": likelihood,
+            "njobs": 1,
+
+            # TODO: the below may have to change
+            "num_likelihood_samples": get_num_likelihood_samples("newsvendor", IN_SAMPLE_TIME_WINDOW, total_model_samples, algorithm),
+            "num_posterior_samples": get_num_posterior_samples("newsvendor", total_model_samples, algorithm),
+
+            "num_observations": 52, # NOTE: now hard-coded
+            "num_replications": get_num_time_windows_james(dataset_dir_james),  # NOTE: changed
+            "num_test_observations": 13,
+            "posterior": posterior,
+            "do_cross_validation": True,
+            "n_splits": NUM_SPLITS,
+        }
+        cv_uuid_list = []
+        for epsilon in (10**pow for pow in range(-5, 1)):   # NOTE: changed the epsilons
+            for split_idx in range(NUM_SPLITS):
+                fold_params = base_params.copy()
+                fold_params["uuid"] = str(uuid4())
+                fold_params["epsilon"] = epsilon
+                fold_params["n_splits"] = NUM_SPLITS
+                fold_params["split_idx"] = split_idx
+                fold_params["use_cv_epsilon"] = False
+                fold_params["cv_uuid_list"] = []
+                experiment.append(fold_params)
+                cv_uuid_list.append(fold_params["uuid"])
+        params = base_params.copy()
+        params["uuid"] = str(uuid4())
+        params["epsilon"] = None    # this must be calculated later using CV!
+        params["split_idx"] = None  # not needed because we will calculate epsilon using all splits
+        params["use_cv_epsilon"] = True     # we will exploit the CV epsilon
+        params["cv_uuid_list"] = cv_uuid_list   #NOTE point to all the UUIDs across all folds and epsilons 
+        experiment.append(params)
     return experiment
 
 # def mmd_portfolio_james(dim: int) -> List[Dict]:
