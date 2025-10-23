@@ -73,13 +73,12 @@ def setup_kl_dro_bas(
         num_batches = math.ceil(float(len(experiment)) / float(batch_size))
 
         # setup SLURM file
-        # TODO: may need to change this given modifications I have made to kl_dro_bas_template.slurm
         with open(
             Path(__file__).parent / "kl_dro_bas_template.slurm", "r", encoding="utf-8"
         ) as slurm_file:
             slurm_string = slurm_file.read()
         dgp_string = slurm_string.format(
-            experiment_dir=experiment_dir, num_batches=num_batches, batch_size=batch_size
+            experiment_dir=experiment_dir, num_batches_minus_one=num_batches-1, batch_size=batch_size
         )
         (experiment_dir / f"{experiment_name}.slurm").write_text(dgp_string)
 
@@ -90,14 +89,14 @@ def setup_kl_dro_bas(
         # B uses the epsilons calculated by cross-validation
         fold_experiment = [params for params in experiment if params["do_cross_validation"] and not params["use_cv_epsilon"]]
 
-        # TODO: may need to change this given modifications I have made to kl_dro_bas_template.slurm
+        # TODO: double-check the num_batches_minus_one logic in the template regarding the below
         fold_num_batches = math.ceil(float(len(fold_experiment)) / float(batch_size))
         with open(
             Path(__file__).parent / "kl_dro_bas_template.slurm", "r", encoding="utf-8"
         ) as slurm_file:
             slurm_string = slurm_file.read()
         fold_string = slurm_string.format(
-            experiment_dir=experiment_dir, num_batches=fold_num_batches, batch_size=batch_size
+            experiment_dir=experiment_dir, num_batches_minus_one=fold_num_batches-1, batch_size=batch_size
         )
         fold_string += " --do-cross-validation --no-use-cv-epsilon"
         (experiment_dir / f"do_cross_validation.slurm").write_text(fold_string)
