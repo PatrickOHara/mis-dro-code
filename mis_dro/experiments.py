@@ -926,7 +926,7 @@ def cv_kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
 
                 "num_observations": 52, # NOTE: now hard-coded
                 "num_replications": get_num_time_windows_james(dataset_dir_james),  # NOTE: changed
-                "num_test_observations": 13,
+                "num_test_observations": 13,    # TODO: dynamically measure the length of a test window here and in kl_portfolio_james
                 "posterior": posterior,
                 "do_cross_validation": True,
                 "n_splits": NUM_SPLITS,

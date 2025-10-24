@@ -313,9 +313,16 @@ def run(
     if uuid:
         print(uuid)
 
-    if do_cross_validation and n_splits is not None and split_idx is not None and epsilon is not None:
+    # TODO: this is technically not cross-validation, but single holdout validation, so maybe I should change mention of CV here and in experiments.py accordingly
+    if do_cross_validation and not use_cv_epsilon and dataset == "james":
 
-        # TODO: probably must change num_training_observations source code, or just do your thing here under your own boolean
+        # NOTE: making sure that, when splitting the training data into training and validation for CV, the ratio is the same as for training and testing outside of CV
+        num_training_observations = num_observations / (num_observations + num_test_observations) * num_observations
+        num_test_observations = num_observations - num_training_observations
+        print(f"Doing {n_splits}-fold cross-validation on split {split_idx}: training/test set size is {num_training_observations}/{num_test_observations}.")
+    
+    elif do_cross_validation and n_splits is not None and split_idx is not None and epsilon is not None:
+
         num_training_observations = get_num_observations_in_train_split(n_splits, split_idx, num_observations)
         num_test_observations = num_observations - num_training_observations
         print(f"Doing {n_splits}-fold cross-validation on split {split_idx}: training/test set size is {num_training_observations}/{num_test_observations}.")
