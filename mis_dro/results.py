@@ -1,5 +1,6 @@
 from pathlib import Path
 import pandas as pd
+import numpy as np
 
 def get_result_df_list(experiment_dir: Path, uuid_list: list[str]):
     result_list = []

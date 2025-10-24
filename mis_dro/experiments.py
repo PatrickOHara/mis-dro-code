@@ -898,7 +898,7 @@ def cv_kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
         posterior = "normal_inverse_wishart"
         inference = "bayes"
 
-        # TODO: instead of defaulting total_model_samples to 900, I am using the same total_model_samples as in kl_portfolio_james, as I am not sure why this was hardcoded to 900 in origina/cross-validation (might be good to find out) and I need some level of consistency with kl_portfolio_james for comparison's sake
+        # NOTE: in what I took from Patrick's branch, total_model_samples was fixed to 900 instead of the below. This doesn't make a difference in the case of kl_dro_bas: num_likelihood_samples is now 1 rather than 900 from it, but this variable isn't actually used due to closed-form, and num_posterior_samples ends up as 1 either way. In the case of kl_pp, it's just the case that 3600 is being left out, which may be good regarding consistency with BDRO. And for BDRO, it's only 900 below anyway.
         if algorithm == "kl_dro_bas":
             total_model_samples_list = [1]
         elif algorithm == "kl_pp":
@@ -920,7 +920,7 @@ def cv_kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
                 "likelihood": likelihood,
                 "njobs": 1,
 
-                # TODO: I have changed the below, but should I let Patrick know that he may need to change "newsvendor" for his results, and are my changes acceptable?
+                # TODO: I have changed the below, but should I let Patrick know that he may need to change "newsvendor" for his results, and are my changes acceptable? More specifically regarding changing "newsvendor" to "portfolio". Seems to affect BDRO alone--30 is used as num_likelihood_samples and num_posterior samples in the last case, now it's 1 and 900 respectively. At least that's now consistent with kl_portfolio_james
                 "num_likelihood_samples": get_num_likelihood_samples("portfolio", 52, total_model_samples, algorithm),
                 "num_posterior_samples": get_num_posterior_samples("portfolio", total_model_samples, algorithm),
 
