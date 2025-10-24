@@ -58,6 +58,7 @@ class ExperimentName(StrEnum):
             ExperimentName.mmd_portfolio,
             ExperimentName.kl_portfolio_crash,
             ExperimentName.mmd_portfolio_crash,
+            # ExperimentName.cv_kl_portfolio_james  # NOTE: activate under is_james instead, for consistency with kl_portfolio_james regarding whether dim must be supplied
         )
     
     def is_james(self) -> bool:
