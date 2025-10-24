@@ -89,7 +89,6 @@ def setup_kl_dro_bas(
         # B uses the epsilons calculated by cross-validation
         fold_experiment = [params for params in experiment if params["do_cross_validation"] and not params["use_cv_epsilon"]]
 
-        # TODO: double-check the num_batches_minus_one logic in the template regarding the below
         fold_num_batches = math.ceil(float(len(fold_experiment)) / float(batch_size))
         with open(
             Path(__file__).parent / "kl_dro_bas_template.slurm", "r", encoding="utf-8"
@@ -103,7 +102,6 @@ def setup_kl_dro_bas(
 
         use_cv_epsilon_experiment = [params for params in experiment if params["do_cross_validation"] and params["use_cv_epsilon"]]
 
-        # TODO: double-check the num_batches_minus_one logic in the template regarding the below
         use_cv_epsilon_num_batches = math.ceil(float(len(use_cv_epsilon_experiment)) / float(batch_size))
         with open(
             Path(__file__).parent / "kl_dro_bas_template.slurm", "r", encoding="utf-8"
