@@ -58,13 +58,13 @@ class ExperimentName(StrEnum):
             ExperimentName.mmd_portfolio,
             ExperimentName.kl_portfolio_crash,
             ExperimentName.mmd_portfolio_crash,
-            ExperimentName.cv_kl_portfolio_james
         )
     
     def is_james(self) -> bool:
         return self in (
             ExperimentName.kl_portfolio_james,
-            # ExperimentName.mmd_portfolio_james
+            # ExperimentName.mmd_portfolio_james,
+            ExperimentName.cv_kl_portfolio_james
         )
     
     def is_cross_validation(self) -> bool:
@@ -891,6 +891,8 @@ def kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
 # NOTE: parameters changed
 def cv_kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
     """Cross-validation KL univariate portfolio for selecting epsilon"""
+    if dim:
+        assert dim <= get_min_dim_james(dataset_dir_james)
     experiment = []
     dgp = "james"   # NOTE: changes from DowJones
     for algorithm in ["kl_dro_bas", "kl_bdro", "kl_pp"]:
