@@ -554,11 +554,14 @@ def run_replication(
 
         if dataset == "james":
 
-            # TODO: this is a little bit fudgey
+            # TODO: this feels a little bit fudgey re: calculating num_training_observations in run and then again here
+
             num_training_observations = num_observations - num_test_observations
             train_index = np.arange(num_training_observations)
             test_index = np.arange(num_training_observations, num_training_observations + num_test_observations)
-
+            num_observations = num_training_observations    # NOTE: did this so that, like in Patrick's branch, only num_training_observations is passed to get_kl_bdro_problem when getting the problem for kl_empirical below
+            # TODO: the above, however, will also change num_observations for some empirical mmd stuff below, but since that will now be using data which is tied to num_training_observations, I think that should be fine, but check before ever merging these changes with main
+    
         else:
 
             # NOTE we use a different random number generator for CV because we do not want to contaminate the test samples
