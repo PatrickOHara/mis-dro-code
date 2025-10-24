@@ -114,16 +114,6 @@ def setup_kl_dro_bas(
         use_cv_epsilon_string += " --do-cross-validation --use-cv-epsilon"
         (experiment_dir / f"use_cv_epsilon.slurm").write_text(use_cv_epsilon_string)
 
-    # setup SLURM file
-    with open(
-        Path(__file__).parent / "kl_dro_bas_template.slurm", "r", encoding="utf-8"
-    ) as slurm_file:
-        slurm_string = slurm_file.read()
-    dgp_string = slurm_string.format(
-        experiment_dir=experiment_dir, num_batches_minus_one=num_batches-1, batch_size=batch_size
-    )
-    (experiment_dir / f"{experiment_name}.slurm").write_text(dgp_string)
-
 
 @app.command(name="setup-mmd")
 def setup_mmd_dro_bas(
@@ -330,37 +320,49 @@ def run(
 
     elif use_cv_epsilon and split_idx is None and do_cross_validation:
         num_training_observations = num_observations
-        # TODO get the best epsilon for each replication from the cross-validation - store in array
         # load the results df for each UUID in cv_uuid_list
-        result_list = get_result_df_list(experiment_dir, cv_uuid_list)
-        result_df = pd.concat(result_list)
+        result_list = get_result_df_list(experiment_dir, cv_uuid_list)  # NOTE by James: in this Python list, each element is for one UUID (I.E. one epsilon across all replications for the algorithm in question), and the element is the Pandas DataFrame containing, essentially, what is in the UUID's .csv file
+        result_df = pd.concat(result_list)  # NOTE by James: combining all the above Pandas DataFrames into a single one, but UUID and replication columns allow easy distinction
 
         # TODO: this convert_str_to_float_list is from results.py and looks as the one in plot.py originally did; I had to change the latter, so maybe I will need to change the former?
-        result_df["out_of_sample_cost"] = result_df["out_of_sample_cost"].map(lambda x: convert_str_to_float_list(x, num_test_observations))
+        result_df["out_of_sample_cost"] = result_df["out_of_sample_cost"].map(lambda x: convert_str_to_float_list(x, num_test_observations))    # NOTE by James: just formatting
 
+        # NOTE by James: for each row in result_df (each of which has a distinct UUID/replication combination), this goes to the object in experiment.json with the mathcing UUID and adds all of the "other" parameters in this object to the row
         experiment_filepath = experiment_dir / "experiment.json"
         with open(experiment_filepath, "r", encoding="utf-8") as json_file:
             experiment = json.load(json_file)
         experiment_df = pd.DataFrame(experiment).set_index("uuid")
         result_df = result_df.join(experiment_df, on="uuid")
 
-        # TODO: there was unused logic here featuring epsilons_for_replications, see if you can use it
-
-        # TODO: not so sure what agg does but I think this is for finding a single epsilon with the best mean and variance across **all* windows, which is what we don't want
         assert len(result_df["algorithm"].unique()) == 1
-        gb = result_df.groupby(["epsilon"])
-        agg_df = gb.agg(
-            out_of_sample_mean = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.mean(np.concatenate(x.values))),
-            out_of_sample_var = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.var(np.concatenate(x.values), ddof=1)),        
-        )
 
-        # TODO: this is just selecting a single epsilon, not what we want
-        if dataset == "portfolio" or dataset == "james":
-            epsilon = agg_df.loc[agg_df["out_of_sample_mean"] == agg_df["out_of_sample_mean"].max()].index[0]
-        print("Epsilon:", epsilon)
+        if dataset == "james":
 
-        # TODO: there was unused logic here about the Pareto front, see if you should include it
+            best_epsilons = (
+                result_df.reset_index()
+                        .assign(mean_cost=result_df["out_of_sample_cost"].apply(np.mean))
+                        .groupby("replication")
+                        .apply(lambda g: g.loc[g["mean_cost"].idxmax(), "epsilon"])
+            )
 
+        else:
+
+            # TODO get the best epsilon for each replication from the cross-validation - store in array
+
+            # NOTE: there was unused logic here featuring epsilons_for_replications
+
+            # NOTE by James: the below results in a row for each epsilon, where its corresponding out-of-sample mean and variance (across all of its replications) is shown
+            gb = result_df.groupby(["epsilon"])
+            agg_df = gb.agg(
+                out_of_sample_mean = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.mean(np.concatenate(x.values))),
+                out_of_sample_var = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.var(np.concatenate(x.values), ddof=1)),        
+            )
+
+            if dataset == "portfolio" or dataset == "james":
+                epsilon = agg_df.loc[agg_df["out_of_sample_mean"] == agg_df["out_of_sample_mean"].max()].index[0]
+            print("Epsilon:", epsilon)
+
+            # TODO: there was unused logic here about the Pareto front, see if you should include it
 
     elif do_cross_validation:
         raise ValueError("Something went wrong in the previous logic.")
@@ -455,9 +457,8 @@ def run(
         list_of_replication_stats = []
         print(all_solve_start, "- Running all replications in series.")
         for j in range(num_replications):
-            if use_cv_epsilon:
-                # TODO: for each window (j), bestow upon it the best epsilon for that window specifically
-                pass
+            if use_cv_epsilon and dataset == "james":
+                params["epsilon"] = best_epsilons.loc[j]
             list_of_replication_stats.append(run_replication(j, problem, **params))
         all_solve_end = datetime.now()
         print(all_solve_end, "- Finished solving all replications in series. Total solve time is", (all_solve_end - all_solve_start).total_seconds())
@@ -560,7 +561,6 @@ def run_replication(
 
         else:
 
-            # TODO: don't need the below to set train_index and test_index, because I have chosen to just select the last 20% (or whatever) for validation
             # NOTE we use a different random number generator for CV because we do not want to contaminate the test samples
             # and because we want to reproduce the same CV splits for each replication
             cv_random_state = np.random.RandomState(seed=replication + 1000)
