@@ -308,7 +308,8 @@ def run(
     if do_cross_validation and not use_cv_epsilon and dataset == "james":
 
         # NOTE: making sure that, when splitting the training data into training and validation for CV, the ratio is the same as for training and testing outside of CV
-        num_training_observations = num_observations / (num_observations + num_test_observations) * num_observations
+        # TODO: not sure if "int" is necessary
+        num_training_observations = int(round(num_observations / (num_observations + num_test_observations) * num_observations))
         num_test_observations = num_observations - num_training_observations
         print(f"Doing {n_splits}-fold cross-validation on split {split_idx}: training/test set size is {num_training_observations}/{num_test_observations}.")
     
