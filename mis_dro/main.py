@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import scipy as sp
 import typer
+from sklearn.model_selection import KFold
 
 from bayesian_dro.Bayesian_DRO_continuous import main_Bayesian_DRO
 from .bayes_conjugates import (
@@ -447,7 +448,7 @@ def run(
         params["npl_uuid_dir"] = None
     params.pop("num_replications")  # popped because we don't need to pass this to the run_replication method, but it is needed above for getting the npl_uuid
     params.pop("kernel_name")   # NOTE: James: popped because currently it's used to get npl_uuid but not used in run_replication. TODO: see if that should change
-    # TODO: consider popping lengthscale, kernel_name and eta, if they are only used in NPL sampling and this isn't done in run
+    # TODO: consider popping lengthscale and eta, if they are only used in NPL sampling and this isn't done in run
 
     if njobs == 1:
         all_solve_start = datetime.now()
@@ -550,15 +551,24 @@ def run_replication(
     
     if do_cross_validation and not use_cv_epsilon:
 
-        # TODO: don't need the below to set train_index and test_index, because I have chosen to just select the last 20% (or whatever) for validation
-        # NOTE we use a different random number generator for CV because we do not want to contaminate the test samples
-        # and because we want to reproduce the same CV splits for each replication
-        cv_random_state = np.random.RandomState(seed=replication + 1000)
-        kf = KFold(n_splits=n_splits, shuffle=True, random_state=cv_random_state)
-        train_index, test_index = list(kf.split(data))[split_idx]
+        if dataset == "james":
 
-        data_eval = data[test_index]
+            # TODO: this is a little bit fudgey
+            num_training_observations = num_observations - num_test_observations
+            train_index = np.arange(num_training_observations)
+            test_index = np.arange(num_training_observations, num_training_observations + num_test_observations)
+
+        else:
+
+            # TODO: don't need the below to set train_index and test_index, because I have chosen to just select the last 20% (or whatever) for validation
+            # NOTE we use a different random number generator for CV because we do not want to contaminate the test samples
+            # and because we want to reproduce the same CV splits for each replication
+            cv_random_state = np.random.RandomState(seed=replication + 1000)
+            kf = KFold(n_splits=n_splits, shuffle=True, random_state=cv_random_state)
+            train_index, test_index = list(kf.split(data))[split_idx]
+
         data = data[train_index]
+        data_eval = data[test_index]
 
     dgp_time = (datetime.now() - dgp_start).total_seconds()
 
