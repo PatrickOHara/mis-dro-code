@@ -50,7 +50,7 @@ class ExperimentName(StrEnum):
     mmd_newsvendor_exp_1d = "mmd_newsvendor_exp_1d"
     kl_portfolio_james = "kl_portfolio_james"
     # mmd_portfolio_james = "mmd_portfolio_james"
-    cv_kl_portfolio_james = "cv_kl_portfolio_james"
+    tv_kl_portfolio_james = "tv_kl_portfolio_james"
 
     def is_portfolio(self) -> bool:
         return self in (
@@ -58,18 +58,18 @@ class ExperimentName(StrEnum):
             ExperimentName.mmd_portfolio,
             ExperimentName.kl_portfolio_crash,
             ExperimentName.mmd_portfolio_crash,
-            # ExperimentName.cv_kl_portfolio_james  # NOTE: activate under is_james instead, for consistency with kl_portfolio_james regarding whether dim must be supplied
+            # ExperimentName.tv_kl_portfolio_james  # NOTE: activate under is_james instead, for consistency with kl_portfolio_james regarding whether dim must be supplied
         )
     
     def is_james(self) -> bool:
         return self in (
             ExperimentName.kl_portfolio_james,
             # ExperimentName.mmd_portfolio_james,
-            ExperimentName.cv_kl_portfolio_james
+            ExperimentName.tv_kl_portfolio_james
         )
     
-    def is_cross_validation(self) -> bool:
-        return self in (ExperimentName.cv_kl_portfolio_james)
+    def is_temporal_validation(self) -> bool:
+        return self in (ExperimentName.tv_kl_portfolio_james)
 
 
 
@@ -92,7 +92,7 @@ def get_experiment(experiment_name: ExperimentName, dataset_dir_james, dataset_d
         ExperimentName.mmd_portfolio_synthetic: mmd_portfolio_synthetic,
         ExperimentName.kl_portfolio_james: kl_portfolio_james,
         # ExperimentName.mmd_portfolio_james: mmd_portfolio_james,
-        ExperimentName.cv_kl_portfolio_james: cv_kl_portfolio_james,
+        ExperimentName.tv_kl_portfolio_james: tv_kl_portfolio_james,
     }
     try:
         if experiment_name.is_portfolio():
@@ -882,7 +882,7 @@ def kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
                 "num_observations": 52,
                 "num_posterior_samples": get_num_posterior_samples("portfolio", num_samples, algorithm),
                 "num_replications": get_num_time_windows_james(dataset_dir_james),
-                "num_test_observations": 13, # TODO: dynamically measure the length of a test window here and in cv_kl_portfolio_james
+                "num_test_observations": 13, # TODO: dynamically measure the length of a test window here and in tv_kl_portfolio_james
                 "posterior": posterior,
                 "uuid": str(uuid4()),  # uniquely identify a run
             }
@@ -890,12 +890,12 @@ def kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
     return experiment
 
 # NOTE: parameters changed
-def cv_kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
-    """Cross-validation KL univariate portfolio for selecting epsilon"""
+def tv_kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
+    """Temporal-validation KL univariate portfolio for selecting epsilon"""
     if dim:
         assert dim <= get_min_dim_james(dataset_dir_james)
     experiment = []
-    dgp = "james"   # NOTE: changes from DowJones
+    dgp = "james"   # NOTE: changed from DowJones
     for algorithm in ["kl_dro_bas", "kl_bdro", "kl_pp"]:
         likelihood = "multivariate_normal"
         posterior = "normal_inverse_wishart"
@@ -931,7 +931,7 @@ def cv_kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
                 "num_replications": get_num_time_windows_james(dataset_dir_james),  # NOTE: changed
                 "num_test_observations": 13,    # TODO: dynamically measure the length of a test window here and in kl_portfolio_james
                 "posterior": posterior,
-                "do_cross_validation": True,
+                "do_temporal_validation": True,
                 "n_splits": NUM_SPLITS,
             }
             cv_uuid_list = []
@@ -942,16 +942,16 @@ def cv_kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
                     fold_params["epsilon"] = epsilon
                     fold_params["n_splits"] = NUM_SPLITS
                     fold_params["split_idx"] = split_idx
-                    fold_params["use_cv_epsilon"] = False
-                    fold_params["cv_uuid_list"] = []
+                    fold_params["use_tv_epsilon"] = False
+                    fold_params["tv_uuid_list"] = []
                     experiment.append(fold_params)
                     cv_uuid_list.append(fold_params["uuid"])
             params = base_params.copy()
             params["uuid"] = str(uuid4())
-            params["epsilon"] = None    # this must be calculated later using CV!
+            params["epsilon"] = None    # this must be calculated later using tv!
             params["split_idx"] = None  # not needed because we will calculate epsilon using all splits
-            params["use_cv_epsilon"] = True     # we will exploit the CV epsilon
-            params["cv_uuid_list"] = cv_uuid_list   #NOTE point to all the UUIDs across all folds and epsilons 
+            params["use_tv_epsilon"] = True     # we will exploit the tv epsilon
+            params["tv_uuid_list"] = cv_uuid_list   #NOTE point to all the UUIDs across all splits and epsilons 
             experiment.append(params)
     return experiment
 

@@ -68,7 +68,7 @@ def setup_kl_dro_bas(
     with open(filepath, "w", encoding="utf-8") as json_file:
         json.dump(experiment, json_file, indent=4)
 
-    if not experiment_name.is_cross_validation():
+    if not experiment_name.is_temporal_validation():
 
         # for the given batch size, how many batches do we need?
         num_batches = math.ceil(float(len(experiment)) / float(batch_size))
@@ -87,8 +87,8 @@ def setup_kl_dro_bas(
 
         # separate into two experiments which need separate SLURM files: 
         # A runs all the splits across all epsilons,
-        # B uses the epsilons calculated by cross-validation
-        fold_experiment = [params for params in experiment if params["do_cross_validation"] and not params["use_cv_epsilon"]]
+        # B uses the epsilons calculated by temporal-validation
+        fold_experiment = [params for params in experiment if params["do_temporal_validation"] and not params["use_tv_epsilon"]]
 
         fold_num_batches = math.ceil(float(len(fold_experiment)) / float(batch_size))
         with open(
@@ -98,21 +98,21 @@ def setup_kl_dro_bas(
         fold_string = slurm_string.format(
             experiment_dir=experiment_dir, num_batches_minus_one=fold_num_batches-1, batch_size=batch_size
         )
-        fold_string += " --do-cross-validation --no-use-cv-epsilon"
-        (experiment_dir / f"do_cross_validation.slurm").write_text(fold_string)
+        fold_string += " --do-temporal-validation --no-use-tv-epsilon"
+        (experiment_dir / f"do_temporal_validation.slurm").write_text(fold_string)
 
-        use_cv_epsilon_experiment = [params for params in experiment if params["do_cross_validation"] and params["use_cv_epsilon"]]
+        use_tv_epsilon_experiment = [params for params in experiment if params["do_temporal_validation"] and params["use_tv_epsilon"]]
 
-        use_cv_epsilon_num_batches = math.ceil(float(len(use_cv_epsilon_experiment)) / float(batch_size))
+        use_tv_epsilon_num_batches = math.ceil(float(len(use_tv_epsilon_experiment)) / float(batch_size))
         with open(
             Path(__file__).parent / "kl_dro_bas_template.slurm", "r", encoding="utf-8"
         ) as slurm_file:
             slurm_string = slurm_file.read()
-        use_cv_epsilon_string = slurm_string.format(
-            experiment_dir=experiment_dir, num_batches_minus_one=use_cv_epsilon_num_batches-1, batch_size=batch_size
+        use_tv_epsilon_string = slurm_string.format(
+            experiment_dir=experiment_dir, num_batches_minus_one=use_tv_epsilon_num_batches-1, batch_size=batch_size
         )
-        use_cv_epsilon_string += " --do-cross-validation --use-cv-epsilon"
-        (experiment_dir / f"use_cv_epsilon.slurm").write_text(use_cv_epsilon_string)
+        use_tv_epsilon_string += " --do-temporal-validation --use-tv-epsilon"
+        (experiment_dir / f"use_tv_epsilon.slurm").write_text(use_tv_epsilon_string)
 
 
 @app.command(name="setup-mmd")
@@ -229,19 +229,19 @@ def run_experiment(
 
 
 @app.command(name="batch")
-def batch(experiment_dir: Path, batch_id: int, batch_size: int, only_missing: bool = False, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), npl_samples_dir: Optional[Path] = None, do_cross_validation: bool = False, use_cv_epsilon: bool = False):
+def batch(experiment_dir: Path, batch_id: int, batch_size: int, only_missing: bool = False, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), npl_samples_dir: Optional[Path] = None, do_temporal_validation: bool = False, use_tv_epsilon: bool = False):
     print(datetime.now(), "Running batch from array index", batch_id)
     print()
     filepath = experiment_dir / "experiment.json"
     with open(filepath, "r", encoding="utf-8") as json_file:
         experiment = json.load(json_file)
-    if do_cross_validation and not use_cv_epsilon:
-        # only keep parameters where do_cross_validation is set to True
-        experiment = [params for params in experiment if params["do_cross_validation"] and not params["use_cv_epsilon"]]
-        print(len(experiment), "params to run in this cross-validation batch.")
-    elif do_cross_validation and use_cv_epsilon:
-        experiment = [params for params in experiment if params["do_cross_validation"] and params["use_cv_epsilon"]]
-        print(len(experiment), "params to run in this 'use_cv_epsilon' batch.")
+    if do_temporal_validation and not use_tv_epsilon:
+        # only keep parameters where do_temporal_validation is set to True
+        experiment = [params for params in experiment if params["do_temporal_validation"] and not params["use_tv_epsilon"]]
+        print(len(experiment), "params to run in this temporal-validation batch.")
+    elif do_temporal_validation and use_tv_epsilon:
+        experiment = [params for params in experiment if params["do_temporal_validation"] and params["use_tv_epsilon"]]
+        print(len(experiment), "params to run in this 'use_tv_epsilon' batch.")
 
     start = batch_id * batch_size
     batch_experiment = experiment[start: min(start + batch_size, len(experiment))]
@@ -292,11 +292,11 @@ def run(
     num_test_observations: int = NUM_TEST_OBSERVATIONS,
     num_certify_points: int = NUM_CERTIFY,
     posterior: str = "gamma",
-    do_cross_validation: bool = False,
+    do_temporal_validation: bool = False,
     n_splits: Optional[int] = None,
     split_idx: Optional[int] = None,
-    use_cv_epsilon: bool = False,
-    cv_uuid_list: list[str] = [],
+    use_tv_epsilon: bool = False,
+    tv_uuid_list: list[str] = [],
     uuid: str = str(uuid4()),
     verbose: bool = False,
 ):
@@ -304,25 +304,24 @@ def run(
     if uuid:
         print(uuid)
 
-    # TODO: this is technically not cross-validation, but single holdout validation, so maybe I should change mention of CV here and in experiments.py accordingly
-    if do_cross_validation and not use_cv_epsilon and dataset == "james":
+    if do_temporal_validation and not use_tv_epsilon and n_splits == 1:
 
-        # NOTE: making sure that, when splitting the training data into training and validation for CV, the ratio is the same as for training and testing outside of CV
+        # NOTE: making sure that, when splitting the training data into training and validation for TV, the ratio is the same as for training and testing outside of TV
         # TODO: not sure if "int" is necessary
         num_training_observations = int(round(num_observations / (num_observations + num_test_observations) * num_observations))
         num_test_observations = num_observations - num_training_observations
-        print(f"Doing {n_splits}-fold cross-validation on split {split_idx}: training/test set size is {num_training_observations}/{num_test_observations}.")
+        print(f"Doing {n_splits}-fold temporal-validation on split {split_idx}: training/test set size is {num_training_observations}/{num_test_observations}.")
     
-    elif do_cross_validation and n_splits is not None and split_idx is not None and epsilon is not None:
+    # elif do_cross_validation and n_splits is not None and split_idx is not None and epsilon is not None:
 
-        num_training_observations = get_num_observations_in_train_split(n_splits, split_idx, num_observations)
-        num_test_observations = num_observations - num_training_observations
-        print(f"Doing {n_splits}-fold cross-validation on split {split_idx}: training/test set size is {num_training_observations}/{num_test_observations}.")
+    #     num_training_observations = get_num_observations_in_train_split(n_splits, split_idx, num_observations)
+    #     num_test_observations = num_observations - num_training_observations
+    #     print(f"Doing {n_splits}-fold cross-validation on split {split_idx}: training/test set size is {num_training_observations}/{num_test_observations}.")
 
-    elif use_cv_epsilon and split_idx is None and do_cross_validation:
+    elif use_tv_epsilon and split_idx is None and do_temporal_validation:
         num_training_observations = num_observations
-        # load the results df for each UUID in cv_uuid_list
-        result_list = get_result_df_list(experiment_dir, cv_uuid_list)  # NOTE by James: in this Python list, each element is for one UUID (I.E. one epsilon across all replications for the algorithm in question), and the element is the Pandas DataFrame containing, essentially, what is in the UUID's .csv file
+        # load the results df for each UUID in tv_uuid_list
+        result_list = get_result_df_list(experiment_dir, tv_uuid_list)  # NOTE by James: in this Python list, each element is for one UUID (I.E. one epsilon across all replications for the algorithm in question), and the element is the Pandas DataFrame containing, essentially, what is in the UUID's .csv file
         result_df = pd.concat(result_list)  # NOTE by James: combining all the above Pandas DataFrames into a single one, but UUID and replication columns allow easy distinction
 
         # TODO: this convert_str_to_float_list is from results.py and looks as the one in plot.py originally did; I had to change the latter, so maybe I will need to change the former?
@@ -337,7 +336,7 @@ def run(
 
         assert len(result_df["algorithm"].unique()) == 1
 
-        if dataset == "james":
+        if n_splits == 1:
 
             best_epsilons = (
                 result_df.reset_index()
@@ -348,7 +347,7 @@ def run(
 
         else:
 
-            # TODO get the best epsilon for each replication from the cross-validation - store in array
+            # TODO get the best epsilon for each replication from the temporal-validation - store in array
 
             # NOTE: there was unused logic here featuring epsilons_for_replications
 
@@ -365,7 +364,7 @@ def run(
 
             # TODO: there was unused logic here about the Pareto front, see if you should include it
 
-    elif do_cross_validation:
+    elif do_temporal_validation:
         raise ValueError("Something went wrong in the previous logic.")
     else:
         num_training_observations = num_observations
@@ -434,10 +433,10 @@ def run(
         "num_replications": num_replications,
         "num_test_observations": num_test_observations,
         "posterior": posterior,
-        "do_cross_validation": do_cross_validation,
+        "do_temporal_validation": do_temporal_validation,
         "n_splits": n_splits,
         "split_idx": split_idx,
-        "use_cv_epsilon": use_cv_epsilon,
+        "use_tv_epsilon": use_tv_epsilon,
         "uuid": uuid,
         "verbose": verbose,
     }
@@ -458,7 +457,7 @@ def run(
         list_of_replication_stats = []
         print(all_solve_start, "- Running all replications in series.")
         for j in range(num_replications):
-            if use_cv_epsilon and dataset == "james":
+            if use_tv_epsilon and n_splits == 1:
                 params["epsilon"] = best_epsilons.loc[j]
             list_of_replication_stats.append(run_replication(j, problem, **params))
         all_solve_end = datetime.now()
@@ -512,10 +511,10 @@ def run_replication(
     num_posterior_samples: int = NUM_POSTERIOR_SAMPLES,
     num_test_observations: int = NUM_TEST_OBSERVATIONS,
     posterior: str = "gamma",
-    do_cross_validation: bool = False,
+    do_temporal_validation: bool = False,
     n_splits: Optional[int] = None,
     split_idx: Optional[int] = None,
-    use_cv_epsilon: bool = False,
+    use_tv_epsilon: bool = False,
     uuid: str = str(uuid4()),
     verbose: bool = False,
 ):
@@ -551,9 +550,9 @@ def run_replication(
     else:
         raise NotImplementedError(f"Dataset not implemented: {dataset}")
     
-    if do_cross_validation and not use_cv_epsilon:
+    if do_temporal_validation and not use_tv_epsilon:
 
-        if dataset == "james":
+        if n_splits == 1:
 
             # TODO: this feels a little bit fudgey re: calculating num_training_observations in run and then again here
 
@@ -563,13 +562,13 @@ def run_replication(
             num_observations = num_training_observations    # NOTE: did this so that, like in Patrick's branch, only num_training_observations is passed to get_kl_bdro_problem when getting the problem for kl_empirical below
             # TODO: the above, however, will also change num_observations for some empirical mmd stuff below, but since that will now be using data which is tied to num_training_observations, I think that should be fine, but check before ever merging these changes with main
     
-        else:
+        # else:
 
-            # NOTE we use a different random number generator for CV because we do not want to contaminate the test samples
-            # and because we want to reproduce the same CV splits for each replication
-            cv_random_state = np.random.RandomState(seed=replication + 1000)
-            kf = KFold(n_splits=n_splits, shuffle=True, random_state=cv_random_state)
-            train_index, test_index = list(kf.split(data))[split_idx]
+        #     # NOTE we use a different random number generator for CV because we do not want to contaminate the test samples
+        #     # and because we want to reproduce the same CV splits for each replication
+        #     cv_random_state = np.random.RandomState(seed=replication + 1000)
+        #     kf = KFold(n_splits=n_splits, shuffle=True, random_state=cv_random_state)
+        #     train_index, test_index = list(kf.split(data))[split_idx]
 
         data = data[train_index]
         data_eval = data[test_index]
@@ -631,7 +630,7 @@ def run_replication(
     likelihood_time = (datetime.now() - likelihood_start).total_seconds()
 
     # 4. Instantiate problem object if doing so in each run
-    # TODO: may need to change num_observations and other numbers of samples below in the case of cross-validation
+    # TODO: may need to change num_observations and other numbers of samples below in the case of temporal-validation
     if dataset == "james":
         if algorithm == "kl_pp":
             problem = get_kl_bdro_problem(portfolio_objective_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim, is_portfolio=True)
@@ -642,7 +641,7 @@ def run_replication(
 
     if algorithm == "kl_dro_bas" and (
         dataset == "portfolio" or dataset == "portfolio_synthetic" or dataset == "james"
-        or (dataset == "newsvendor" and do_cross_validation)
+        or (dataset == "newsvendor" and do_temporal_validation)
     ):
         # NOTE under the above conditions, having values of epsilon just above
         # the constant is benefitial for obtaining a small mean
