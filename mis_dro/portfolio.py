@@ -56,3 +56,18 @@ def bdro_portfolio_posterior_samples(num_posterior_samples: int, mu_post: np.arr
         theta_sample[i, :dim] = mu_post
         theta_sample[i, dim:] = vec_triu_cov
     return theta_sample
+
+def calculate_transaction_cost(
+    prev_stock_figi_list: list[str],
+    prev_portfolio_weighting: list,
+    new_stock_figi_list: list[str],
+    new_portfolio_weighting: list
+) -> float:
+    if len(prev_stock_figi_list) != len(prev_portfolio_weighting):
+        raise ValueError("prev_stock_figi_list and prev_portfolio_weighting must be same length.")
+    if len(new_stock_figi_list) != len(new_portfolio_weighting):
+        raise ValueError("new_stock_figi_list and new_portfolio_weighting must be same length.")
+    prev_map = {figi: float(w) for figi, w in zip(prev_stock_figi_list, prev_portfolio_weighting)}
+    new_map  = {figi: float(w) for figi, w in zip(new_stock_figi_list,  new_portfolio_weighting)}
+    all_figis = set(prev_map) | set(new_map)
+    return 0.005 * sum(abs(new_map.get(figi, 0.0) - prev_map.get(figi, 0.0)) for figi in all_figis)
