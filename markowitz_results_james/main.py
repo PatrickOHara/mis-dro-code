@@ -6,7 +6,7 @@ from tqdm import tqdm
 from mis_dro.portfolio import calculate_transaction_cost
 from mis_dro.metrics import calculate_sharpe_ratio, calculate_sortino_ratio
 
-using_ipynb = True
+using_ipynb = False
 
 # TODO: cite https://github.com/BorisForce/PyPortfolioModels/blob/main/Min_Mean_Variance/Min_Mean_Variance_model.py for code if necessary
 def mean_variance_opt(Sigma: np.ndarray, mu: np.ndarray, risk_aversion: float):
@@ -101,7 +101,13 @@ def do_markowitz_run_without_validation(djia_windows_filename, lambdas, save, us
 
         results_for_each_window = []
 
-        for window in tqdm(windows):
+        iterable = windows
+
+        if using_ipynb:
+
+            iterable = tqdm(iterable)
+
+        for window in iterable:
             training_df, test_df = window
 
             # NOTE: I have not included transaction costs below, in order to reflect (post refactor) how I got the existing non-validation data--I got the out of sample costs without including transaction costs, then included them in results processing in james-portfolio.ipynb
@@ -157,7 +163,13 @@ def do_markowitz_run_with_single_holdout_validation_using_ratio_as_metric(markow
 
     all_out_of_sample_costs_so_far = []
 
-    for i, window in tqdm(enumerate(markowitz_windows)):
+    iterable = enumerate(markowitz_windows)
+
+    if using_ipynb:
+
+        iterable = tqdm(iterable)
+
+    for i, window in iterable:
 
         markowitz_training_df, test_df = window
 
