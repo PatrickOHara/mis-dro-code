@@ -924,6 +924,7 @@ def tv_kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
                 "njobs": 1,
 
                 # TODO: I have changed the below, but should I let Patrick know that he may need to change "newsvendor" for his results, and are my changes acceptable? More specifically regarding changing "newsvendor" to "portfolio". Seems to affect BDRO alone--30 is used as num_likelihood_samples and num_posterior samples in the last case, now it's 1 and 900 respectively. At least that's now consistent with kl_portfolio_james
+                # TODO: should the number of samples and observations be different in the validation runs? Or no because that would change the optimisation method, and we don't want to do that in temporal validation?
                 "num_likelihood_samples": get_num_likelihood_samples("portfolio", 52, total_model_samples, algorithm),
                 "num_posterior_samples": get_num_posterior_samples("portfolio", total_model_samples, algorithm),
 
@@ -934,7 +935,7 @@ def tv_kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
                 "do_temporal_validation": True,
                 "n_splits": NUM_SPLITS,
             }
-            cv_uuid_list = []
+            tv_uuid_list = []
             for epsilon in (10**pow for pow in range(-5, 1)):   # NOTE: changed the epsilons
                 for split_idx in range(NUM_SPLITS):
                     fold_params = base_params.copy()
@@ -945,13 +946,13 @@ def tv_kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
                     fold_params["use_tv_epsilon"] = False
                     fold_params["tv_uuid_list"] = []
                     experiment.append(fold_params)
-                    cv_uuid_list.append(fold_params["uuid"])
+                    tv_uuid_list.append(fold_params["uuid"])
             params = base_params.copy()
             params["uuid"] = str(uuid4())
             params["epsilon"] = None    # this must be calculated later using tv!
             params["split_idx"] = None  # not needed because we will calculate epsilon using all splits
             params["use_tv_epsilon"] = True     # we will exploit the tv epsilon
-            params["tv_uuid_list"] = cv_uuid_list   #NOTE point to all the UUIDs across all splits and epsilons 
+            params["tv_uuid_list"] = tv_uuid_list   #NOTE point to all the UUIDs across all splits and epsilons 
             experiment.append(params)
     return experiment
 
