@@ -73,7 +73,7 @@ class ExperimentName(StrEnum):
 
 
 
-def get_experiment(experiment_name: ExperimentName, dataset_dir_james, dataset_dir: Optional[Path] = None, dim: Optional[int] = None) -> List[Dict]:
+def get_experiment(experiment_name: ExperimentName, dataset_dir_james, risk_free_rates_filename, dataset_dir: Optional[Path] = None, dim: Optional[int] = None, tv_ratio: Optional[str] = None) -> List[Dict]:
     """Returns the experiment associated with the name"""
     function_lookup = {
         ExperimentName.kl_newsvendor_1d: kl_newsvendor_1d,
@@ -99,6 +99,8 @@ def get_experiment(experiment_name: ExperimentName, dataset_dir_james, dataset_d
             # NOTE portfolio setup requires a dataset_dir argument
             return function_lookup[experiment_name](dataset_dir)
         elif experiment_name.is_james():
+            if experiment_name.is_temporal_validation():
+                return function_lookup[experiment_name](dataset_dir_james, risk_free_rates_filename, dim, tv_ratio)
             return function_lookup[experiment_name](dataset_dir_james, dim)
         else:
             return function_lookup[experiment_name]()
@@ -890,7 +892,7 @@ def kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
     return experiment
 
 # NOTE: parameters changed
-def tv_kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
+def tv_kl_portfolio_james(dataset_dir_james, risk_free_rates_filename, dim: Optional[int], tv_ratio: Optional[str]) -> List[Dict]:
     """Temporal-validation KL univariate portfolio for selecting epsilon"""
     if dim:
         assert dim <= get_min_dim_james(dataset_dir_james)
@@ -934,6 +936,9 @@ def tv_kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
                 "posterior": posterior,
                 "do_temporal_validation": True,
                 "n_splits": NUM_SPLITS,
+                # TODO: note that the below probably won't be needed in runs with use_tv_epsilon as False
+                "tv_ratio": tv_ratio,
+                "risk_free_rates_filename": risk_free_rates_filename
             }
             tv_uuid_list = []
             for epsilon in (10**pow for pow in range(-5, 1)):   # NOTE: changed the epsilons

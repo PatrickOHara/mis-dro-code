@@ -13,6 +13,8 @@ import pandas as pd
 import scipy as sp
 import typer
 from sklearn.model_selection import KFold
+import pickle
+from typing import Any, Callable
 
 from bayesian_dro.Bayesian_DRO_continuous import main_Bayesian_DRO
 from .bayes_conjugates import (
@@ -44,24 +46,25 @@ from .likelihood import sample_likelihood, reconstruct_covariance_from_triu
 from .newsvendor import newsvendor_cost_cvxpy
 from .npl import sample_npl
 from .optimise import get_kl_bdro_problem, DRO_BAS_MMD
-from .portfolio import get_kl_portfolio_problem, bdro_portfolio_posterior_samples, portfolio_objective_cvxpy
+from .portfolio import get_kl_portfolio_problem, bdro_portfolio_posterior_samples, portfolio_objective_cvxpy, calculate_transaction_cost
 from .preprocessing import normalise_by_dimension
 from .gaussian_kernel import *
 from .results import get_result_df_list, convert_str_to_float_list
+from .metrics import calculate_sharpe_ratio, calculate_sortino_ratio
 
 app = typer.Typer(name="misdro")
 
 
 @app.command(name="setup-kl")
 def setup_kl_dro_bas(
-    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, dataset_dir_james, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), dim: Optional[int] = None, overwrite: bool = False
+    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, dataset_dir_james, risk_free_rates_filename, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), dim: Optional[int] = None, tv_ratio: Optional[str] = None, overwrite: bool = False
 ):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
         experiment_dir.mkdir(parents=False, exist_ok=False)
 
     # get the experiment from the name
-    experiment = get_experiment(experiment_name, dataset_dir_james, dim=dim)
+    experiment = get_experiment(experiment_name, dataset_dir_james, risk_free_rates_filename, dim=dim, tv_ratio=tv_ratio)
 
     # write experiment file to JSON
     filepath = experiment_dir / "experiment.json"
@@ -263,12 +266,75 @@ def run_uuid(experiment_dir: Path, uuid: UUID, dataset_dir: Path = Path("~/datas
     if not found:
         raise ValueError(f"UUID {uuid} not found in {filepath}")
 
+def get_useful_tv_results_shv_all_windows(result_df: pd.DataFrame) -> list[dict]:
+    all_tv_results = []
+    for _, g in result_df.groupby(level="replication", sort=True):
+        tv_results_for_replication = {}
+        for _, row in g.iterrows():
+            tv_results_for_replication[row["epsilon"]] = {col: row[col] for col in (
+                "likelihood_time", "posterior_time", "solve_time", "solution", "out_of_sample_cost"
+            )}
+        all_tv_results.append(tv_results_for_replication)
+    return all_tv_results
 
+def get_stock_figi_list(training_df: pd.DataFrame) -> list[str]:
+
+    # TODO: this whole thing with the use of get_window_of_train_and_test_dataframes is a bit of a fudge--the stock IDs should be saved along with the other results. Moreover, I don't know why I appended _{window index} to each of the FIGIs in the first place, so undo that and get rid of the splitting done below.
+
+    return [col.split("_")[0] for col in training_df.columns]
+
+def choose_risk_free_rates_for_validation(risk_free_rates: list[float], number_of_extra_data_at_start_of_risk_free_rates_reserved_for_validation: int, num_test_weeks: int, num_validation_dates_per_window: int, window_index: int) -> list[float]:
+
+    t = number_of_extra_data_at_start_of_risk_free_rates_reserved_for_validation
+    v = num_validation_dates_per_window
+
+    return risk_free_rates[t: t + num_test_weeks * window_index] + risk_free_rates[t + num_test_weeks * window_index - v: t + num_test_weeks * window_index]
+
+def choose_risk_free_rates_for_testing(risk_free_rates: list[float], number_of_extra_data_at_start_of_risk_free_rates_reserved_for_validation: int, num_test_weeks: int, window_index: int) -> list[float]:
+
+    t = number_of_extra_data_at_start_of_risk_free_rates_reserved_for_validation
+
+    return risk_free_rates[t: t + num_test_weeks * (window_index + 1)]
+
+def process_tv_results_shv_for_window(stock_figi_list_this_window: list[str], window_index: int, risk_free_rates: list[float], num_test_observations: int, num_validation_observations_per_window: int, useful_tv_results_shv_all_windows: list[dict[str, Any]], prev_stock_figi_list: list[str], prev_portfolio_weighting: list[float], all_out_of_sample_costs_so_far: list[float], ratio_calculator: Callable[[list[float], list[float], int], float], period_for_test_ratio_in_weeks: int) -> dict[str, Any]:
+    # TODO: note that 51 is specific to the risk free returns file in use (because it has 51 weekly risk-free rates up to and including the first rebalance date)
+    risk_free_rates_for_validation = choose_risk_free_rates_for_validation(risk_free_rates, 51, num_test_observations, num_validation_observations_per_window, window_index)   
+    best_epsilon_this_window, highest_validation_ratio = None, -float("inf")
+    total_validation_times = {"posterior": 0, "likelihood": 0, "solve": 0}  # TODO: Maybe save validation times for each epsilon rather than an overall one?
+    for epsilon, validation_results in useful_tv_results_shv_all_windows[window_index].items():
+        validation_transaction_cost = calculate_transaction_cost(prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, validation_results["solution"])
+        validation_portfolio_returns = validation_results["out_of_sample_cost"]
+        validation_portfolio_returns[0] -= validation_transaction_cost
+        all_out_of_sample_costs_so_far_including_validation = all_out_of_sample_costs_so_far + validation_portfolio_returns
+        validation_ratio = ratio_calculator(all_out_of_sample_costs_so_far_including_validation, risk_free_rates_for_validation, period_for_test_ratio_in_weeks - 13 + num_validation_observations_per_window)
+        if validation_ratio > highest_validation_ratio:
+            best_epsilon_this_window, highest_validation_ratio = epsilon, validation_ratio
+        for time_type in total_validation_times:
+            total_validation_times[time_type] += validation_results[f"{time_type}_time"]
+    return {
+        "best_epsilon_this_window": best_epsilon_this_window,
+        "total_validation_times": total_validation_times,
+    }
+
+def process_actual_results_after_tv_shv_for_window(total_validation_times: dict[str, float], results_this_replication: dict[str, Any], prev_stock_figi_list: list[str], prev_portfolio_weighting: list[float], stock_figi_list_this_window: list[str], risk_free_rates: list[float], num_test_observations: int, window_index: int, ratio_calculator: Callable[[list[float], list[float], int], float], all_out_of_sample_costs_so_far: list[float], period_for_test_ratio_in_weeks: int, tv_ratio: str) -> tuple[dict[str, Any], list[float]]:
+    for time_type, time in total_validation_times.items():
+        results_this_replication[f"total_validation_{time_type}_time"] = time
+    actual_transaction_cost = calculate_transaction_cost(prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, results_this_replication["solution"])
+    actual_portfolio_returns = results_this_replication["out_of_sample_cost"]
+    actual_portfolio_returns[0] -= actual_transaction_cost
+    results_this_replication["out_of_sample_cost"] = actual_portfolio_returns   # TODO: note somewhere that these will already have transaction costs in case you load them in .ipynb and forget and reapply them
+    all_out_of_sample_costs_so_far += results_this_replication["out_of_sample_cost"]
+    # TODO: note that 51 is specific to the risk free returns file in use (because it has 51 weekly risk-free rates up to and including the first rebalance date)
+    risk_free_rates_for_testing = choose_risk_free_rates_for_testing(risk_free_rates, 51, num_test_observations, window_index)
+    actual_ratio = ratio_calculator(all_out_of_sample_costs_so_far, risk_free_rates_for_testing, period_for_test_ratio_in_weeks)
+    results_this_replication[tv_ratio] = actual_ratio
+    return results_this_replication, all_out_of_sample_costs_so_far
 
 @app.command(name="run")
 def run(
     experiment_dir: Path,
     dataset_dir_james,
+    risk_free_rates_filename,
     algorithm: str = "kl_bdro",
     contamination: float = CONTAMINATION_LEVEL,
     dataset: str = "newsvendor",
@@ -293,6 +359,7 @@ def run(
     num_certify_points: int = NUM_CERTIFY,
     posterior: str = "gamma",
     do_temporal_validation: bool = False,
+    tv_ratio: Optional[str] = None,
     n_splits: Optional[int] = None,
     split_idx: Optional[int] = None,
     use_tv_epsilon: bool = False,
@@ -307,7 +374,6 @@ def run(
     if do_temporal_validation and not use_tv_epsilon and n_splits == 1:
 
         # NOTE: making sure that, when splitting the training data into training and validation for TV, the ratio is the same as for training and testing outside of TV
-        # TODO: not sure if "int" is necessary
         num_training_observations = round(num_observations / (num_observations + num_test_observations) * num_observations)
         num_test_observations = num_observations - num_training_observations
         print(f"Doing {n_splits}-fold temporal-validation on split {split_idx}: training/test set size is {num_training_observations}/{num_test_observations}.")
@@ -338,12 +404,17 @@ def run(
 
         if n_splits == 1:
 
-            best_epsilons = (
-                result_df.reset_index()
-                        .assign(mean_cost=result_df["out_of_sample_cost"].apply(np.mean))
-                        .groupby("replication")
-                        .apply(lambda g: g.loc[g["mean_cost"].idxmax(), "epsilon"])
-            )
+            if tv_ratio:
+                # [0: {0.00001: {"solution": ..., other result types}, other epsilons}, other replication numbers in order]
+                useful_tv_results_shv_all_windows = get_useful_tv_results_shv_all_windows(result_df)
+            else:
+                # TODO: is this correct? It 
+                best_epsilons = (
+                    result_df.reset_index()
+                            .assign(mean_cost=result_df["out_of_sample_cost"].apply(np.mean))
+                            .groupby("replication")
+                            .apply(lambda g: g.loc[g["mean_cost"].idxmax(), "epsilon"])
+                )
 
         else:
 
@@ -452,14 +523,40 @@ def run(
     params.pop("kernel_name")   # NOTE: James: popped because currently it's used to get npl_uuid but not used in run_replication. TODO: see if that should change
     # TODO: consider popping lengthscale and eta, if they are only used in NPL sampling and this isn't done in run
 
+    # TODO: remember add portfolio vs newsvendor to this boolean and similar ones
+    if do_temporal_validation and use_tv_epsilon and tv_ratio:
+        with open(dataset_dir_james, "rb") as f:
+            stock_figi_lists = [get_stock_figi_list(training_df) for training_df, _ in pickle.load(f)]
+        with open(risk_free_rates_filename, "rb") as f:
+            risk_free_rates = pickle.load(f)
+        all_out_of_sample_costs_so_far = []
+        # TODO: maybe enforce for the same index in the below lists to refer to the same stock
+        prev_stock_figi_list = []
+        prev_portfolio_weighting = []
+        ratio_calculator = {"sharpe": calculate_sharpe_ratio, "sortino": calculate_sortino_ratio}[tv_ratio]
+        period_for_test_ratio_in_weeks = 156  # TODO: maybe allow this to be chosen dynamically
+        num_validation_observations_per_window = len(list(useful_tv_results_shv_all_windows[0].values())[0]["out_of_sample_cost"])
+
     if njobs == 1:
         all_solve_start = datetime.now()
         list_of_replication_stats = []
         print(all_solve_start, "- Running all replications in series.")
         for j in range(num_replications):
             if use_tv_epsilon and n_splits == 1:
-                params["epsilon"] = best_epsilons.loc[j]
-            list_of_replication_stats.append(run_replication(j, problem, **params))
+                if tv_ratio:
+                    stock_figi_list_this_window = stock_figi_lists[j]
+                    processed_validation_results = process_tv_results_shv_for_window(stock_figi_list_this_window, j, risk_free_rates, num_test_observations, num_validation_observations_per_window, useful_tv_results_shv_all_windows, prev_stock_figi_list, prev_portfolio_weighting, all_out_of_sample_costs_so_far, ratio_calculator, period_for_test_ratio_in_weeks)
+                    best_epsilon_this_window = processed_validation_results["best_epsilon_this_window"]
+                    total_validation_times = processed_validation_results["total_validation_times"]
+                else:
+                    best_epsilon_this_window = best_epsilons.loc[j]
+                params["epsilon"] = best_epsilon_this_window
+            results_this_replication = run_replication(j, problem, **params)
+            if use_tv_epsilon and n_splits == 1 and tv_ratio:
+                results_this_replication, all_out_of_sample_costs_so_far = process_actual_results_after_tv_shv_for_window(total_validation_times, results_this_replication, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, risk_free_rates, num_test_observations, j, ratio_calculator, all_out_of_sample_costs_so_far, period_for_test_ratio_in_weeks, tv_ratio)
+                prev_stock_figi_list = stock_figi_list_this_window
+                prev_portfolio_weighting = results_this_replication["solution"]
+            list_of_replication_stats.append(results_this_replication)
         all_solve_end = datetime.now()
         print(all_solve_end, "- Finished solving all replications in series. Total solve time is", (all_solve_end - all_solve_start).total_seconds())
 
@@ -518,6 +615,7 @@ def run_replication(
     uuid: str = str(uuid4()),
     verbose: bool = False,
 ):
+
     """Run a single replication where the seed is given by the replication number"""
     # 1. generate dataset
     # Also, get dim in case of James dataset
@@ -630,7 +728,7 @@ def run_replication(
     likelihood_time = (datetime.now() - likelihood_start).total_seconds()
 
     # 4. Instantiate problem object if doing so in each run
-    # TODO: may need to change num_observations and other numbers of samples below in the case of temporal-validation
+    # NOTE: not changing num_posterior_samples or num_likelihood_samples in the case of validation run because that would fundamentally change the optimiser and compromise the integrity of validation itself
     if dataset == "james":
         if algorithm == "kl_pp":
             problem = get_kl_bdro_problem(portfolio_objective_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim, is_portfolio=True)
@@ -724,6 +822,7 @@ def run_replication(
     # evaluate the out-of-sample cost
     if (solution == np.inf).any():
         out_of_sample_cost = np.inf * np.ones(num_test_observations)
+        # TODO: James: should the solution still be made into a Python list like it is in the else statement?
     else:
         if dataset == "newsvendor":
             out_of_sample_cost = newsvendor_cost_cvxpy(solution, data_eval.reshape((num_test_observations, dim))).value
@@ -733,7 +832,7 @@ def run_replication(
             raise NotImplementedError(f"Out-of-sample cost for dataset '{dataset}' not implemented")
         solution = list(solution)
 
-    return {
+    results = {
         "uuid": uuid,
         "replication": replication,
         "solution": solution,
@@ -745,6 +844,8 @@ def run_replication(
         "log_partition_constant": log_partition_constant,
         "out_of_sample_cost": list(out_of_sample_cost),
     }
+
+    return results
 
 POSTERIOR_GB_COLS = [
     "contamination",
