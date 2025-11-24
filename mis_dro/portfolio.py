@@ -1,7 +1,7 @@
 """Functions for the portfolio problem"""
 
 
-from typing import Optional
+from typing import Optional, Sequence
 import numpy as np
 import cvxpy as cp
 from .bayes_conjugates import sample_posterior
@@ -58,10 +58,11 @@ def bdro_portfolio_posterior_samples(num_posterior_samples: int, mu_post: np.arr
     return theta_sample
 
 def calculate_transaction_cost(
-    prev_stock_figi_list: list[str],
-    prev_portfolio_weighting: list,
-    new_stock_figi_list: list[str],
-    new_portfolio_weighting: list
+    # TODO: now that you've changed the allowed types in this function signature, maybe go to where you are forcing a conversion of an argument to list before passing it to this function and lax such efforts--particularly for prev_portfolio_weighting and new_portfolio_weighting, I think
+    prev_stock_figi_list: Sequence[str],
+    prev_portfolio_weighting: Sequence[float],
+    new_stock_figi_list: Sequence[str],
+    new_portfolio_weighting: Sequence[float]
 ) -> float:
     if len(prev_stock_figi_list) != len(prev_portfolio_weighting):
         raise ValueError("prev_stock_figi_list and prev_portfolio_weighting must be same length.")
