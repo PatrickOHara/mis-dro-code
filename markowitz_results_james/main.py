@@ -9,7 +9,7 @@ from mis_dro.metrics import calculate_sharpe_ratio, calculate_sortino_ratio
 using_ipynb = False
 
 # TODO: cite https://github.com/BorisForce/PyPortfolioModels/blob/main/Min_Mean_Variance/Min_Mean_Variance_model.py for code if necessary
-def mean_variance_opt(Sigma: np.ndarray, mu: np.ndarray, risk_aversion: float):
+def mean_variance_opt(Sigma: np.ndarray, mu: np.ndarray, risk_aversion: float, include_transaction_costs_in_cost_function, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list):
     """
     Compute the mean-variance optimal portfolio weights subject to the constraints of no short-selling (weights >= 0)
     and full investment (sum(weights) = 1).
@@ -17,7 +17,10 @@ def mean_variance_opt(Sigma: np.ndarray, mu: np.ndarray, risk_aversion: float):
     n = len(mu)
     
     def objective(w):
-        return - (np.dot(w, mu) - 0.5 * risk_aversion * np.dot(w, Sigma @ w))
+        cost = - np.dot(w, mu) + 0.5 * risk_aversion * np.dot(w, Sigma @ w)
+        if include_transaction_costs_in_cost_function:
+            cost += calculate_transaction_cost(prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, w)
+        return cost
     
     constraints = [{'type': 'eq', 'fun': lambda w: np.sum(w) - 1}]
     bounds = [(0, 1) for _ in range(n)]
@@ -26,7 +29,7 @@ def mean_variance_opt(Sigma: np.ndarray, mu: np.ndarray, risk_aversion: float):
     res = minimize(objective, w0, method='SLSQP', bounds=bounds, constraints=constraints)
     return res.x
 
-def do_markowitz(training_df, test_df, risk_aversion_hyperparameter, ratio_type, all_out_of_sample_costs_so_far, risk_free_rates, period_for_ratio_in_weeks, include_transaction_costs, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list):
+def do_markowitz(training_df, test_df, risk_aversion_hyperparameter, ratio_type, all_out_of_sample_costs_so_far, risk_free_rates, period_for_ratio_in_weeks, include_transaction_costs_in_portfolio_returns, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, include_transaction_costs_in_cost_function):
 
     # Start a timer for measuring total time up to and including solve for window
     Sigma_mu_calculation_start = datetime.now()
@@ -41,7 +44,7 @@ def do_markowitz(training_df, test_df, risk_aversion_hyperparameter, ratio_type,
     solve_start = datetime.now()
 
     # Supply Sigma, mu and a chosen risk-aversion (remember, you planned to trial values on the upper side of the 1-50 range) to get the portfolio weighting, x
-    portfolio_weighting = mean_variance_opt(Sigma, mu, risk_aversion=risk_aversion_hyperparameter)
+    portfolio_weighting = mean_variance_opt(Sigma, mu, risk_aversion_hyperparameter, include_transaction_costs_in_cost_function, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list)
 
     # Stop the timer for measuring solve time for window to finalise it
     solve_time = (datetime.now() - solve_start).total_seconds()
@@ -52,7 +55,7 @@ def do_markowitz(training_df, test_df, risk_aversion_hyperparameter, ratio_type,
     # Calculate the out-of-sample cumulative returns using the portfolio weighting and the test dataset--see how out_of_sample_cost is calculated in mis_dro/main.py
     out_of_sample_cost = test_df @ portfolio_weighting
 
-    if include_transaction_costs:
+    if include_transaction_costs_in_portfolio_returns:
 
         transaction_cost = calculate_transaction_cost(prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, list(portfolio_weighting))
 
@@ -111,7 +114,7 @@ def do_markowitz_run_without_validation(djia_windows_filename, lambdas, save, us
             training_df, test_df = window
 
             # NOTE: I have not included transaction costs below, in order to reflect (post refactor) how I got the existing non-validation data--I got the out of sample costs without including transaction costs, then included them in results processing in james-portfolio.ipynb
-            results = do_markowitz(training_df, test_df, risk_aversion_hyperparameter, None, None, None, None, False, None, None, None)
+            results = do_markowitz(training_df, test_df, risk_aversion_hyperparameter, None, None, None, None, False, None, None, None, False)
 
             results_for_each_window.append(results)
 
@@ -148,7 +151,7 @@ def choose_risk_free_rates_for_testing(risk_free_rates: list[float], number_of_e
 
     return risk_free_rates[t: t + num_test_weeks * (window_index + 1)]
 
-def do_markowitz_run_with_single_holdout_validation_using_ratio_as_metric(markowitz_djia_windows_filename, dro_djia_windows_filename, risk_free_rates_file, lambdas, ratio_type, save, using_ipynb, save_filename_excluding_ratio_type):
+def do_markowitz_run_with_single_holdout_validation_using_ratio_as_metric(markowitz_djia_windows_filename, dro_djia_windows_filename, risk_free_rates_file, lambdas, ratio_type, save, using_ipynb, save_filename_excluding_ratio_type, include_transaction_costs_in_cost_function):
 
     markowitz_windows = unpickle_data(markowitz_djia_windows_filename)
 
@@ -194,13 +197,13 @@ def do_markowitz_run_with_single_holdout_validation_using_ratio_as_metric(markow
 
         for risk_aversion_hyperparameter in lambdas:
 
-            validation_ratio = do_markowitz(single_holdout_training_df, single_holdout_validation_df, risk_aversion_hyperparameter, ratio_type, all_out_of_sample_costs_so_far, risk_free_rates_for_validation, period_for_test_ratio_in_weeks - 13 + len(single_holdout_validation_df), True, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list)[ratio_type]
+            validation_ratio = do_markowitz(single_holdout_training_df, single_holdout_validation_df, risk_aversion_hyperparameter, ratio_type, all_out_of_sample_costs_so_far, risk_free_rates_for_validation, period_for_test_ratio_in_weeks - 13 + len(single_holdout_validation_df), True, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, include_transaction_costs_in_cost_function)[ratio_type]
 
             if validation_ratio > highest_validation_ratio:
                 best_lambda = risk_aversion_hyperparameter
                 highest_validation_ratio = validation_ratio
 
-        results_for_best_lambda = do_markowitz(markowitz_training_df, test_df, best_lambda, ratio_type, all_out_of_sample_costs_so_far, risk_free_rates_for_testing, period_for_test_ratio_in_weeks, True, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list)
+        results_for_best_lambda = do_markowitz(markowitz_training_df, test_df, best_lambda, ratio_type, all_out_of_sample_costs_so_far, risk_free_rates_for_testing, period_for_test_ratio_in_weeks, True, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, include_transaction_costs_in_cost_function)
 
         time_for_hyperparameter_optimisation_and_running_with_best_one = (datetime.now() - time_just_before_hyperparameter_optimisation).total_seconds()
 
@@ -215,7 +218,11 @@ def do_markowitz_run_with_single_holdout_validation_using_ratio_as_metric(markow
 
     if save:
 
-        pickle_results(results_for_each_window_with_its_best_lambda, using_ipynb, f"{save_filename_excluding_ratio_type}_with_{ratio_type}")
+        extended_save_file_name = f"{save_filename_excluding_ratio_type}_with_{ratio_type}"
+        if include_transaction_costs_in_cost_function:
+            extended_save_file_name += "_with_transaction_costs_in_cost_function"
+
+        pickle_results(results_for_each_window_with_its_best_lambda, using_ipynb, extended_save_file_name)
 
 markowitz_djia_windows_filename = "/dcs/pg24/u5674159/mis-dro-code/james-data/windows_rebalance_dates_20080220_to_20250430_inclusive_every_13_weeks_markowitz.pkl"
 dro_djia_windows_filename = "/dcs/pg24/u5674159/mis-dro-code/james-data/windows_rebalance_dates_20080220_to_20250430_inclusive_every_13_weeks.pkl"
@@ -228,6 +235,10 @@ lambdas = (
     500
 )
 
+# NOTE: these won't make a difference when it comes to do_markowitz_run_without_validation, as you can see
+save = True
+include_transaction_costs_in_cost_function = True
+
 # do_markowitz_run_without_validation(markowitz_djia_windows_filename, lambdas, False, using_ipynb, "results_for_multiple_lambdas")
-do_markowitz_run_with_single_holdout_validation_using_ratio_as_metric(markowitz_djia_windows_filename, dro_djia_windows_filename, risk_free_returns_filename, lambdas, "sharpe", True, using_ipynb, "results_for_best_lambdas_from_single_holdout_validation")
-do_markowitz_run_with_single_holdout_validation_using_ratio_as_metric(markowitz_djia_windows_filename, dro_djia_windows_filename, risk_free_returns_filename, lambdas, "sortino", True, using_ipynb, "results_for_best_lambdas_from_single_holdout_validation")
+for ratio_type in ("sharpe", "sortino"):
+    do_markowitz_run_with_single_holdout_validation_using_ratio_as_metric(markowitz_djia_windows_filename, dro_djia_windows_filename, risk_free_returns_filename, lambdas, ratio_type, save, using_ipynb, "results_for_best_lambdas_from_single_holdout_validation", include_transaction_costs_in_cost_function)
