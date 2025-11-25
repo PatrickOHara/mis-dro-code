@@ -51,6 +51,7 @@ class ExperimentName(StrEnum):
     kl_portfolio_james = "kl_portfolio_james"
     # mmd_portfolio_james = "mmd_portfolio_james"
     tv_kl_portfolio_james = "tv_kl_portfolio_james"
+    tv_kl_portfolio_james_has_tcosts_in_cost_function = "tv_kl_portfolio_james_has_tcosts_in_cost_function"
 
     def is_portfolio(self) -> bool:
         return self in (
@@ -65,11 +66,15 @@ class ExperimentName(StrEnum):
         return self in (
             ExperimentName.kl_portfolio_james,
             # ExperimentName.mmd_portfolio_james,
-            ExperimentName.tv_kl_portfolio_james
+            ExperimentName.tv_kl_portfolio_james,
+            ExperimentName.tv_kl_portfolio_james_has_tcosts_in_cost_function
         )
     
     def is_temporal_validation(self) -> bool:
-        return self in (ExperimentName.tv_kl_portfolio_james)
+        return self in (ExperimentName.tv_kl_portfolio_james, ExperimentName.tv_kl_portfolio_james_has_tcosts_in_cost_function)
+    
+    def has_has_tcosts_in_cost_function(self) -> bool:
+        return self in (ExperimentName.tv_kl_portfolio_james_has_tcosts_in_cost_function)
 
 
 
@@ -93,6 +98,7 @@ def get_experiment(experiment_name: ExperimentName, dataset_dir_james, risk_free
         ExperimentName.kl_portfolio_james: kl_portfolio_james,
         # ExperimentName.mmd_portfolio_james: mmd_portfolio_james,
         ExperimentName.tv_kl_portfolio_james: tv_kl_portfolio_james,
+        ExperimentName.tv_kl_portfolio_james_has_tcosts_in_cost_function: tv_kl_portfolio_james_has_tcosts_in_cost_function
     }
     try:
         if experiment_name.is_portfolio():
@@ -958,6 +964,53 @@ def tv_kl_portfolio_james(dataset_dir_james, risk_free_rates_filename, dim: Opti
             params["split_idx"] = None  # not needed because we will calculate epsilon using all splits
             params["use_tv_epsilon"] = True     # we will exploit the tv epsilon
             params["tv_uuid_list"] = tv_uuid_list   #NOTE point to all the UUIDs across all splits and epsilons 
+            experiment.append(params)
+    return experiment
+
+# TODO: refactor the below with the above etc.
+def tv_kl_portfolio_james_has_tcosts_in_cost_function(dataset_dir_james, risk_free_rates_filename, dim: Optional[int], tv_ratio: Optional[str]) -> List[Dict]:
+    if dim:
+        assert dim <= get_min_dim_james(dataset_dir_james)
+    experiment = []
+    dgp = "james"   # NOTE: changed from DowJones
+    for algorithm in ["kl_dro_bas", "kl_bdro", "kl_pp"]:
+        likelihood = "multivariate_normal"
+        posterior = "normal_inverse_wishart"
+        inference = "bayes"
+        # NOTE: in what I took from Patrick's branch, total_model_samples was fixed to 900 instead of the below. This doesn't make a difference in the case of kl_dro_bas: num_likelihood_samples is now 1 rather than 900 from it, but this variable isn't actually used due to closed-form, and num_posterior_samples ends up as 1 either way. In the case of kl_pp, it's just the case that 3600 is being left out, which may be good regarding consistency with BDRO. And for BDRO, it's only 900 below anyway.
+        if algorithm == "kl_dro_bas":
+            total_model_samples_list = [1]
+        elif algorithm == "kl_pp":
+            total_model_samples_list = [900, 3600]
+        elif algorithm == "kl_bdro":
+            total_model_samples_list = [900]
+        NUM_SPLITS = 1
+        for total_model_samples in total_model_samples_list:
+            params = {
+                "algorithm": algorithm,
+                "contamination": 0.0,
+                "dataset": "james",
+                "dataset_dir_james": dataset_dir_james,
+                "dgp": dgp,
+                "dim": dim,
+                "ignore_dpp": True,
+                "inference": inference,
+                "likelihood": likelihood,
+                "njobs": 1,
+                "num_likelihood_samples": get_num_likelihood_samples("portfolio", 52, total_model_samples, algorithm),
+                "num_posterior_samples": get_num_posterior_samples("portfolio", total_model_samples, algorithm),
+                "num_observations": 52,
+                "num_replications": get_num_time_windows_james(dataset_dir_james),
+                "num_test_observations": 13,
+                "posterior": posterior,
+                "do_temporal_validation": True,
+                "n_splits": NUM_SPLITS,
+                "tv_ratio": tv_ratio,
+                "risk_free_rates_filename": risk_free_rates_filename,
+                "has_tcosts_in_cost_function": True,
+                "epsilon_list": [10**pow for pow in range(-5, 1)],
+                "uuid": str(uuid4()),
+            }
             experiment.append(params)
     return experiment
 
