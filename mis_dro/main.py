@@ -334,6 +334,11 @@ def process_actual_results_after_tv_shv_for_window(total_validation_times: dict[
     results_this_replication[tv_ratio] = actual_ratio
     return results_this_replication, all_out_of_sample_costs_so_far
 
+def get_num_training_and_test_observations_shv(num_observations: int, num_test_observations: int) -> tuple[int, int]:
+    num_training_observations = round(num_observations / (num_observations + num_test_observations) * num_observations)
+    num_test_observations = num_observations - num_training_observations
+    return num_training_observations, num_test_observations
+
 @app.command(name="run")
 def run(
     experiment_dir: Path,
@@ -384,8 +389,7 @@ def run(
     elif do_temporal_validation and (not use_tv_epsilon and n_splits == 1):
 
         # NOTE: making sure that, when splitting the training data into training and validation for TV, the ratio is the same as for training and testing outside of TV
-        num_training_observations = round(num_observations / (num_observations + num_test_observations) * num_observations)
-        num_test_observations = num_observations - num_training_observations
+        num_training_observations, num_test_observations = get_num_training_and_test_observations_shv(num_observations, num_test_observations)
         print(f"Doing {n_splits}-fold temporal-validation on split {split_idx}: training/test set size is {num_training_observations}/{num_test_observations}.")
     
     # elif do_cross_validation and n_splits is not None and split_idx is not None and epsilon is not None:
@@ -547,14 +551,13 @@ def run(
         period_for_test_ratio_in_weeks = 156  # TODO: maybe allow this to be chosen dynamically
         if use_tv_epsilon:
             num_validation_observations_per_window = len(list(useful_tv_results_shv_all_windows[0].values())[0]["out_of_sample_cost"])
-            # TODO: needed for has_tcosts_in_cost_function?
 
     if njobs == 1:
         all_solve_start = datetime.now()
         list_of_replication_stats = []
         print(all_solve_start, "- Running all replications in series.")
         for j in range(num_replications):
-            if has_tcosts_in_cost_function:
+            if has_tcosts_in_cost_function: # TODO: write logic for when temporal validation is not being done, too, in case you want to see how potential curves shift when you include transaction costs in the cost function
                 best_epsilon, highest_validation_ratio = None, -float("inf")
                 total_validation_times = {"posterior": 0, "likelihood": 0, "solve": 0}  # TODO: Maybe save validation times for each epsilon rather than an overall one?
                 stock_figi_list_this_window = stock_figi_lists[j]
@@ -563,21 +566,27 @@ def run(
                 params["stock_figi_list_this_window"] = stock_figi_list_this_window
                 for val_epsilon in epsilon_list:
                     params["epsilon"] = val_epsilon
-                    params["num_test_observations"] = ...   # Val
+                    params["num_test_observations"] = get_num_training_and_test_observations_shv(num_observations, num_test_observations)[1]
                     validation_results = run_replication(j, problem, **params)
                     for time_type in total_validation_times.keys():
                         total_validation_times[time_type] += validation_results[f"{time_type}_time"]
-                    validation_ratio = ... # Use validation_results["out_of_sample_cost"], transaction cost (calculated from prev_portfolio_weighting, prev_stock_figi_list, stock_figi_list_this_window and the solution from the results), correct risk free rates (use the function that extracts these for validation) and the correct ratio calculator
+                    validation_transaction_cost = calculate_transaction_cost(prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, validation_results["solution"])
+                    validation_portfolio_returns = validation_results["out_of_sample_cost"]
+                    validation_portfolio_returns[0] -= validation_transaction_cost
+                    risk_free_rates_for_validation = choose_risk_free_rates_for_validation(risk_free_rates, 51, num_test_observations, len(validation_portfolio_returns), j)
+                    validation_ratio = ratio_calculator(all_out_of_sample_costs_so_far + validation_portfolio_returns, risk_free_rates_for_validation, period_for_test_ratio_in_weeks - 13 + len(validation_portfolio_returns))
                     if validation_ratio > highest_validation_ratio:
                         best_epsilon, highest_validation_ratio = val_epsilon, validation_ratio
                 params["epsilon"] = best_epsilon
-                params["num_test_observations"] = ...   # Apt for real run
+                params["num_test_observations"] = num_test_observations
                 results = run_replication(j, problem, **params)
                 for time_type, time in total_validation_times.items():
                     results[f"total_validation_{time_type}_time"] = time
-                actual_transaction_cost = ...   # Use prev_stock_figi_list, stock_figi_list_this_window, prev_portfolio_weighting and results["solution"]
+                actual_transaction_cost = calculate_transaction_cost(prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, results["solution"])
                 results["out_of_sample_cost"] -= actual_transaction_cost
-                actual_ratio = ...  # Use results["out_of_sample_cost"], correct risk free rates (use the function that extracts these for testing) and correct ratio calculator
+                all_out_of_sample_costs_so_far += results["out_of_sample_cost"]
+                risk_free_rates_for_testing = choose_risk_free_rates_for_testing(risk_free_rates, 51, num_test_observations, j)
+                actual_ratio = ratio_calculator(all_out_of_sample_costs_so_far, risk_free_rates_for_testing, period_for_test_ratio_in_weeks)
                 results[tv_ratio] = actual_ratio
                 list_of_replication_stats.append(results)
                 prev_stock_figi_list, prev_portfolio_weighting = stock_figi_list_this_window, results["solution"]
