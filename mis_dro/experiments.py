@@ -947,7 +947,7 @@ def tv_kl_portfolio_james(dataset_dir_james, risk_free_rates_filename, dim: Opti
                 "risk_free_rates_filename": risk_free_rates_filename
             }
             tv_uuid_list = []
-            for epsilon in (10**pow for pow in range(-5, 1)):   # NOTE: changed the epsilons
+            for epsilon in (1e-05, 0.001, 1):   # NOTE: changed the epsilons
                 for split_idx in range(NUM_SPLITS):
                     fold_params = base_params.copy()
                     fold_params["uuid"] = str(uuid4())
@@ -1008,7 +1008,7 @@ def tv_kl_portfolio_james_has_tcosts_in_cost_function(dataset_dir_james, risk_fr
                 "tv_ratio": tv_ratio,
                 "risk_free_rates_filename": risk_free_rates_filename,
                 "has_tcosts_in_cost_function": True,
-                "epsilon_list": [10**pow for pow in range(-5, 1)],
+                "epsilon_list": [1e-05, 0.001, 1],
                 "uuid": str(uuid4()),
             }
             experiment.append(params)
