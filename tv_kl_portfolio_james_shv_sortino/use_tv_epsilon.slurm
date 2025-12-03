@@ -13,4 +13,4 @@
 
 ## Loop over each batch ##
 start=$(($SLURM_ARRAY_TASK_ID * 1))
-srun misdro batch /dcs/pg24/u5674159/mis-dro-code/tv_kl_portfolio_james_shv_sortino $start 8 --do-temporal-validation --use-tv-epsilon
+srun misdro batch /dcs/pg24/u5674159/mis-dro-code/tv_kl_portfolio_james_shv_sortino $start 4 --do-temporal-validation --use-tv-epsilon
