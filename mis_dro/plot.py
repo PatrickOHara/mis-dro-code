@@ -228,7 +228,11 @@ def get_agg_df(results_df: pd.DataFrame, gb_cols: list[str], temporal_validation
             "mean_total_validation_solve_time": pd.NamedAgg(column="total_validation_solve_time", aggfunc=np.mean),
             "std_total_validation_solve_time": pd.NamedAgg(column="total_validation_solve_time", aggfunc=np.std),
             "mean_total_validation_sample_time": pd.NamedAgg(column="total_validation_sample_time", aggfunc=np.mean),
-            "std_total_validation_sample_time": pd.NamedAgg(column="total_validation_sample_time", aggfunc=np.std)
+            "std_total_validation_sample_time": pd.NamedAgg(column="total_validation_sample_time", aggfunc=np.std),
+            "mean_total_solve_time": pd.NamedAgg(column="total_solve_time", aggfunc=np.mean),
+            "std_total_solve_time": pd.NamedAgg(column="total_solve_time", aggfunc=np.std),
+            "mean_total_sample_time": pd.NamedAgg(column="total_sample_time", aggfunc=np.mean),
+            "std_total_sample_time": pd.NamedAgg(column="total_sample_time", aggfunc=np.std),
         })
     agg_df = gb.agg(**agg_dict)
     return agg_df
@@ -259,6 +263,8 @@ def preprocess_results_df(results_df: pd.DataFrame, dgp: str, dataset: str = "ne
     processed_df["sample_time"] = processed_df["likelihood_time"] + processed_df["posterior_time"]
     if temporal_validation:
         processed_df["total_validation_sample_time"] = processed_df["total_validation_likelihood_time"] + processed_df["total_validation_posterior_time"]
+        processed_df["total_sample_time"] = processed_df["sample_time"] + processed_df["total_validation_sample_time"]
+        processed_df["total_solve_time"] = processed_df["solve_time"] + processed_df["total_validation_solve_time"]
 
     # convert strings into list of floats where necessary
     processed_df["out_of_sample_cost"] = processed_df["out_of_sample_cost"].map(lambda x: convert_str_to_float_list(x, num_test_observations))
