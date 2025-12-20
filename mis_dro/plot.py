@@ -206,23 +206,31 @@ def is_maximise_pareto_front(out_of_sample_var, out_of_sample_mean):
         pareto.append(point_is_pareto)
     return pareto
 
-def get_agg_df(results_df: pd.DataFrame, gb_cols: list[str]):
+def get_agg_df(results_df: pd.DataFrame, gb_cols: list[str], temporal_validation: bool = False):
     """Groupby the given columns then apply summary statistics for each group"""
     assert len(results_df["num_replications"].unique()) == 1
     assert len(results_df["num_test_observations"].unique()) == 1
     num_replications = results_df["num_replications"].unique()[0]
     num_test_observations = results_df["num_test_observations"].unique()[0]
     gb = results_df.groupby(by=gb_cols)
-    agg_df = gb.agg(
-        out_of_sample_mean = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.mean(np.concatenate(x.values))),
-        out_of_sample_var = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.var(np.concatenate(x.values), ddof=1)),
-        sum_of_in_group_var = pd.NamedAgg(column="in_group_var", aggfunc=lambda x: float(num_test_observations - 1) / float(num_replications * num_test_observations - 1) * np.sum(x.values)),
-        var_of_in_group_mean = pd.NamedAgg(column="in_group_mean", aggfunc=lambda x: float(num_test_observations * (num_replications - 1)) / float(num_replications * num_test_observations - 1) * np.var(x, ddof=1)),
-        mean_solve_time = pd.NamedAgg(column="solve_time", aggfunc=np.mean),
-        std_solve_time = pd.NamedAgg(column="solve_time", aggfunc=np.std),
-        mean_sample_time = pd.NamedAgg(column="sample_time", aggfunc=np.mean),
-        std_sample_time = pd.NamedAgg(column="sample_time", aggfunc=np.std),
-    )
+    agg_dict = {
+        "out_of_sample_mean": pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.mean(np.concatenate(x.values))),
+        "out_of_sample_var": pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.var(np.concatenate(x.values), ddof=1)),
+        "sum_of_in_group_var": pd.NamedAgg(column="in_group_var", aggfunc=lambda x: float(num_test_observations - 1) / float(num_replications * num_test_observations - 1) * np.sum(x.values)),
+        "var_of_in_group_mean": pd.NamedAgg(column="in_group_mean", aggfunc=lambda x: float(num_test_observations * (num_replications - 1)) / float(num_replications * num_test_observations - 1) * np.var(x, ddof=1)),
+        "mean_solve_time": pd.NamedAgg(column="solve_time", aggfunc=np.mean),
+        "std_solve_time": pd.NamedAgg(column="solve_time", aggfunc=np.std),
+        "mean_sample_time": pd.NamedAgg(column="sample_time", aggfunc=np.mean),
+        "std_sample_time": pd.NamedAgg(column="sample_time", aggfunc=np.std),
+    }
+    if temporal_validation:
+        agg_dict.update({
+            "mean_total_validation_solve_time": pd.NamedAgg(column="total_validation_solve_time", aggfunc=np.mean),
+            "std_total_validation_solve_time": pd.NamedAgg(column="total_validation_solve_time", aggfunc=np.std),
+            "mean_total_validation_sample_time": pd.NamedAgg(column="total_validation_sample_time", aggfunc=np.mean),
+            "std_total_validation_sample_time": pd.NamedAgg(column="total_validation_sample_time", aggfunc=np.std)
+        })
+    agg_df = gb.agg(**agg_dict)
     return agg_df
 
 def convert_str_to_float_list(str_list: str, list_len: int) -> list[float]:
@@ -233,7 +241,7 @@ def convert_str_to_float_list(str_list: str, list_len: int) -> list[float]:
         return [float(re.sub(r'np\.float64\((.*?)\)', r'\1', x.strip())) for x in str_list.strip('[]').split(',')]
         # return [float(x) for x in str_list.strip('[]').split(',')]
 
-def preprocess_results_df(results_df: pd.DataFrame, dgp: str, dataset: str = "newsvendor"):
+def preprocess_results_df(results_df: pd.DataFrame, dgp: str, dataset: str = "newsvendor", temporal_validation: bool = False):
     """Filter results, process columns, and create new columns"""
     assert len(results_df["num_test_observations"].unique()) == 1
     assert len(results_df.loc[(results_df["dgp"] == dgp)]["dim"].unique()) == 1 
@@ -249,6 +257,8 @@ def preprocess_results_df(results_df: pd.DataFrame, dgp: str, dataset: str = "ne
     # get useful stats such as the number of samples and total time spent sampling
     processed_df["num_total_samples"] = processed_df["num_posterior_samples"] * processed_df["num_likelihood_samples"]
     processed_df["sample_time"] = processed_df["likelihood_time"] + processed_df["posterior_time"]
+    if temporal_validation:
+        processed_df["total_validation_sample_time"] = processed_df["total_validation_likelihood_time"] + processed_df["total_validation_posterior_time"]
 
     # convert strings into list of floats where necessary
     processed_df["out_of_sample_cost"] = processed_df["out_of_sample_cost"].map(lambda x: convert_str_to_float_list(x, num_test_observations))

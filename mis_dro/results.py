@@ -1,6 +1,7 @@
 from pathlib import Path
 import pandas as pd
 import numpy as np
+import re
 
 def get_result_df_list(experiment_dir: Path, uuid_list: list[str]):
     result_list = []
@@ -28,4 +29,4 @@ def convert_str_to_float_list(str_list: str, list_len: int) -> list[float]:
     if str_list == "[]":
         return [np.nan for _ in range(list_len)]
     else:
-        return [float(x) for x in str_list.strip('[]').split(',')]
+        return [float(re.sub(r'np\.float64\((.*?)\)', r'\1', x.strip())) for x in str_list.strip('[]').split(',')]

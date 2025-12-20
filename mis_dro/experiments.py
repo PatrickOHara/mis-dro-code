@@ -73,8 +73,8 @@ class ExperimentName(StrEnum):
     def is_temporal_validation(self) -> bool:
         return self in (ExperimentName.tv_kl_portfolio_james, ExperimentName.tv_kl_portfolio_james_has_tcosts_in_cost_function)
     
-    def has_has_tcosts_in_cost_function(self) -> bool:
-        return self in (ExperimentName.tv_kl_portfolio_james_has_tcosts_in_cost_function)
+    def has_tcosts_in_cost_function(self) -> bool:
+        return self in (ExperimentName.tv_kl_portfolio_james_has_tcosts_in_cost_function,)
 
 
 

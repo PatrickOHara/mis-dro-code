@@ -13,9 +13,9 @@ def portfolio_objective_cvxpy(x, xi):
 def get_kl_portfolio_problem(
         num_stocks: int,
         num_cov_samples: int,
-        include_tcosts_in_cost_function: Optional[bool] = False,
-        prev_stock_figi_list: Optional[list[str]] = None,
-        stock_figi_list_this_window: Optional[list[str]] = None
+        # include_tcosts_in_cost_function: Optional[bool] = False,
+        # prev_stock_figi_list: Optional[list[str]] = None,
+        # stock_figi_list_this_window: Optional[list[str]] = None
     ) -> cp.Problem:
     """Evaluate portfolio cost function with cvxpy assuming a Gaussian likelihood
 
@@ -26,18 +26,18 @@ def get_kl_portfolio_problem(
     Returns:
         Cvxpy problem object
     """
-    num_stocks_in_union = len(set(prev_stock_figi_list) | set(stock_figi_list_this_window))
+    # num_stocks_in_union = len(set(prev_stock_figi_list) | set(stock_figi_list_this_window))
 
     # variables
     x = cp.Variable(num_stocks, name="x")
-    x_for_stocks_in_union = cp.Variable(..., name="x_for_stocks_in_union")
+    # x_for_stocks_in_union = cp.Variable(..., name="x_for_stocks_in_union")
 
     # parameters
     epsilon_minus_constant = cp.Parameter(1, name="epsilon_minus_constant", nonneg=True)
     mu_post = cp.Parameter(num_stocks, name="mu_post")
     sqrt_cov_post_samples = [cp.Parameter((num_stocks, num_stocks), name=f"sqrt_cov_post_{i}") for i in range(num_cov_samples)]
-    tau = cp.Parameter(1, name="tcost_constant", nonneg=True)
-    prev_portfolio_weighting = cp.Parameter(num_stocks_in_union, name="prev_portfolio_weighting")
+    # tau = cp.Parameter(1, name="tcost_constant", nonneg=True)
+    # prev_portfolio_weighting = cp.Parameter(num_stocks_in_union, name="prev_portfolio_weighting")
 
     # objective function: maximise return whilst minimising standard deviation
     portfolio_objective = cp.Minimize(- mu_post @ x + cp.sqrt(2 * epsilon_minus_constant) * (1.0 / float(num_cov_samples)) * cp.sum(
@@ -48,7 +48,6 @@ def get_kl_portfolio_problem(
     constraints = [x >= 0, cp.sum(x) == 1]
 
     return cp.Problem(portfolio_objective, constraints)
-
 
 def bdro_portfolio_posterior_samples(num_posterior_samples: int, mu_post: np.array, iota_post: float, Psi_post: np.array, generator: Optional[np.random.Generator] = None) -> np.array:
     """With KL BDRO, we only need to sample the covariance using an inverse Wishart.

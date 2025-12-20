@@ -64,7 +64,7 @@ def setup_kl_dro_bas(
         experiment_dir.mkdir(parents=False, exist_ok=False)
 
     # get the experiment from the name
-    experiment = get_experiment(experiment_name, dataset_dir_james, risk_free_rates_filename, dim=dim, tv_ratio=tv_ratio)
+    experiment = get_experiment(experiment_name=experiment_name, dataset_dir_james=dataset_dir_james, risk_free_rates_filename=risk_free_rates_filename, dataset_dir=dataset_dir, dim=dim, tv_ratio=tv_ratio)
 
     # write experiment file to JSON
     filepath = experiment_dir / "experiment.json"
@@ -85,7 +85,7 @@ def setup_kl_dro_bas(
             experiment_dir=experiment_dir, num_batches_minus_one=num_batches-1, batch_size=batch_size
         )
         if experiment_name.is_temporal_validation():    # TODO: fix the boolean mess right here and surrounding
-            dgp_string += "--do-temporal-validation --has-tcosts-in-cost-function"
+            dgp_string += " --do-temporal-validation --has-tcosts-in-cost-function"
         (experiment_dir / f"{experiment_name}.slurm").write_text(dgp_string)
 
     else:
@@ -108,6 +108,7 @@ def setup_kl_dro_bas(
 
         use_tv_epsilon_experiment = [params for params in experiment if params["do_temporal_validation"] and params["use_tv_epsilon"]]
 
+        # TODO: note that using the same batch size as for the validation runs is making it so that the normal runs aren't spread across processes
         use_tv_epsilon_num_batches = math.ceil(float(len(use_tv_epsilon_experiment)) / float(batch_size))
         with open(
             Path(__file__).parent / "kl_dro_bas_template.slurm", "r", encoding="utf-8"
@@ -406,6 +407,7 @@ def run(
 
         # TODO: this convert_str_to_float_list is from results.py and looks as the one in plot.py originally did; I had to change the latter, so maybe I will need to change the former?
         result_df["out_of_sample_cost"] = result_df["out_of_sample_cost"].map(lambda x: convert_str_to_float_list(x, num_test_observations))    # NOTE by James: just formatting
+        result_df["solution"] = result_df["solution"].map(lambda x: convert_str_to_float_list(x, num_test_observations))
 
         # NOTE by James: for each row in result_df (each of which has a distinct UUID/replication combination), this goes to the object in experiment.json with the mathcing UUID and adds all of the "other" parameters in this object to the row
         experiment_filepath = experiment_dir / "experiment.json"
@@ -722,8 +724,8 @@ def run_replication(
         #     kf = KFold(n_splits=n_splits, shuffle=True, random_state=cv_random_state)
         #     train_index, test_index = list(kf.split(data))[split_idx]
 
-        data = data[train_index]
-        data_eval = data[test_index]
+        # NOTE: make sure not to allow data to be modified and then select data_eval from data
+        data, data_eval = data[train_index], data[test_index]
 
     dgp_time = (datetime.now() - dgp_start).total_seconds()
 
@@ -792,10 +794,10 @@ def run_replication(
             problem = get_kl_portfolio_problem(
                 dim,
                 num_posterior_samples,
-                include_tcosts_in_cost_function,
-                prev_portfolio_weighting,
-                prev_stock_figi_list,
-                stock_figi_list_this_window
+                # include_tcosts_in_cost_function,
+                # prev_portfolio_weighting,
+                # prev_stock_figi_list,
+                # stock_figi_list_this_window
             )  # TODO: enable transaction costs
 
     if algorithm == "kl_dro_bas" and (
