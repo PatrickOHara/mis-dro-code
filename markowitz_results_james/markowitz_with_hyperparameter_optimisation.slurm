@@ -2,6 +2,7 @@
 #
 #SBATCH --job-name=markowitz
 #SBATCH --partition=parrot
+#SBATCH --account=legacy
 #SBATCH --array=0-1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=10000
