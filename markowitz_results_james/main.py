@@ -6,7 +6,9 @@ from tqdm import tqdm
 from mis_dro.portfolio import calculate_transaction_cost
 from mis_dro.metrics import calculate_sharpe_ratio, calculate_sortino_ratio
 
+# === DO NOT CHANGE THIS ===
 using_ipynb = False
+# === DO NOT CHANGE THIS ===
 
 # TODO: cite https://github.com/BorisForce/PyPortfolioModels/blob/main/Min_Mean_Variance/Min_Mean_Variance_model.py for code if necessary
 def mean_variance_opt(Sigma: np.ndarray, mu: np.ndarray, risk_aversion: float, include_transaction_costs_in_cost_function, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list):
@@ -138,12 +140,23 @@ def get_stock_figi_list(training_df):
 
     return [col.split("_")[0] for col in training_df.columns]
 
-def choose_risk_free_rates_for_validation(risk_free_rates: list[float], number_of_extra_data_at_start_of_risk_free_rates_reserved_for_validation: int, num_test_weeks: int, num_validation_dates_per_window: int, window_index: int):
+def choose_risk_free_rates_for_single_holdout_validation(risk_free_rates: list[float], number_of_extra_data_at_start_of_risk_free_rates_reserved_for_validation: int, num_test_weeks: int, num_validation_dates_per_window: int, window_index: int):
 
     t = number_of_extra_data_at_start_of_risk_free_rates_reserved_for_validation
     v = num_validation_dates_per_window
 
     return risk_free_rates[t: t + num_test_weeks * window_index] + risk_free_rates[t + num_test_weeks * window_index - v: t + num_test_weeks * window_index]
+
+# TODO: refactor this with choose_risk_free_rates_for_single_holdout_validation
+def choose_risk_free_rates_for_rolling_validation(risk_free_rates: list[float], number_of_extra_data_at_start_of_risk_free_rates_reserved_for_validation: int, num_test_weeks: int, num_validation_dates_per_window: int, window_index: int, number_of_folds: int, fold_index: int):
+
+    t = number_of_extra_data_at_start_of_risk_free_rates_reserved_for_validation
+    v = num_validation_dates_per_window
+
+    # NOTE: offset_of_validation_data_from_rebalance_for_fold
+    o = number_of_folds - fold_index - 1
+
+    return risk_free_rates[t: t + num_test_weeks * window_index] + risk_free_rates[t + num_test_weeks * window_index - v - o: t + num_test_weeks * window_index - o]
 
 def choose_risk_free_rates_for_testing(risk_free_rates: list[float], number_of_extra_data_at_start_of_risk_free_rates_reserved_for_validation: int, num_test_weeks: int, window_index: int):
 
@@ -151,7 +164,7 @@ def choose_risk_free_rates_for_testing(risk_free_rates: list[float], number_of_e
 
     return risk_free_rates[t: t + num_test_weeks * (window_index + 1)]
 
-def do_markowitz_run_with_single_holdout_validation_using_ratio_as_metric(markowitz_djia_windows_filename, dro_djia_windows_filename, risk_free_rates_file, lambdas, ratio_type, save, using_ipynb, save_filename_excluding_ratio_type, include_transaction_costs_in_cost_function):
+def do_markowitz_run_with_rolling_validation_using_ratio_as_metric(markowitz_djia_windows_filename, dro_djia_windows_filename, risk_free_rates_file, lambdas, ratio_type, save, using_ipynb, save_filename_excluding_ratio_type, include_transaction_costs_in_cost_function, num_folds):
 
     markowitz_windows = unpickle_data(markowitz_djia_windows_filename)
 
@@ -174,30 +187,79 @@ def do_markowitz_run_with_single_holdout_validation_using_ratio_as_metric(markow
 
     for i, window in iterable:
 
-        markowitz_training_df, test_df = window
+        markowitz_training_df, test_df = window # 40, 13
 
         stock_figi_list = get_stock_figi_list(markowitz_training_df)
 
-        single_holdout_training_df_size, single_holdout_validation_df_size = get_single_holdout_dataset_sizes_same_ratio_as_train_test(markowitz_training_df, test_df)
+        risk_free_rates_for_testing = choose_risk_free_rates_for_testing(risk_free_rates, 51, 13, i)
 
-        single_holdout_training_df = markowitz_training_df[: single_holdout_training_df_size]
-        
-        single_holdout_validation_df = dro_windows[i][0][- single_holdout_validation_df_size:]  # NOTE: doing this because of the need for weekly returns, not 13-week returns from markowitz_training_df, when it comes to validation data
+        if num_folds == 1:  # Single holdout validation
+
+            single_holdout_training_df_size, single_holdout_validation_df_size = get_single_holdout_dataset_sizes_same_ratio_as_train_test(markowitz_training_df, test_df)  # 30, 10
+
+            single_holdout_training_df = markowitz_training_df[: single_holdout_training_df_size]
+            
+            single_holdout_validation_df = dro_windows[i][0][- single_holdout_validation_df_size:]  # NOTE: doing this because of the need for weekly returns, not 13-week returns from markowitz_training_df, when it comes to validation data
+
+            # TODO: note that 51 is specific to the risk free returns file in use (because it has 51 weekly risk-free rates up to and including the first rebalance date)
+            risk_free_rates_for_validation = choose_risk_free_rates_for_single_holdout_validation(risk_free_rates, 51, 13, len(single_holdout_validation_df), i)
+
+        else:
+
+            _, rolling_validation_validation_df_size = get_single_holdout_dataset_sizes_same_ratio_as_train_test(markowitz_training_df, test_df)
+
+            rolling_validation_training_df_size = len(markowitz_training_df) - rolling_validation_validation_df_size - num_folds + 1
+
+            rolling_validation_folds = []
+
+            for j in range(num_folds):
+
+                validation_start_index_for_fold = j + rolling_validation_training_df_size
+
+                rolling_validation_training_df = markowitz_training_df[j: validation_start_index_for_fold]
+
+                # TODO: note that 51 is specific to the risk free returns file in use (because it has 51 weekly risk-free rates up to and including the first rebalance date)
+                rolling_validation_validation_df = dro_windows[i][0][validation_start_index_for_fold: validation_start_index_for_fold + rolling_validation_validation_df_size]
+
+                # TODO: make sure you've implemented this correctly
+                risk_free_rates_for_validation = choose_risk_free_rates_for_rolling_validation(risk_free_rates, 51, 13, len(rolling_validation_validation_df), i, num_folds, j)
+
+                rolling_validation_folds.append({
+                    "training_df": rolling_validation_training_df,
+                    "validation_df": rolling_validation_validation_df,
+                    "validation_risk_free_rates": risk_free_rates_for_validation
+                })
 
         period_for_test_ratio_in_weeks = 156
-
-        # TODO: note that 51 is specific to the risk free returns file in use (because it has 51 weekly risk-free rates up to and including the first rebalance date)
-        risk_free_rates_for_validation = choose_risk_free_rates_for_validation(risk_free_rates, 51, 13, len(single_holdout_validation_df), i)
-        risk_free_rates_for_testing = choose_risk_free_rates_for_testing(risk_free_rates, 51, 13, i)
 
         best_lambda, highest_validation_ratio = None, -float('inf')
 
         # TODO: maybe rethink where you put this, although at the time of coding, the functions before this in the window should be pretty fast compared to Markowitz optimisation problem solving etc.
         time_just_before_hyperparameter_optimisation = datetime.now()
 
+        total_solve_time_hyperparameter_optimisation_and_final_run = 0
+
         for risk_aversion_hyperparameter in lambdas:
 
-            validation_ratio = do_markowitz(single_holdout_training_df, single_holdout_validation_df, risk_aversion_hyperparameter, ratio_type, all_out_of_sample_costs_so_far, risk_free_rates_for_validation, period_for_test_ratio_in_weeks - 13 + len(single_holdout_validation_df), True, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, include_transaction_costs_in_cost_function)[ratio_type]
+            if num_folds == 1:
+
+                markowitz_results_object = do_markowitz(single_holdout_training_df, single_holdout_validation_df, risk_aversion_hyperparameter, ratio_type, all_out_of_sample_costs_so_far, risk_free_rates_for_validation, period_for_test_ratio_in_weeks - 13 + len(single_holdout_validation_df), True, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, include_transaction_costs_in_cost_function)
+
+                validation_ratio = markowitz_results_object[ratio_type]
+                total_solve_time_hyperparameter_optimisation_and_final_run += markowitz_results_object["solve_time"]
+
+            else:
+
+                sum_of_validation_ratio_for_each_fold = 0
+
+                for fold in rolling_validation_folds:
+
+                    markowitz_results_object = do_markowitz(fold["training_df"], fold["validation_df"], risk_aversion_hyperparameter, ratio_type, all_out_of_sample_costs_so_far, risk_free_rates_for_validation, period_for_test_ratio_in_weeks - 13 + len(fold["validation_df"]), True, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, include_transaction_costs_in_cost_function)
+
+                    sum_of_validation_ratio_for_each_fold += markowitz_results_object[ratio_type]
+                    total_solve_time_hyperparameter_optimisation_and_final_run += markowitz_results_object["solve_time"]
+
+                validation_ratio = sum_of_validation_ratio_for_each_fold / len(rolling_validation_folds)
 
             if validation_ratio > highest_validation_ratio:
                 best_lambda = risk_aversion_hyperparameter
@@ -206,8 +268,11 @@ def do_markowitz_run_with_single_holdout_validation_using_ratio_as_metric(markow
         results_for_best_lambda = do_markowitz(markowitz_training_df, test_df, best_lambda, ratio_type, all_out_of_sample_costs_so_far, risk_free_rates_for_testing, period_for_test_ratio_in_weeks, True, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, include_transaction_costs_in_cost_function)
 
         time_for_hyperparameter_optimisation_and_running_with_best_one = (datetime.now() - time_just_before_hyperparameter_optimisation).total_seconds()
-
         results_for_best_lambda["time_for_hyperparameter_optimisation_and_running_with_best_one"] = time_for_hyperparameter_optimisation_and_running_with_best_one
+
+        # TODO: redo Markowitz with SHV (including transaction costs in the portfolio returns, **not** the cost function) and in james-portfolio.ipynb, get "total_solve_time_hyperparameter_optimisation_and_final_run" rather than "solve_time" for Markowitz SHV
+        total_solve_time_hyperparameter_optimisation_and_final_run += results_for_best_lambda["solve_time"]
+        results_for_best_lambda["total_solve_time_hyperparameter_optimisation_and_final_run"] = total_solve_time_hyperparameter_optimisation_and_final_run
 
         results_for_each_window_with_its_best_lambda.append(results_for_best_lambda)
 
@@ -237,8 +302,10 @@ lambdas = (
 
 # NOTE: these won't make a difference when it comes to do_markowitz_run_without_validation, as you can see
 save = True
-include_transaction_costs_in_cost_function = True
+include_transaction_costs_in_cost_function = False
+num_folds_for_rolling_validation = 10
 
 # do_markowitz_run_without_validation(markowitz_djia_windows_filename, lambdas, False, using_ipynb, "results_for_multiple_lambdas")
 for ratio_type in ("sharpe", "sortino"):
-    do_markowitz_run_with_single_holdout_validation_using_ratio_as_metric(markowitz_djia_windows_filename, dro_djia_windows_filename, risk_free_returns_filename, lambdas, ratio_type, save, using_ipynb, "results_for_best_lambdas_from_single_holdout_validation", include_transaction_costs_in_cost_function)
+    # do_markowitz_run_with_rolling_validation_using_ratio_as_metric(markowitz_djia_windows_filename, dro_djia_windows_filename, risk_free_returns_filename, lambdas, ratio_type, save, using_ipynb, "results_for_best_lambdas_from_single_holdout_validation", include_transaction_costs_in_cost_function, num_folds=1)
+    do_markowitz_run_with_rolling_validation_using_ratio_as_metric(markowitz_djia_windows_filename, dro_djia_windows_filename, risk_free_returns_filename, lambdas, ratio_type, save, using_ipynb, f"results_for_best_lambdas_from_rolling_validation_{num_folds_for_rolling_validation}_folds", include_transaction_costs_in_cost_function, num_folds_for_rolling_validation)
