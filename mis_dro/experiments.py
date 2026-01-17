@@ -78,7 +78,7 @@ class ExperimentName(StrEnum):
 
 
 
-def get_experiment(experiment_name: ExperimentName, dataset_dir_james, risk_free_rates_filename, dataset_dir: Optional[Path] = None, dim: Optional[int] = None, tv_ratio: Optional[str] = None) -> List[Dict]:
+def get_experiment(experiment_name: ExperimentName, dataset_dir_james, risk_free_rates_filename, dataset_dir: Optional[Path] = None, dim: Optional[int] = None, tv_ratio: Optional[str] = None, num_folds_tv: Optional[int] = 1) -> List[Dict]:
     """Returns the experiment associated with the name"""
     function_lookup = {
         ExperimentName.kl_newsvendor_1d: kl_newsvendor_1d,
@@ -106,7 +106,7 @@ def get_experiment(experiment_name: ExperimentName, dataset_dir_james, risk_free
             return function_lookup[experiment_name](dataset_dir)
         elif experiment_name.is_james():
             if experiment_name.is_temporal_validation():
-                return function_lookup[experiment_name](dataset_dir_james, risk_free_rates_filename, dim, tv_ratio)
+                return function_lookup[experiment_name](dataset_dir_james, risk_free_rates_filename, dim, tv_ratio, num_folds_tv)
             return function_lookup[experiment_name](dataset_dir_james, dim)
         else:
             return function_lookup[experiment_name]()
@@ -898,7 +898,7 @@ def kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
     return experiment
 
 # NOTE: parameters changed
-def tv_kl_portfolio_james(dataset_dir_james, risk_free_rates_filename, dim: Optional[int], tv_ratio: Optional[str]) -> List[Dict]:
+def tv_kl_portfolio_james(dataset_dir_james, risk_free_rates_filename, dim: Optional[int], tv_ratio: Optional[str], NUM_FOLDS: int = 1) -> List[Dict]:
     """Temporal-validation KL univariate portfolio for selecting epsilon"""
     if dim:
         assert dim <= get_min_dim_james(dataset_dir_james)
@@ -917,7 +917,6 @@ def tv_kl_portfolio_james(dataset_dir_james, risk_free_rates_filename, dim: Opti
         elif algorithm == "kl_bdro":
             total_model_samples_list = [900]
 
-        NUM_SPLITS = 1  # NOTE: changed from 10
         for total_model_samples in total_model_samples_list:
             base_params = {
                 "algorithm": algorithm,
@@ -939,20 +938,21 @@ def tv_kl_portfolio_james(dataset_dir_james, risk_free_rates_filename, dim: Opti
                 "num_observations": 52, # NOTE: now hard-coded
                 "num_replications": get_num_time_windows_james(dataset_dir_james),  # NOTE: changed
                 "num_test_observations": 13,    # TODO: dynamically measure the length of a test window here and in kl_portfolio_james
+
                 "posterior": posterior,
                 "do_temporal_validation": True,
-                "n_splits": NUM_SPLITS,
+                "n_splits": NUM_FOLDS,
                 # TODO: note that the below probably won't be needed in runs with use_tv_epsilon as False
                 "tv_ratio": tv_ratio,
                 "risk_free_rates_filename": risk_free_rates_filename
             }
             tv_uuid_list = []
             for epsilon in (1e-05, 0.001, 1):   # NOTE: changed the epsilons
-                for split_idx in range(NUM_SPLITS):
+                for split_idx in range(NUM_FOLDS):
                     fold_params = base_params.copy()
                     fold_params["uuid"] = str(uuid4())
                     fold_params["epsilon"] = epsilon
-                    fold_params["n_splits"] = NUM_SPLITS
+                    fold_params["n_splits"] = NUM_FOLDS
                     fold_params["split_idx"] = split_idx
                     fold_params["use_tv_epsilon"] = False
                     fold_params["tv_uuid_list"] = []
@@ -968,7 +968,8 @@ def tv_kl_portfolio_james(dataset_dir_james, risk_free_rates_filename, dim: Opti
     return experiment
 
 # TODO: refactor the below with the above etc.
-def tv_kl_portfolio_james_has_tcosts_in_cost_function(dataset_dir_james, risk_free_rates_filename, dim: Optional[int], tv_ratio: Optional[str]) -> List[Dict]:
+def tv_kl_portfolio_james_has_tcosts_in_cost_function(dataset_dir_james, risk_free_rates_filename, dim: Optional[int], tv_ratio: Optional[str], NUM_FOLDS: int = 1) -> List[Dict]:
+    assert NUM_FOLDS == 1
     if dim:
         assert dim <= get_min_dim_james(dataset_dir_james)
     experiment = []

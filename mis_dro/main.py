@@ -15,6 +15,7 @@ import typer
 from sklearn.model_selection import KFold
 import pickle
 from typing import Any, Callable
+from collections import defaultdict
 
 from bayesian_dro.Bayesian_DRO_continuous import main_Bayesian_DRO
 from .bayes_conjugates import (
@@ -57,14 +58,14 @@ app = typer.Typer(name="misdro")
 
 @app.command(name="setup-kl")
 def setup_kl_dro_bas(
-    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, dataset_dir_james, risk_free_rates_filename, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), dim: Optional[int] = None, tv_ratio: Optional[str] = None, overwrite: bool = False
+    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, dataset_dir_james, risk_free_rates_filename, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), dim: Optional[int] = None, tv_ratio: Optional[str] = None, num_folds_tv: int = 1, overwrite: bool = False
 ):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
         experiment_dir.mkdir(parents=False, exist_ok=False)
 
     # get the experiment from the name
-    experiment = get_experiment(experiment_name=experiment_name, dataset_dir_james=dataset_dir_james, risk_free_rates_filename=risk_free_rates_filename, dataset_dir=dataset_dir, dim=dim, tv_ratio=tv_ratio)
+    experiment = get_experiment(experiment_name=experiment_name, dataset_dir_james=dataset_dir_james, risk_free_rates_filename=risk_free_rates_filename, dataset_dir=dataset_dir, dim=dim, tv_ratio=tv_ratio, num_folds_tv=num_folds_tv)
 
     # write experiment file to JSON
     filepath = experiment_dir / "experiment.json"
@@ -282,6 +283,21 @@ def get_useful_tv_results_shv_all_windows(result_df: pd.DataFrame) -> list[dict]
         all_tv_results.append(tv_results_for_replication)
     return all_tv_results
 
+# TODO: should be very easy to refactor this with get_useful_tv_results_shv_all_windows, just remember to accordingly change how results of that function are currently used
+def get_useful_tv_results_rolling_validation_all_windows(result_df: pd.DataFrame) -> list[dict]:
+    all_tv_results = []
+    for _, g in result_df.groupby(level="replication", sort=True):
+        # TODO: would be better to store folds in a list, where list index == fold index
+        tv_results_for_replication = defaultdict(set)
+        for _, row in g.iterrows():
+            epsilon = row["epsilon"]
+            fold_results = {col: row[col] for col in (
+                "likelihood_time", "posterior_time", "solve_time", "solution", "out_of_sample_cost"
+            )}
+            tv_results_for_replication[epsilon].add(fold_results)
+        all_tv_results.append(tv_results_for_replication)
+    return all_tv_results
+
 def get_stock_figi_list(training_df: pd.DataFrame) -> list[str]:
 
     # TODO: this whole thing with the use of get_window_of_train_and_test_dataframes is a bit of a fudge--the stock IDs should be saved along with the other results. Moreover, I don't know why I appended _{window index} to each of the FIGIs in the first place, so undo that and get rid of the splitting done below.
@@ -387,10 +403,20 @@ def run(
 
         pass
 
-    elif do_temporal_validation and (not use_tv_epsilon and n_splits == 1):
+    elif do_temporal_validation and not use_tv_epsilon:
 
-        # NOTE: making sure that, when splitting the training data into training and validation for TV, the ratio is the same as for training and testing outside of TV
-        num_training_observations, num_test_observations = get_num_training_and_test_observations_shv(num_observations, num_test_observations)
+
+        if n_splits == 1:
+
+            # NOTE: making sure that, when splitting the training data into training and validation for TV, the ratio is the same as for training and testing outside of TV
+            num_training_observations, num_test_observations = get_num_training_and_test_observations_shv(num_observations, num_test_observations)
+
+        else:
+
+            _, num_test_observations = get_num_training_and_test_observations_shv(num_observations, num_test_observations)
+
+            num_training_observations = num_observations - num_test_observations - n_splits + 1
+
         print(f"Doing {n_splits}-fold temporal-validation on split {split_idx}: training/test set size is {num_training_observations}/{num_test_observations}.")
     
     # elif do_cross_validation and n_splits is not None and split_idx is not None and epsilon is not None:
@@ -399,15 +425,16 @@ def run(
     #     num_test_observations = num_observations - num_training_observations
     #     print(f"Doing {n_splits}-fold cross-validation on split {split_idx}: training/test set size is {num_training_observations}/{num_test_observations}.")
 
+    # TODO: rolling: also got to adapt the non-validation flow, maybe, the one that uses the best epsilon, or rather selects it first
     elif use_tv_epsilon and split_idx is None and do_temporal_validation:
         num_training_observations = num_observations
         # load the results df for each UUID in tv_uuid_list
-        result_list = get_result_df_list(experiment_dir, tv_uuid_list)  # NOTE by James: in this Python list, each element is for one UUID (I.E. one epsilon across all replications for the algorithm in question), and the element is the Pandas DataFrame containing, essentially, what is in the UUID's .csv file
+        result_list = get_result_df_list(experiment_dir, tv_uuid_list)  # NOTE by James: in this Python list, each element is for one UUID (a particular UUID is for one epsilon/fold index combination across all replications for the algorithm in question), and the element is the Pandas DataFrame containing, essentially, what is in the UUID's .csv file
         result_df = pd.concat(result_list)  # NOTE by James: combining all the above Pandas DataFrames into a single one, but UUID and replication columns allow easy distinction
 
-        # TODO: this convert_str_to_float_list is from results.py and looks as the one in plot.py originally did; I had to change the latter, so maybe I will need to change the former?
-        result_df["out_of_sample_cost"] = result_df["out_of_sample_cost"].map(lambda x: convert_str_to_float_list(x, num_test_observations))    # NOTE by James: just formatting
-        result_df["solution"] = result_df["solution"].map(lambda x: convert_str_to_float_list(x, num_test_observations))
+        # TODO: None is the wrong argument to pass below; this shouldn't make a difference in my experiments (look at convert_str_to_float_list source code), but in the first case, it should be the number of test observations in validation, not necessarily num_test_observations as it is now; in the second case, it should be the number of stocks, but this differs from window to window so be careful
+        result_df["out_of_sample_cost"] = result_df["out_of_sample_cost"].map(lambda x: convert_str_to_float_list(x, None))    # NOTE by James: just formatting
+        result_df["solution"] = result_df["solution"].map(lambda x: convert_str_to_float_list(x, None))
 
         # NOTE by James: for each row in result_df (each of which has a distinct UUID/replication combination), this goes to the object in experiment.json with the mathcing UUID and adds all of the "other" parameters in this object to the row
         experiment_filepath = experiment_dir / "experiment.json"
@@ -434,22 +461,24 @@ def run(
 
         else:
 
-            # TODO get the best epsilon for each replication from the temporal-validation - store in array
+            if tv_ratio:
+                useful_tv_results_rolling_validation_all_windows = get_useful_tv_results_rolling_validation_all_windows(result_df)
+            else:
+                raise NotImplementedError("Rolling temporal validation without Sharpe/Sortino ratio not currently implemented.")
 
-            # NOTE: there was unused logic here featuring epsilons_for_replications
-
-            # NOTE by James: the below results in a row for each epsilon, where its corresponding out-of-sample mean and variance (across all of its replications) is shown
-            gb = result_df.groupby(["epsilon"])
-            agg_df = gb.agg(
-                out_of_sample_mean = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.mean(np.concatenate(x.values))),
-                out_of_sample_var = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.var(np.concatenate(x.values), ddof=1)),        
-            )
-
-            if dataset == "portfolio" or dataset == "james":
-                epsilon = agg_df.loc[agg_df["out_of_sample_mean"] == agg_df["out_of_sample_mean"].max()].index[0]
-            print("Epsilon:", epsilon)
-
-            # TODO: there was unused logic here about the Pareto front, see if you should include it
+            # NOTE: the below only selects one epsilon for all replications, which is clearly not what we want
+            # # TODO get the best epsilon for each replication from the temporal-validation - store in array
+            # # NOTE: there was unused logic here featuring epsilons_for_replications
+            # # NOTE by James: the below results in a row for each epsilon, where its corresponding out-of-sample mean and variance (across all of its replications) is shown
+            # gb = result_df.groupby(["epsilon"])
+            # agg_df = gb.agg(
+            #     out_of_sample_mean = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.mean(np.concatenate(x.values))),
+            #     out_of_sample_var = pd.NamedAgg(column="out_of_sample_cost", aggfunc=lambda x: np.var(np.concatenate(x.values), ddof=1)),        
+            # )
+            # if dataset == "portfolio" or dataset == "james":
+            #     epsilon = agg_df.loc[agg_df["out_of_sample_mean"] == agg_df["out_of_sample_mean"].max()].index[0]
+            # print("Epsilon:", epsilon)
+            # # TODO: there was unused logic here about the Pareto front, see if you should include it
 
     elif do_temporal_validation:
         raise ValueError("Something went wrong in the previous logic.")
@@ -552,13 +581,17 @@ def run(
         ratio_calculator = {"sharpe": calculate_sharpe_ratio, "sortino": calculate_sortino_ratio}[tv_ratio]
         period_for_test_ratio_in_weeks = 156  # TODO: maybe allow this to be chosen dynamically
         if use_tv_epsilon:
-            num_validation_observations_per_window = len(list(useful_tv_results_shv_all_windows[0].values())[0]["out_of_sample_cost"])
+            if n_splits == 1:
+                num_validation_observations_per_window = len(list(useful_tv_results_shv_all_windows[0].values())[0]["out_of_sample_cost"])
+            else:
+                num_validation_observations_per_window = len(list(list(useful_tv_results_rolling_validation_all_windows[0].values())[0])[0]["out_of_sample_cost"])
 
     if njobs == 1:
         all_solve_start = datetime.now()
         list_of_replication_stats = []
         print(all_solve_start, "- Running all replications in series.")
         for j in range(num_replications):
+            # TODO: adapt the below and any other transaction costs in cost function stuff to (if justified by results) rolling validation instead of single holdout validation
             if has_tcosts_in_cost_function: # TODO: write logic for when temporal validation is not being done, too, in case you want to see how potential curves shift when you include transaction costs in the cost function
                 best_epsilon, highest_validation_ratio = None, -float("inf")
                 total_validation_times = {"posterior": 0, "likelihood": 0, "solve": 0}  # TODO: Maybe save validation times for each epsilon rather than an overall one?
@@ -594,6 +627,7 @@ def run(
                 list_of_replication_stats.append(results)
                 prev_stock_figi_list, prev_portfolio_weighting = stock_figi_list_this_window, results["solution"]
             else:
+                # TODO: rolling: may have to alter the below
                 if use_tv_epsilon and n_splits == 1:
                     if tv_ratio:
                         stock_figi_list_this_window = stock_figi_lists[j]
@@ -604,6 +638,7 @@ def run(
                         best_epsilon_this_window = best_epsilons.loc[j]
                     params["epsilon"] = best_epsilon_this_window
                 results_this_replication = run_replication(j, problem, **params)
+                # TODO: rolling: may have to alter the below
                 if use_tv_epsilon and n_splits == 1 and tv_ratio:
                     results_this_replication, all_out_of_sample_costs_so_far = process_actual_results_after_tv_shv_for_window(total_validation_times, results_this_replication, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, risk_free_rates, num_test_observations, j, ratio_calculator, all_out_of_sample_costs_so_far, period_for_test_ratio_in_weeks, tv_ratio)
                     prev_stock_figi_list = stock_figi_list_this_window
@@ -706,15 +741,21 @@ def run_replication(
     
     if do_temporal_validation and not use_tv_epsilon:
 
+        # TODO: this feels a little bit fudgey re: calculating num_training_observations in run and then again here in the if and else
         if n_splits == 1:
-
-            # TODO: this feels a little bit fudgey re: calculating num_training_observations in run and then again here
 
             num_training_observations = num_observations - num_test_observations
             train_index = np.arange(num_training_observations)
             test_index = np.arange(num_training_observations, num_training_observations + num_test_observations)
-            num_observations = num_training_observations    # NOTE: did this so that, like in Patrick's branch, only num_training_observations is passed to get_kl_bdro_problem when getting the problem for kl_empirical below
-            # TODO: the above, however, will also change num_observations for some empirical mmd stuff below, but since that will now be using data which is tied to num_training_observations, I think that should be fine, but check before ever merging these changes with main
+
+        else:
+
+            num_training_observations = num_observations - num_test_observations - n_splits + 1
+            train_index = np.arange(split_idx, split_idx + num_training_observations)
+            test_index = np.arange(split_idx + num_training_observations, split_idx + num_training_observations + num_test_observations)
+
+        num_observations = num_training_observations    # NOTE: did this so that, like in Patrick's branch, only num_training_observations is passed to get_kl_bdro_problem when getting the problem for kl_empirical below
+        # TODO: the above, however, will also change num_observations for some empirical mmd stuff below, but since that will now be using data which is tied to num_training_observations, I think that should be fine, but check before ever merging these changes with main
     
         # else:
 
@@ -788,6 +829,7 @@ def run_replication(
     if dataset == "james":
         if algorithm == "kl_pp":
             problem = get_kl_bdro_problem(portfolio_objective_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim, is_portfolio=True) # TODO: enable transaction costs, but should these be put into portfolio_objective_cvxpy or get_kl_bdro_problem, or does it matter?
+        # TODO: make sure the below is okay for validation
         elif algorithm == "kl_empirical":
             problem = get_kl_bdro_problem(portfolio_objective_cvxpy, 1, num_observations, dim=dim, is_portfolio=True)   # TODO: enable transaction costs later
         elif algorithm in ("kl_bdro", "kl_dro_bas") and likelihood == "multivariate_normal":
