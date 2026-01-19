@@ -58,7 +58,7 @@ app = typer.Typer(name="misdro")
 
 @app.command(name="setup-kl")
 def setup_kl_dro_bas(
-    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, dataset_dir_james, risk_free_rates_filename, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), dim: Optional[int] = None, tv_ratio: Optional[str] = None, num_folds_tv: int = 1, overwrite: bool = False
+    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, dataset_dir_james, risk_free_rates_filename, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), dim: Optional[int] = None, tv_ratio: Optional[str] = None, num_folds_tv: Optional[int] = 1, overwrite: bool = False
 ):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
@@ -290,6 +290,7 @@ def get_useful_tv_results_rolling_validation_all_windows(result_df: pd.DataFrame
         tv_results_for_replication = defaultdict(list)
         for _, row in g.iterrows():
             epsilon = row["epsilon"]
+            print(epsilon, type(epsilon))    # TODO: remove when you have checked--if it is the wrong type, may also be the case in get_useful_tv_results_shv_all_windows
             split_idx = int(row["split_idx"])
             fold_results = {col: row[col] for col in (
                 "likelihood_time", "posterior_time", "solve_time", "solution", "out_of_sample_cost"
