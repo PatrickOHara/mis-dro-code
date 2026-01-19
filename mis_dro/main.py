@@ -287,14 +287,17 @@ def get_useful_tv_results_shv_all_windows(result_df: pd.DataFrame) -> list[dict]
 def get_useful_tv_results_rolling_validation_all_windows(result_df: pd.DataFrame) -> list[dict]:
     all_tv_results = []
     for _, g in result_df.groupby(level="replication", sort=True):
-        # TODO: would be better to store folds in a list, where list index == fold index
-        tv_results_for_replication = defaultdict(set)
+        tv_results_for_replication = defaultdict(list)
         for _, row in g.iterrows():
             epsilon = row["epsilon"]
+            split_idx = int(row["split_idx"])
             fold_results = {col: row[col] for col in (
                 "likelihood_time", "posterior_time", "solve_time", "solution", "out_of_sample_cost"
             )}
-            tv_results_for_replication[epsilon].add(fold_results)
+            folds = tv_results_for_replication[epsilon]
+            if split_idx >= len(folds):
+                folds.extend([None] * (split_idx - len(folds) + 1))
+            folds[split_idx] = fold_results
         all_tv_results.append(tv_results_for_replication)
     return all_tv_results
 
@@ -304,12 +307,13 @@ def get_stock_figi_list(training_df: pd.DataFrame) -> list[str]:
 
     return [col.split("_")[0] for col in training_df.columns]
 
-def choose_risk_free_rates_for_validation(risk_free_rates: list[float], number_of_extra_data_at_start_of_risk_free_rates_reserved_for_validation: int, num_test_weeks: int, num_validation_dates_per_window: int, window_index: int) -> list[float]:
+def choose_risk_free_rates_for_validation(risk_free_rates: list[float], number_of_extra_data_at_start_of_risk_free_rates_reserved_for_validation: int, num_test_weeks: int, num_validation_dates_per_window: int, window_index: int, num_folds: int, fold_index: int) -> list[float]:
 
     t = number_of_extra_data_at_start_of_risk_free_rates_reserved_for_validation
     v = num_validation_dates_per_window
+    fold_offset = num_folds - fold_index - 1
 
-    return risk_free_rates[t: t + num_test_weeks * window_index] + risk_free_rates[t + num_test_weeks * window_index - v: t + num_test_weeks * window_index]
+    return risk_free_rates[t: t + num_test_weeks * window_index] + risk_free_rates[t + num_test_weeks * window_index - v - fold_offset: t + num_test_weeks * window_index - fold_offset]
 
 def choose_risk_free_rates_for_testing(risk_free_rates: list[float], number_of_extra_data_at_start_of_risk_free_rates_reserved_for_validation: int, num_test_weeks: int, window_index: int) -> list[float]:
 
@@ -317,9 +321,10 @@ def choose_risk_free_rates_for_testing(risk_free_rates: list[float], number_of_e
 
     return risk_free_rates[t: t + num_test_weeks * (window_index + 1)]
 
-def process_tv_results_shv_for_window(stock_figi_list_this_window: list[str], window_index: int, risk_free_rates: list[float], num_test_observations: int, num_validation_observations_per_window: int, useful_tv_results_shv_all_windows: list[dict[str, Any]], prev_stock_figi_list: list[str], prev_portfolio_weighting: list[float], all_out_of_sample_costs_so_far: list[float], ratio_calculator: Callable[[list[float], list[float], int], float], period_for_test_ratio_in_weeks: int) -> dict[str, Any]:
+# TODO: something below seems strange--useful_tv_results_shv_all_windows' type signature. Especially given how useful_tv_results_shv_all_windows[window_index].items() is unpacked--epsilon is assumed to be an integer, not a string. I have now changed it from list[dict[str, Any]], but make sure the new type signature is correct.
+def process_tv_results_shv_for_window(stock_figi_list_this_window: list[str], window_index: int, risk_free_rates: list[float], num_test_observations: int, num_validation_observations_per_window: int, useful_tv_results_shv_all_windows: list[dict[float, dict[str, Any]]], prev_stock_figi_list: list[str], prev_portfolio_weighting: list[float], all_out_of_sample_costs_so_far: list[float], ratio_calculator: Callable[[list[float], list[float], int], float], period_for_test_ratio_in_weeks: int) -> dict[str, Any]:
     # TODO: note that 51 is specific to the risk free returns file in use (because it has 51 weekly risk-free rates up to and including the first rebalance date)
-    risk_free_rates_for_validation = choose_risk_free_rates_for_validation(risk_free_rates, 51, num_test_observations, num_validation_observations_per_window, window_index)   
+    risk_free_rates_for_validation = choose_risk_free_rates_for_validation(risk_free_rates, 51, num_test_observations, num_validation_observations_per_window, window_index, 1, 0)   
     best_epsilon_this_window, highest_validation_ratio = None, -float("inf")
     total_validation_times = {"posterior": 0, "likelihood": 0, "solve": 0}  # TODO: Maybe save validation times for each epsilon rather than an overall one?
     for epsilon, validation_results in useful_tv_results_shv_all_windows[window_index].items():
@@ -337,7 +342,32 @@ def process_tv_results_shv_for_window(stock_figi_list_this_window: list[str], wi
         "total_validation_times": total_validation_times,
     }
 
-def process_actual_results_after_tv_shv_for_window(total_validation_times: dict[str, float], results_this_replication: dict[str, Any], prev_stock_figi_list: list[str], prev_portfolio_weighting: list[float], stock_figi_list_this_window: list[str], risk_free_rates: list[float], num_test_observations: int, window_index: int, ratio_calculator: Callable[[list[float], list[float], int], float], all_out_of_sample_costs_so_far: list[float], period_for_test_ratio_in_weeks: int, tv_ratio: str) -> tuple[dict[str, Any], list[float]]:
+# TODO: make sure useful_tv_results_rolling_validation_all_windows's type signature is correct
+def process_tv_results_rolling_validation_for_window(risk_free_rates: list[float], num_test_observations: int, window_index: int, useful_tv_results_rolling_validation_all_windows: list[dict[float, list[dict[str, Any]]]], prev_stock_figi_list: list[str], prev_portfolio_weighting: list[float], stock_figi_list_this_window: list[str], all_out_of_sample_costs_so_far: list[float], ratio_calculator: Callable[[list[float], list[float], int], float], period_for_test_ratio_in_weeks: int, num_validation_observations_per_window: int) -> dict[str, Any]:
+    num_folds = len(list(useful_tv_results_rolling_validation_all_windows[0].values())[0])
+    # TODO: note that 51 is specific to the risk free returns file in use (because it has 51 weekly risk-free rates up to and including the first rebalance date)
+    risk_free_rates_for_validation = [choose_risk_free_rates_for_validation(risk_free_rates, 51, num_test_observations, num_validation_observations_per_window, window_index, num_folds, fold_index) for fold_index in range(num_folds)]
+    best_epsilon_this_window, highest_validation_ratio = None, -float("inf")
+    total_validation_times = {"posterior": 0, "likelihood": 0, "solve": 0}  # TODO: Maybe save validation times for each epsilon rather than an overall one? Same TODO for process_tv_results_shv_for_window, but it is not necessarily a must--decide
+    for epsilon, validation_results_for_each_fold in useful_tv_results_rolling_validation_all_windows[window_index].items():
+        sum_of_validation_ratio_for_each_fold = 0
+        for i, validation_results in enumerate(validation_results_for_each_fold):
+            validation_transaction_cost = calculate_transaction_cost(prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, validation_results["solution"])
+            validation_portfolio_returns = validation_results["out_of_sample_cost"]
+            validation_portfolio_returns[0] -= validation_transaction_cost
+            all_out_of_sample_costs_so_far_including_validation = all_out_of_sample_costs_so_far + validation_portfolio_returns
+            sum_of_validation_ratio_for_each_fold += ratio_calculator(all_out_of_sample_costs_so_far_including_validation, risk_free_rates_for_validation[i], period_for_test_ratio_in_weeks - 13 + num_validation_observations_per_window)
+            for time_type in total_validation_times:
+                total_validation_times[time_type] += validation_results[f"{time_type}_time"]
+        validation_ratio = sum_of_validation_ratio_for_each_fold / len(validation_results_for_each_fold)
+        if validation_ratio > highest_validation_ratio:
+            best_epsilon_this_window, highest_validation_ratio = epsilon, validation_ratio
+    return {
+        "best_epsilon_this_window": best_epsilon_this_window,
+        "total_validation_times": total_validation_times,
+    }
+
+def process_actual_results_after_tv_for_window(total_validation_times: dict[str, float], results_this_replication: dict[str, Any], prev_stock_figi_list: list[str], prev_portfolio_weighting: list[float], stock_figi_list_this_window: list[str], risk_free_rates: list[float], num_test_observations: int, window_index: int, ratio_calculator: Callable[[list[float], list[float], int], float], all_out_of_sample_costs_so_far: list[float], period_for_test_ratio_in_weeks: int, tv_ratio: str) -> tuple[dict[str, Any], list[float]]:
     for time_type, time in total_validation_times.items():
         results_this_replication[f"total_validation_{time_type}_time"] = time
     actual_transaction_cost = calculate_transaction_cost(prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, results_this_replication["solution"])
@@ -627,20 +657,24 @@ def run(
                 list_of_replication_stats.append(results)
                 prev_stock_figi_list, prev_portfolio_weighting = stock_figi_list_this_window, results["solution"]
             else:
-                # TODO: rolling: may have to alter the below
-                if use_tv_epsilon and n_splits == 1:
+                if use_tv_epsilon:
                     if tv_ratio:
                         stock_figi_list_this_window = stock_figi_lists[j]
-                        processed_validation_results = process_tv_results_shv_for_window(stock_figi_list_this_window, j, risk_free_rates, num_test_observations, num_validation_observations_per_window, useful_tv_results_shv_all_windows, prev_stock_figi_list, prev_portfolio_weighting, all_out_of_sample_costs_so_far, ratio_calculator, period_for_test_ratio_in_weeks)
+                        if n_splits == 1:
+                            processed_validation_results = process_tv_results_shv_for_window(stock_figi_list_this_window, j, risk_free_rates, num_test_observations, num_validation_observations_per_window, useful_tv_results_shv_all_windows, prev_stock_figi_list, prev_portfolio_weighting, all_out_of_sample_costs_so_far, ratio_calculator, period_for_test_ratio_in_weeks)
+                        else:
+                            processed_validation_results = process_tv_results_rolling_validation_for_window(risk_free_rates, num_test_observations, j, useful_tv_results_rolling_validation_all_windows, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, all_out_of_sample_costs_so_far, ratio_calculator, period_for_test_ratio_in_weeks, num_validation_observations_per_window)
                         best_epsilon_this_window = processed_validation_results["best_epsilon_this_window"]
                         total_validation_times = processed_validation_results["total_validation_times"]
                     else:
-                        best_epsilon_this_window = best_epsilons.loc[j]
+                        if n_splits == 1:
+                            best_epsilon_this_window = best_epsilons.loc[j]
+                        else:
+                            raise NotImplementedError("Rolling temporal validation without Sharpe/Sortino ratio not currently implemented.")
                     params["epsilon"] = best_epsilon_this_window
                 results_this_replication = run_replication(j, problem, **params)
-                # TODO: rolling: may have to alter the below
-                if use_tv_epsilon and n_splits == 1 and tv_ratio:
-                    results_this_replication, all_out_of_sample_costs_so_far = process_actual_results_after_tv_shv_for_window(total_validation_times, results_this_replication, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, risk_free_rates, num_test_observations, j, ratio_calculator, all_out_of_sample_costs_so_far, period_for_test_ratio_in_weeks, tv_ratio)
+                if use_tv_epsilon and tv_ratio:
+                    results_this_replication, all_out_of_sample_costs_so_far = process_actual_results_after_tv_for_window(total_validation_times, results_this_replication, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, risk_free_rates, num_test_observations, j, ratio_calculator, all_out_of_sample_costs_so_far, period_for_test_ratio_in_weeks, tv_ratio)
                     prev_stock_figi_list = stock_figi_list_this_window
                     prev_portfolio_weighting = results_this_replication["solution"]
                 list_of_replication_stats.append(results_this_replication)
