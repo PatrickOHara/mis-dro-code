@@ -1,0 +1,1 @@
+misdro setup-kl tv_kl_portfolio_james /dcs/pg24/u5674159/mis-dro-code/rolling-tv-normal-cost-function-sharpe 40 /dcs/pg24/u5674159/mis-dro-code/james-data/windows_rebalance_dates_20080220_to_20250430_inclusive_every_13_weeks.pkl /dcs/pg24/u5674159/mis-dro-code/james-data/risk_free_returns_weekly_2007-03-07_to_2025-07-30_inclusive.pkl --tv-ratio sharpe --num-folds-tv 10
