@@ -13,5 +13,5 @@
 
 # Note that I have removed the array Slurm parameter found in other Slurm scripts in this project
 
-# TODO: Note that there are other import parameters set directly in the script, maybe bring them up here
+# TODO: Note that there are other important parameters set directly in the script, maybe bring them up here
 srun python /dcs/pg24/u5674159/mis-dro-code/markowitz_results_james/main.py
