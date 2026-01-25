@@ -322,7 +322,7 @@ def do_markowitz_run_with_rolling_validation_using_ratio_as_metric(markowitz_dji
         time_for_hyperparameter_optimisation_and_running_with_best_one = (datetime.now() - time_just_before_hyperparameter_optimisation).total_seconds()
         results_for_best_lambda["time_for_hyperparameter_optimisation_and_running_with_best_one"] = time_for_hyperparameter_optimisation_and_running_with_best_one
 
-        # TODO: redo Markowitz with SHV (including transaction costs in the portfolio returns, **not** the cost function) and in james-portfolio.ipynb, get "total_solve_time_hyperparameter_optimisation_and_final_run" rather than "solve_time" for Markowitz SHV
+        # TODO: redo Markowitz with SHV (including transaction costs in the portfolio returns, **not** the cost function) and in james-portfolio.ipynb, get "total_solve_time_hyperparameter_optimisation_and_final_run" rather than "solve_time" or  "time_for_hyperparameter_optimisation_and_running_with_best_one" or whatever you have been using for Markowitz SHV and maybe rolling TV with and without tcosts
         results_for_best_lambda["total_solve_time_hyperparameter_optimisation_and_final_run"] = validation_results["total_solve_time"] + results_for_best_lambda["solve_time"]
 
         results_for_each_window_with_its_best_lambda.append(results_for_best_lambda)
