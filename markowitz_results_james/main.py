@@ -7,8 +7,12 @@ from mis_dro.portfolio import calculate_transaction_cost
 from mis_dro.metrics import calculate_sharpe_ratio, calculate_sortino_ratio
 from argparse import ArgumentParser
 
-# === DO NOT CHANGE THIS ===
+##############################################################################################
+# === DO NOT CHANGE THIS ACCIDENTALLY ===
 using_ipynb = False
+save = True
+
+# NOTE: these won't make a difference when it comes to do_markowitz_run_without_validation
 parser = ArgumentParser()
 parser.add_argument(
     "--num-folds",
@@ -20,10 +24,18 @@ parser.add_argument(
     choices=["sharpe", "sortino"],
     default=None,
 )
+# NOTE: if you want this to be False, don't mention --optimise-transaction-costs, otherwise, do.
+parser.add_argument(
+    "--optimise-transaction-costs",
+    action="store_true",
+    help="Enable transaction cost optimisation"
+)
 args = parser.parse_args()
 num_folds_for_rolling_validation = args.num_folds
 ratio_types = (args.ratio_type,)
-# === DO NOT CHANGE THIS ===
+include_transaction_costs_in_cost_function = args.optimise_transaction_costs
+# === DO NOT CHANGE THIS ACCIDENTALLY ===
+##############################################################################################
 
 # TODO: cite https://github.com/BorisForce/PyPortfolioModels/blob/main/Min_Mean_Variance/Min_Mean_Variance_model.py for code if necessary
 def mean_variance_opt(Sigma: np.ndarray, mu: np.ndarray, risk_aversion: float, include_transaction_costs_in_cost_function, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list):
@@ -339,9 +351,7 @@ lambdas = (
     500
 )
 
-# NOTE: these won't make a difference when it comes to do_markowitz_run_without_validation, as you can see
-save = True
-include_transaction_costs_in_cost_function = False
+# NOTE: there are other important options at the top of the file
 
 if num_folds_for_rolling_validation:
     for ratio_type in ratio_types:
