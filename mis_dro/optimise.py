@@ -5,6 +5,7 @@ import cvxpy as cp
 import numpy as np
 
 from bayesian_dro.Bayesian_DRO_continuous import LARGEST_X, SMALLEST_X
+from portfolio import get_cvxpy_transaction_cost_addend
 
 
 def get_kl_bdro_problem(
@@ -14,8 +15,8 @@ def get_kl_bdro_problem(
     dim: int = 1,
     is_portfolio: bool = False,
     include_tcosts_in_cost_function: bool = False,
-    prev_portfolio_weighting: Optional[list[float]] = None,
     prev_stock_figi_list: Optional[list[str]] = None,
+    prev_portfolio_weighting: Optional[list[float]] = None,
     stock_figi_list_this_window: Optional[list[str]] = None
 ) -> cp.Problem:
     """Bayesian DRO as a cvxpy optimisaton problem.
@@ -56,20 +57,13 @@ def get_kl_bdro_problem(
         for i in range(num_posterior_samples)
     ]
 
-    # TODO: James: may be worth refactoring some of the below with what's in portfolio.calculate_transaction_cost
-    if include_tcosts_in_cost_function:
-        # TODO: James: consider catching errors regarding prev_stock_figi_list and prev_portfolio_weighting length mistmatches etc.
-        prev_map = dict(zip(prev_stock_figi_list, prev_portfolio_weighting))
-        curr_set = set(stock_figi_list_this_window)
-        y_aligned = np.array(
-            [prev_map.get(figi, 0.0) for figi in stock_figi_list_this_window],
-            dtype=float,
+    if is_portfolio and include_tcosts_in_cost_function:
+        u = get_cvxpy_transaction_cost_addend(
+            prev_stock_figi_list,
+            prev_portfolio_weighting,
+            stock_figi_list_this_window,
+            x
         )
-        prev_only_cost = sum(
-            abs(prev_map[figi]) for figi in prev_map if figi not in curr_set
-        )
-        y = cp.Constant(y_aligned)
-        u = 0.005 / 13 * (cp.norm1(x - y) + prev_only_cost)
     else:
         u = 0.0
 

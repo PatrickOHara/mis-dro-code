@@ -13,9 +13,10 @@ def portfolio_objective_cvxpy(x, xi):
 def get_kl_portfolio_problem(
         num_stocks: int,
         num_cov_samples: int,
-        # include_tcosts_in_cost_function: Optional[bool] = False,
-        # prev_stock_figi_list: Optional[list[str]] = None,
-        # stock_figi_list_this_window: Optional[list[str]] = None
+        include_tcosts_in_cost_function: bool = False,
+        prev_stock_figi_list: Optional[list[str]] = None,
+        prev_portfolio_weighting: Optional[list[float]] = None,
+        stock_figi_list_this_window: Optional[list[str]] = None
     ) -> cp.Problem:
     """Evaluate portfolio cost function with cvxpy assuming a Gaussian likelihood
 
@@ -26,21 +27,27 @@ def get_kl_portfolio_problem(
     Returns:
         Cvxpy problem object
     """
-    # num_stocks_in_union = len(set(prev_stock_figi_list) | set(stock_figi_list_this_window))
 
     # variables
     x = cp.Variable(num_stocks, name="x")
-    # x_for_stocks_in_union = cp.Variable(..., name="x_for_stocks_in_union")
 
     # parameters
     epsilon_minus_constant = cp.Parameter(1, name="epsilon_minus_constant", nonneg=True)
     mu_post = cp.Parameter(num_stocks, name="mu_post")
     sqrt_cov_post_samples = [cp.Parameter((num_stocks, num_stocks), name=f"sqrt_cov_post_{i}") for i in range(num_cov_samples)]
-    # tau = cp.Parameter(1, name="tcost_constant", nonneg=True)
-    # prev_portfolio_weighting = cp.Parameter(num_stocks_in_union, name="prev_portfolio_weighting")
+
+    if include_tcosts_in_cost_function:
+        u = get_cvxpy_transaction_cost_addend(
+            prev_stock_figi_list,
+            prev_portfolio_weighting,
+            stock_figi_list_this_window,
+            x
+        )
+    else:
+        u = 0.0
 
     # objective function: maximise return whilst minimising standard deviation
-    portfolio_objective = cp.Minimize(- mu_post @ x + cp.sqrt(2 * epsilon_minus_constant) * (1.0 / float(num_cov_samples)) * cp.sum(
+    portfolio_objective = cp.Minimize(- mu_post @ x + u + cp.sqrt(2 * epsilon_minus_constant) * (1.0 / float(num_cov_samples)) * cp.sum(
         [cp.norm(sqrt_cov_post_samples[i] @ x) for i in range(num_cov_samples)]
     ))
 
@@ -68,12 +75,12 @@ def bdro_portfolio_posterior_samples(num_posterior_samples: int, mu_post: np.arr
     return theta_sample
 
 def calculate_transaction_cost(
-    # TODO: now that you've changed the allowed types in this function signature, maybe go to where you are forcing a conversion of an argument to list before passing it to this function and lax such efforts--particularly for prev_portfolio_weighting and new_portfolio_weighting, I think
-    prev_stock_figi_list: Sequence[str],
-    prev_portfolio_weighting: Sequence[float],
-    new_stock_figi_list: Sequence[str],
-    new_portfolio_weighting: Sequence[float]
-) -> float:
+        # TODO: now that you've changed the allowed types in this function signature, maybe go to where you are forcing a conversion of an argument to list before passing it to this function and lax such efforts--particularly for prev_portfolio_weighting and new_portfolio_weighting, I think
+        prev_stock_figi_list: Sequence[str],
+        prev_portfolio_weighting: Sequence[float],
+        new_stock_figi_list: Sequence[str],
+        new_portfolio_weighting: Sequence[float]
+    ) -> float:
     if len(prev_stock_figi_list) != len(prev_portfolio_weighting):
         raise ValueError("prev_stock_figi_list and prev_portfolio_weighting must be same length.")
     if len(new_stock_figi_list) != len(new_portfolio_weighting):
@@ -82,3 +89,26 @@ def calculate_transaction_cost(
     new_map  = {figi: float(w) for figi, w in zip(new_stock_figi_list,  new_portfolio_weighting)}
     all_figis = set(prev_map) | set(new_map)
     return 0.005 * sum(abs(new_map.get(figi, 0.0) - prev_map.get(figi, 0.0)) for figi in all_figis)
+
+def get_cvxpy_transaction_cost_addend(
+        prev_stock_figi_list: list[str],
+        prev_portfolio_weighting: list[float],
+        stock_figi_list_this_window: list[str],
+        x: cp.Variable
+    ) -> cp.Expression:
+
+    # TODO: James: may be worth refactoring some of the below with what's in portfolio.calculate_transaction_cost
+    # TODO: James: consider catching errors regarding prev_stock_figi_list and prev_portfolio_weighting length mistmatches etc.
+
+    prev_map = dict(zip(prev_stock_figi_list, prev_portfolio_weighting))
+    curr_set = set(stock_figi_list_this_window)
+    y_aligned = np.array(
+        [prev_map.get(figi, 0.0) for figi in stock_figi_list_this_window],
+        dtype=float,
+    )
+    prev_only_cost = sum(
+        abs(prev_map[figi]) for figi in prev_map if figi not in curr_set
+    )
+    y = cp.Constant(y_aligned)
+    return 0.005 / 13 * (cp.norm1(x - y) + prev_only_cost)
+    

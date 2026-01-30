@@ -869,8 +869,8 @@ def run_replication(
                 dim=dim,
                 is_portfolio=True,
                 include_tcosts_in_cost_function=include_tcosts_in_cost_function,
-                prev_portfolio_weighting=prev_portfolio_weighting,
                 prev_stock_figi_list=prev_stock_figi_list,
+                prev_portfolio_weighting=prev_portfolio_weighting,
                 stock_figi_list_this_window=stock_figi_list_this_window
             )
         # TODO: make sure the below is okay for validation and include transaction costs for cost function when needed
@@ -880,11 +880,11 @@ def run_replication(
             problem = get_kl_portfolio_problem(
                 dim,
                 num_posterior_samples,
-                # include_tcosts_in_cost_function,
-                # prev_portfolio_weighting,
-                # prev_stock_figi_list,
-                # stock_figi_list_this_window
-            )  # TODO: enable transaction costs
+                include_tcosts_in_cost_function,
+                prev_stock_figi_list,
+                prev_portfolio_weighting,
+                stock_figi_list_this_window
+            )
 
     if algorithm == "kl_dro_bas" and (
         dataset == "portfolio" or dataset == "portfolio_synthetic" or dataset == "james"
