@@ -51,7 +51,7 @@ class ExperimentName(StrEnum):
     kl_portfolio_james = "kl_portfolio_james"
     # mmd_portfolio_james = "mmd_portfolio_james"
     tv_kl_portfolio_james = "tv_kl_portfolio_james"
-    tv_kl_portfolio_james_has_tcosts_in_cost_function = "tv_kl_portfolio_james_has_tcosts_in_cost_function"
+    # tv_kl_portfolio_james_has_tcosts_in_cost_function = "tv_kl_portfolio_james_has_tcosts_in_cost_function"
 
     def is_portfolio(self) -> bool:
         return self in (
@@ -67,18 +67,21 @@ class ExperimentName(StrEnum):
             ExperimentName.kl_portfolio_james,
             # ExperimentName.mmd_portfolio_james,
             ExperimentName.tv_kl_portfolio_james,
-            ExperimentName.tv_kl_portfolio_james_has_tcosts_in_cost_function
+            # ExperimentName.tv_kl_portfolio_james_has_tcosts_in_cost_function
         )
     
     def is_temporal_validation(self) -> bool:
-        return self in (ExperimentName.tv_kl_portfolio_james, ExperimentName.tv_kl_portfolio_james_has_tcosts_in_cost_function)
+        return self in (
+            ExperimentName.tv_kl_portfolio_james,
+            # ExperimentName.tv_kl_portfolio_james_has_tcosts_in_cost_function
+        )
     
-    def has_tcosts_in_cost_function(self) -> bool:
-        return self in (ExperimentName.tv_kl_portfolio_james_has_tcosts_in_cost_function,)
+    # def has_tcosts_in_cost_function(self) -> bool:
+    #     return self in (ExperimentName.tv_kl_portfolio_james_has_tcosts_in_cost_function,)
 
 
 
-def get_experiment(experiment_name: ExperimentName, dataset_dir_james, risk_free_rates_filename, dataset_dir: Optional[Path] = None, dim: Optional[int] = None, tv_ratio: Optional[str] = None, num_folds_tv: Optional[int] = 1) -> List[Dict]:
+def get_experiment(experiment_name: ExperimentName, dataset_dir_james, risk_free_rates_filename, dataset_dir: Optional[Path] = None, dim: Optional[int] = None, tv_ratio: Optional[str] = None, num_folds_tv: Optional[int] = 1, has_tcosts_in_cost_function: bool = False) -> List[Dict]:
     """Returns the experiment associated with the name"""
     function_lookup = {
         ExperimentName.kl_newsvendor_1d: kl_newsvendor_1d,
@@ -98,7 +101,7 @@ def get_experiment(experiment_name: ExperimentName, dataset_dir_james, risk_free
         ExperimentName.kl_portfolio_james: kl_portfolio_james,
         # ExperimentName.mmd_portfolio_james: mmd_portfolio_james,
         ExperimentName.tv_kl_portfolio_james: tv_kl_portfolio_james,
-        ExperimentName.tv_kl_portfolio_james_has_tcosts_in_cost_function: tv_kl_portfolio_james_has_tcosts_in_cost_function
+        # ExperimentName.tv_kl_portfolio_james_has_tcosts_in_cost_function: tv_kl_portfolio_james_has_tcosts_in_cost_function
     }
     try:
         if experiment_name.is_portfolio():
@@ -106,7 +109,7 @@ def get_experiment(experiment_name: ExperimentName, dataset_dir_james, risk_free
             return function_lookup[experiment_name](dataset_dir)
         elif experiment_name.is_james():
             if experiment_name.is_temporal_validation():
-                return function_lookup[experiment_name](dataset_dir_james, risk_free_rates_filename, dim, tv_ratio, num_folds_tv)
+                return function_lookup[experiment_name](dataset_dir_james, risk_free_rates_filename, dim, tv_ratio, num_folds_tv, has_tcosts_in_cost_function)
             return function_lookup[experiment_name](dataset_dir_james, dim)
         else:
             return function_lookup[experiment_name]()
@@ -897,13 +900,16 @@ def kl_portfolio_james(dataset_dir_james, dim: Optional[int]) -> List[Dict]:
             experiment.append(params)
     return experiment
 
-# NOTE: parameters changed
-def tv_kl_portfolio_james(dataset_dir_james, risk_free_rates_filename, dim: Optional[int], tv_ratio: Optional[str], NUM_FOLDS: int = 1) -> List[Dict]:
+def tv_kl_portfolio_james(dataset_dir_james, risk_free_rates_filename, dim: Optional[int], tv_ratio: Optional[str], NUM_FOLDS: int = 1, has_tcosts_in_cost_function: bool = False) -> List[Dict]:
     """Temporal-validation KL univariate portfolio for selecting epsilon"""
     if dim:
         assert dim <= get_min_dim_james(dataset_dir_james)
     experiment = []
     dgp = "james"   # NOTE: changed from DowJones
+
+    # TODO: maybe make dynamic or move to .constants
+    epsilon_list = (1e-05, 0.001, 1)
+
     for algorithm in ["kl_dro_bas", "kl_bdro", "kl_pp"]:
         likelihood = "multivariate_normal"
         posterior = "normal_inverse_wishart"
@@ -921,8 +927,8 @@ def tv_kl_portfolio_james(dataset_dir_james, risk_free_rates_filename, dim: Opti
             base_params = {
                 "algorithm": algorithm,
                 "contamination": 0.0,
-                "dataset": "james", # NOTE: changed from portfolio
-                "dataset_dir_james": dataset_dir_james, # NOTE: added
+                "dataset": "james",
+                "dataset_dir_james": dataset_dir_james,
                 "dgp": dgp,
                 "dim": dim,
                 "ignore_dpp": True,
@@ -946,74 +952,34 @@ def tv_kl_portfolio_james(dataset_dir_james, risk_free_rates_filename, dim: Opti
                 "tv_ratio": tv_ratio,
                 "risk_free_rates_filename": risk_free_rates_filename
             }
-            tv_uuid_list = []
-            for epsilon in (1e-05, 0.001, 1):   # NOTE: changed the epsilons
-                for split_idx in range(NUM_FOLDS):
-                    fold_params = base_params.copy()
-                    fold_params["uuid"] = str(uuid4())
-                    fold_params["epsilon"] = epsilon
-                    fold_params["n_splits"] = NUM_FOLDS
-                    fold_params["split_idx"] = split_idx
-                    fold_params["use_tv_epsilon"] = False
-                    fold_params["tv_uuid_list"] = []
-                    experiment.append(fold_params)
-                    tv_uuid_list.append(fold_params["uuid"])
             params = base_params.copy()
             params["uuid"] = str(uuid4())
-            params["epsilon"] = None    # this must be calculated later using tv!
-            params["split_idx"] = None  # not needed because we will calculate epsilon using all splits
-            params["use_tv_epsilon"] = True     # we will exploit the tv epsilon
-            params["tv_uuid_list"] = tv_uuid_list   #NOTE point to all the UUIDs across all splits and epsilons 
+            params["epsilon"] = None    # The final epsilon for each replication will be calculated using temporal validation
+            params["split_idx"] = None  # This is for the process including non-validation, so it doesn't make sense to pass a lone split index to it
+            if has_tcosts_in_cost_function:
+                params["has_tcosts_in_cost_function"] = True
+                params["epsilon_list"] = epsilon_list
+            else:
+                tv_uuid_list = []
+                for epsilon in epsilon_list:
+                    for split_idx in range(NUM_FOLDS):
+                        fold_params = base_params.copy()
+                        fold_params["uuid"] = str(uuid4())
+                        fold_params["epsilon"] = epsilon
+                        fold_params["n_splits"] = NUM_FOLDS
+                        fold_params["split_idx"] = split_idx
+                        fold_params["use_tv_epsilon"] = False
+                        fold_params["tv_uuid_list"] = []
+                        experiment.append(fold_params)
+                        tv_uuid_list.append(fold_params["uuid"])
+                params["use_tv_epsilon"] = True     # we will exploit the tv epsilon
+                params["tv_uuid_list"] = tv_uuid_list   #NOTE point to all the UUIDs across all splits and epsilons 
             experiment.append(params)
     return experiment
 
-# TODO: refactor the below with the above etc.
-def tv_kl_portfolio_james_has_tcosts_in_cost_function(dataset_dir_james, risk_free_rates_filename, dim: Optional[int], tv_ratio: Optional[str], NUM_FOLDS: int = 1) -> List[Dict]:
-    assert NUM_FOLDS == 1
-    if dim:
-        assert dim <= get_min_dim_james(dataset_dir_james)
-    experiment = []
-    dgp = "james"   # NOTE: changed from DowJones
-    for algorithm in ["kl_dro_bas", "kl_bdro", "kl_pp"]:
-        likelihood = "multivariate_normal"
-        posterior = "normal_inverse_wishart"
-        inference = "bayes"
-        # NOTE: in what I took from Patrick's branch, total_model_samples was fixed to 900 instead of the below. This doesn't make a difference in the case of kl_dro_bas: num_likelihood_samples is now 1 rather than 900 from it, but this variable isn't actually used due to closed-form, and num_posterior_samples ends up as 1 either way. In the case of kl_pp, it's just the case that 3600 is being left out, which may be good regarding consistency with BDRO. And for BDRO, it's only 900 below anyway.
-        if algorithm == "kl_dro_bas":
-            total_model_samples_list = [1]
-        elif algorithm == "kl_pp":
-            total_model_samples_list = [900, 3600]
-        elif algorithm == "kl_bdro":
-            total_model_samples_list = [900]
-        NUM_SPLITS = 1
-        for total_model_samples in total_model_samples_list:
-            params = {
-                "algorithm": algorithm,
-                "contamination": 0.0,
-                "dataset": "james",
-                "dataset_dir_james": dataset_dir_james,
-                "dgp": dgp,
-                "dim": dim,
-                "ignore_dpp": True,
-                "inference": inference,
-                "likelihood": likelihood,
-                "njobs": 1,
-                "num_likelihood_samples": get_num_likelihood_samples("portfolio", 52, total_model_samples, algorithm),
-                "num_posterior_samples": get_num_posterior_samples("portfolio", total_model_samples, algorithm),
-                "num_observations": 52,
-                "num_replications": get_num_time_windows_james(dataset_dir_james),
-                "num_test_observations": 13,
-                "posterior": posterior,
-                "do_temporal_validation": True,
-                "n_splits": NUM_SPLITS,
-                "tv_ratio": tv_ratio,
-                "risk_free_rates_filename": risk_free_rates_filename,
-                "has_tcosts_in_cost_function": True,
-                "epsilon_list": [1e-05, 0.001, 1],
-                "uuid": str(uuid4()),
-            }
-            experiment.append(params)
-    return experiment
+# TODO: left this commented because for now tv_kl_portfolio_james can be used if optimising transaction costs
+# def tv_kl_portfolio_james_has_tcosts_in_cost_function(dataset_dir_james, risk_free_rates_filename, dim: Optional[int], tv_ratio: Optional[str], NUM_FOLDS: int = 1) -> List[Dict]:
+#     ...
 
 # def mmd_portfolio_james(dim: int) -> List[Dict]:
 #     assert dim <= get_min_dim_james()

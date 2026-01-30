@@ -58,38 +58,25 @@ app = typer.Typer(name="misdro")
 
 @app.command(name="setup-kl")
 def setup_kl_dro_bas(
-    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, dataset_dir_james, risk_free_rates_filename, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), dim: Optional[int] = None, tv_ratio: Optional[str] = None, num_folds_tv: Optional[int] = 1, overwrite: bool = False
+    experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, dataset_dir_james, risk_free_rates_filename, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), dim: Optional[int] = None, tv_ratio: Optional[str] = None, num_folds_tv: Optional[int] = 1, has_tcosts_in_cost_function: bool = False, overwrite: bool = False
 ):
     """Setup an experiment in a new directory"""
     if not experiment_dir.exists() or not overwrite:
         experiment_dir.mkdir(parents=False, exist_ok=False)
 
     # get the experiment from the name
-    experiment = get_experiment(experiment_name=experiment_name, dataset_dir_james=dataset_dir_james, risk_free_rates_filename=risk_free_rates_filename, dataset_dir=dataset_dir, dim=dim, tv_ratio=tv_ratio, num_folds_tv=num_folds_tv)
+    experiment = get_experiment(experiment_name=experiment_name, dataset_dir_james=dataset_dir_james, risk_free_rates_filename=risk_free_rates_filename, dataset_dir=dataset_dir, dim=dim, tv_ratio=tv_ratio, num_folds_tv=num_folds_tv, has_tcosts_in_cost_function=has_tcosts_in_cost_function)
 
     # write experiment file to JSON
     filepath = experiment_dir / "experiment.json"
     with open(filepath, "w", encoding="utf-8") as json_file:
         json.dump(experiment, json_file, indent=4)
 
-    if not experiment_name.is_temporal_validation() or experiment_name.has_tcosts_in_cost_function():
+    # TODO: James: has_tcosts_in_cost_function should work but it's not consistent with experiment_name.<give_boolean>() so consider changing things such that it is, although this may take more code than it's worth. Same consideration applies to other instances of has_tcosts_in_cost_function
+    if has_tcosts_in_cost_function and not experiment_name.is_temporal_validation():
+        raise NotImplementedError("Transaction cost optimisation is not necessarily implemented outside of when temporal validation is involved.")
 
-        # for the given batch size, how many batches do we need?
-        num_batches = math.ceil(float(len(experiment)) / float(batch_size))
-
-        # setup SLURM file
-        with open(
-            Path(__file__).parent / "kl_dro_bas_template.slurm", "r", encoding="utf-8"
-        ) as slurm_file:
-            slurm_string = slurm_file.read()
-        dgp_string = slurm_string.format(
-            experiment_dir=experiment_dir, num_batches_minus_one=num_batches-1, batch_size=batch_size
-        )
-        if experiment_name.is_temporal_validation():    # TODO: fix the boolean mess right here and surrounding
-            dgp_string += " --do-temporal-validation --has-tcosts-in-cost-function"
-        (experiment_dir / f"{experiment_name}.slurm").write_text(dgp_string)
-
-    else:
+    if experiment_name.is_temporal_validation() and not has_tcosts_in_cost_function:
 
         # separate into two experiments which need separate SLURM files: 
         # A runs all the splits across all epsilons,
@@ -120,6 +107,23 @@ def setup_kl_dro_bas(
         )
         use_tv_epsilon_string += " --do-temporal-validation --use-tv-epsilon"
         (experiment_dir / f"use_tv_epsilon.slurm").write_text(use_tv_epsilon_string)
+
+    else:
+
+        # for the given batch size, how many batches do we need?
+        num_batches = math.ceil(float(len(experiment)) / float(batch_size))
+
+        # setup SLURM file
+        with open(
+            Path(__file__).parent / "kl_dro_bas_template.slurm", "r", encoding="utf-8"
+        ) as slurm_file:
+            slurm_string = slurm_file.read()
+        dgp_string = slurm_string.format(
+            experiment_dir=experiment_dir, num_batches_minus_one=num_batches-1, batch_size=batch_size
+        )
+        if experiment_name.is_temporal_validation():    # TODO: James: make the booleans here and surrounding much nicer
+            dgp_string += " --do-temporal-validation --has-tcosts-in-cost-function"
+        (experiment_dir / f"{experiment_name}.slurm").write_text(dgp_string)
 
 
 @app.command(name="setup-mmd")
@@ -236,7 +240,7 @@ def run_experiment(
 
 
 @app.command(name="batch")
-def batch(experiment_dir: Path, batch_id: int, batch_size: int, only_missing: bool = False, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), npl_samples_dir: Optional[Path] = None, do_temporal_validation: bool = False, use_tv_epsilon: bool = False, has_tcosts_in_cost_function: bool = False):
+def batch(experiment_dir: Path, batch_id: int, batch_size: int, only_missing: bool = False, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), npl_samples_dir: Optional[Path] = None, do_temporal_validation: bool = False, use_tv_epsilon: Optional[bool] = False, has_tcosts_in_cost_function: bool = False):
     print(datetime.now(), "Running batch from array index", batch_id)
     print()
     filepath = experiment_dir / "experiment.json"
@@ -371,9 +375,7 @@ def process_actual_results_after_tv_for_window(total_validation_times: dict[str,
     for time_type, time in total_validation_times.items():
         results_this_replication[f"total_validation_{time_type}_time"] = time
     actual_transaction_cost = calculate_transaction_cost(prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, results_this_replication["solution"])
-    actual_portfolio_returns = results_this_replication["out_of_sample_cost"]
-    actual_portfolio_returns[0] -= actual_transaction_cost
-    results_this_replication["out_of_sample_cost"] = actual_portfolio_returns   # TODO: note somewhere that these will already have transaction costs in case you load them in .ipynb and forget and reapply them
+    results_this_replication["out_of_sample_cost"][0] -= actual_transaction_cost    # TODO: note somewhere that these will already have transaction costs in case you load them in .ipynb and forget and reapply them
     all_out_of_sample_costs_so_far += results_this_replication["out_of_sample_cost"]
     # TODO: note that 51 is specific to the risk free returns file in use (because it has 51 weekly risk-free rates up to and including the first rebalance date)
     risk_free_rates_for_testing = choose_risk_free_rates_for_testing(risk_free_rates, 51, num_test_observations, window_index)
@@ -418,7 +420,7 @@ def run(
     tv_ratio: Optional[str] = None,
     n_splits: Optional[int] = None,
     split_idx: Optional[int] = None,
-    use_tv_epsilon: bool = False,
+    use_tv_epsilon: Optional[bool] = False,
     tv_uuid_list: list[str] = [],
     uuid: str = str(uuid4()),
     verbose: bool = False,
@@ -448,14 +450,8 @@ def run(
             num_training_observations = num_observations - num_test_observations - n_splits + 1
 
         print(f"Doing {n_splits}-fold temporal-validation on split {split_idx}: training/test set size is {num_training_observations}/{num_test_observations}.")
-    
-    # elif do_cross_validation and n_splits is not None and split_idx is not None and epsilon is not None:
 
-    #     num_training_observations = get_num_observations_in_train_split(n_splits, split_idx, num_observations)
-    #     num_test_observations = num_observations - num_training_observations
-    #     print(f"Doing {n_splits}-fold cross-validation on split {split_idx}: training/test set size is {num_training_observations}/{num_test_observations}.")
-
-    # TODO: rolling: also got to adapt the non-validation flow, maybe, the one that uses the best epsilon, or rather selects it first
+    # NOTE: when temporal validation is done and this is done in a separate process for the final portfolio weighting selection than for validation, the below is done in the process for the final portfolio weighting selection and unpacks the results of the validation, currently producing useful_tv_results_{shv/rolling_validation}_all_windows for later and assigning num_observations to num_training_observations
     elif use_tv_epsilon and split_idx is None and do_temporal_validation:
         num_training_observations = num_observations
         # load the results df for each UUID in tv_uuid_list
@@ -610,6 +606,7 @@ def run(
         prev_portfolio_weighting = []
         ratio_calculator = {"sharpe": calculate_sharpe_ratio, "sortino": calculate_sortino_ratio}[tv_ratio]
         period_for_test_ratio_in_weeks = 156  # TODO: maybe allow this to be chosen dynamically
+        # TODO: James: is something similar to the below needed in the case of has_tcosts_in_cost_function? Depends on how num_validation_observations_per_window is used, I guess
         if use_tv_epsilon:
             if n_splits == 1:
                 num_validation_observations_per_window = len(list(useful_tv_results_shv_all_windows[0].values())[0]["out_of_sample_cost"])
@@ -620,42 +617,58 @@ def run(
         all_solve_start = datetime.now()
         list_of_replication_stats = []
         print(all_solve_start, "- Running all replications in series.")
+
         for j in range(num_replications):
-            # TODO: adapt the below and any other transaction costs in cost function stuff to (if justified by results) rolling validation instead of single holdout validation
-            if has_tcosts_in_cost_function: # TODO: write logic for when temporal validation is not being done, too, in case you want to see how potential curves shift when you include transaction costs in the cost function
+
+            # TODO: James: consider writing has_tcosts_in_cost_function logic for when temporal validation is not being done?
+            # TODO: James: split the below into functions (functions may already exist for some of the logic) etc.
+            if has_tcosts_in_cost_function:
+
                 best_epsilon, highest_validation_ratio = None, -float("inf")
-                total_validation_times = {"posterior": 0, "likelihood": 0, "solve": 0}  # TODO: Maybe save validation times for each epsilon rather than an overall one?
+                total_validation_times = {"posterior": 0, "likelihood": 0, "solve": 0}
                 stock_figi_list_this_window = stock_figi_lists[j]
+
                 params["include_tcosts_in_cost_function"] = True
                 params["prev_portfolio_weighting"] = prev_portfolio_weighting
                 params["prev_stock_figi_list"] = prev_stock_figi_list
                 params["stock_figi_list_this_window"] = stock_figi_list_this_window
+
                 for val_epsilon in epsilon_list:
                     params["epsilon"] = val_epsilon
+                    # NOTE: the below get_num_training_and_test_observations_shv is suitable for rolling validation as well because the number of test observations (the 1st element of the result) is currently made to be the same
                     params["num_test_observations"] = get_num_training_and_test_observations_shv(num_observations, num_test_observations)[1]
-                    validation_results = run_replication(j, problem, **params)
-                    for time_type in total_validation_times.keys():
-                        total_validation_times[time_type] += validation_results[f"{time_type}_time"]
-                    validation_transaction_cost = calculate_transaction_cost(prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, validation_results["solution"])
-                    validation_portfolio_returns = validation_results["out_of_sample_cost"]
-                    validation_portfolio_returns[0] -= validation_transaction_cost
-                    risk_free_rates_for_validation = choose_risk_free_rates_for_validation(risk_free_rates, 51, num_test_observations, len(validation_portfolio_returns), j)
-                    validation_ratio = ratio_calculator(all_out_of_sample_costs_so_far + validation_portfolio_returns, risk_free_rates_for_validation, period_for_test_ratio_in_weeks - 13 + len(validation_portfolio_returns))
+
+                    sum_of_validation_ratio_for_each_fold = 0
+                    for split_idx in n_splits:
+                        params["split_idx"] = split_idx
+
+                        validation_results = run_replication(j, problem, **params)
+
+                        for time_type in total_validation_times.keys():
+                            total_validation_times[time_type] += validation_results[f"{time_type}_time"]
+                        validation_transaction_cost = calculate_transaction_cost(prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, validation_results["solution"])
+                        validation_portfolio_returns = validation_results["out_of_sample_cost"]
+                        validation_portfolio_returns[0] -= validation_transaction_cost
+                        risk_free_rates_for_validation = choose_risk_free_rates_for_validation(risk_free_rates, 51, num_test_observations, len(validation_portfolio_returns), j, n_splits, split_idx)
+                        sum_of_validation_ratio_for_each_fold += ratio_calculator(all_out_of_sample_costs_so_far + validation_portfolio_returns, risk_free_rates_for_validation, period_for_test_ratio_in_weeks - 13 + len(validation_portfolio_returns))
+                    validation_ratio = sum_of_validation_ratio_for_each_fold / n_splits
+
                     if validation_ratio > highest_validation_ratio:
                         best_epsilon, highest_validation_ratio = val_epsilon, validation_ratio
+
+                params["split_idx"] = None
                 params["epsilon"] = best_epsilon
                 params["num_test_observations"] = num_test_observations
+
                 results = run_replication(j, problem, **params)
-                for time_type, time in total_validation_times.items():
-                    results[f"total_validation_{time_type}_time"] = time
-                actual_transaction_cost = calculate_transaction_cost(prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, results["solution"])
-                results["out_of_sample_cost"] -= actual_transaction_cost
-                all_out_of_sample_costs_so_far += results["out_of_sample_cost"]
-                risk_free_rates_for_testing = choose_risk_free_rates_for_testing(risk_free_rates, 51, num_test_observations, j)
-                actual_ratio = ratio_calculator(all_out_of_sample_costs_so_far, risk_free_rates_for_testing, period_for_test_ratio_in_weeks)
-                results[tv_ratio] = actual_ratio
+
+                results, all_out_of_sample_costs_so_far = process_actual_results_after_tv_for_window(
+                    total_validation_times, results, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, risk_free_rates, num_test_observations, j, ratio_calculator, all_out_of_sample_costs_so_far, period_for_test_ratio_in_weeks, tv_ratio
+                )
+
                 list_of_replication_stats.append(results)
                 prev_stock_figi_list, prev_portfolio_weighting = stock_figi_list_this_window, results["solution"]
+
             else:
                 if use_tv_epsilon:
                     if tv_ratio:
@@ -732,7 +745,7 @@ def run_replication(
     do_temporal_validation: bool = False,
     n_splits: Optional[int] = None,
     split_idx: Optional[int] = None,
-    use_tv_epsilon: bool = False,
+    use_tv_epsilon: Optional[bool] = False,
     uuid: str = str(uuid4()),
     verbose: bool = False,
     include_tcosts_in_cost_function: Optional[bool] = False,
@@ -773,34 +786,42 @@ def run_replication(
     else:
         raise NotImplementedError(f"Dataset not implemented: {dataset}")
     
+    # TODO: James: this may need to be changed for rolling temporal validation with transaction cost optimisation
     if do_temporal_validation and not use_tv_epsilon:
 
-        # TODO: this feels a little bit fudgey re: calculating num_training_observations in run and then again here in the if and else
-        if n_splits == 1:
+        # NOTE: the boolean in the parentheses is for run with transaction cost optimisation and rolling temporal validation, but where run_replication is called for final portfolio weighting selection (and thus doesn't have a proper split_idx passed to it)
+        if use_tv_epsilon or (include_tcosts_in_cost_function and not split_idx):
 
-            num_training_observations = num_observations - num_test_observations
-            train_index = np.arange(num_training_observations)
-            test_index = np.arange(num_training_observations, num_training_observations + num_test_observations)
+            pass
 
         else:
 
-            num_training_observations = num_observations - num_test_observations - n_splits + 1
-            train_index = np.arange(split_idx, split_idx + num_training_observations)
-            test_index = np.arange(split_idx + num_training_observations, split_idx + num_training_observations + num_test_observations)
+            # TODO: this feels a little bit fudgey re: calculating num_training_observations in run and then again here in the if and else
+            if n_splits == 1:
 
-        num_observations = num_training_observations    # NOTE: did this so that, like in Patrick's branch, only num_training_observations is passed to get_kl_bdro_problem when getting the problem for kl_empirical below
-        # TODO: the above, however, will also change num_observations for some empirical mmd stuff below, but since that will now be using data which is tied to num_training_observations, I think that should be fine, but check before ever merging these changes with main
-    
-        # else:
+                num_training_observations = num_observations - num_test_observations
+                train_index = np.arange(num_training_observations)
+                test_index = np.arange(num_training_observations, num_training_observations + num_test_observations)
 
-        #     # NOTE we use a different random number generator for CV because we do not want to contaminate the test samples
-        #     # and because we want to reproduce the same CV splits for each replication
-        #     cv_random_state = np.random.RandomState(seed=replication + 1000)
-        #     kf = KFold(n_splits=n_splits, shuffle=True, random_state=cv_random_state)
-        #     train_index, test_index = list(kf.split(data))[split_idx]
+            else:
 
-        # NOTE: make sure not to allow data to be modified and then select data_eval from data
-        data, data_eval = data[train_index], data[test_index]
+                num_training_observations = num_observations - num_test_observations - n_splits + 1
+                train_index = np.arange(split_idx, split_idx + num_training_observations)
+                test_index = np.arange(split_idx + num_training_observations, split_idx + num_training_observations + num_test_observations)
+
+            num_observations = num_training_observations    # NOTE: did this so that, like in Patrick's branch, only num_training_observations is passed to get_kl_bdro_problem when getting the problem for kl_empirical below
+            # TODO: the above, however, will also change num_observations for some empirical mmd stuff below, but since that will now be using data which is tied to num_training_observations, I think that should be fine, but check before ever merging these changes with main
+        
+            # else:
+
+            #     # NOTE we use a different random number generator for CV because we do not want to contaminate the test samples
+            #     # and because we want to reproduce the same CV splits for each replication
+            #     cv_random_state = np.random.RandomState(seed=replication + 1000)
+            #     kf = KFold(n_splits=n_splits, shuffle=True, random_state=cv_random_state)
+            #     train_index, test_index = list(kf.split(data))[split_idx]
+
+            # NOTE: make sure not to allow data to be modified and then select data_eval from data
+            data, data_eval = data[train_index], data[test_index]
 
     dgp_time = (datetime.now() - dgp_start).total_seconds()
 
