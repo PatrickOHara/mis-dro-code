@@ -1,7 +1,8 @@
 """Optimisation code"""
 
-from typing import Callable
+from typing import Callable, Optional
 import cvxpy as cp
+import numpy as np
 
 from bayesian_dro.Bayesian_DRO_continuous import LARGEST_X, SMALLEST_X
 
@@ -12,6 +13,10 @@ def get_kl_bdro_problem(
     num_likelihood_samples: int,
     dim: int = 1,
     is_portfolio: bool = False,
+    include_tcosts_in_cost_function: bool = False,
+    prev_portfolio_weighting: Optional[list[float]] = None,
+    prev_stock_figi_list: Optional[list[str]] = None,
+    stock_figi_list_this_window: Optional[list[str]] = None
 ) -> cp.Problem:
     """Bayesian DRO as a cvxpy optimisaton problem.
 
@@ -51,6 +56,23 @@ def get_kl_bdro_problem(
         for i in range(num_posterior_samples)
     ]
 
+    # TODO: James: may be worth refactoring some of the below with what's in portfolio.calculate_transaction_cost
+    if include_tcosts_in_cost_function:
+        # TODO: James: consider catching errors regarding prev_stock_figi_list and prev_portfolio_weighting length mistmatches etc.
+        prev_map = dict(zip(prev_stock_figi_list, prev_portfolio_weighting))
+        curr_set = set(stock_figi_list_this_window)
+        y_aligned = np.array(
+            [prev_map.get(figi, 0.0) for figi in stock_figi_list_this_window],
+            dtype=float,
+        )
+        prev_only_cost = sum(
+            abs(prev_map[figi]) for figi in prev_map if figi not in curr_set
+        )
+        y = cp.Constant(y_aligned)
+        u = 0.005 / 13 * (cp.norm1(x - y) + prev_only_cost)
+    else:
+        u = 0.0
+
     # create the objective function for the Bayesian DRO problem
     # NOTE we pass the max function to f_recession because,
     # as lam -> 0, then lam * LSE(t[i] / lam) tends to max(t[i]).
@@ -70,7 +92,8 @@ def get_kl_bdro_problem(
     constraints = [
         x >= SMALLEST_X,
         # x <= LARGEST_X,   # NOTE this can cause some unexpected behaviour for large epsilon in newsvendor problem
-    ] + [decision_objective(x, xi[i]) <= t[i] for i in range(num_posterior_samples)]
+    ] + [decision_objective(x, xi[i]) + u <= t[i] for i in range(num_posterior_samples)]
+    # NOTE: James: decision_objective's return type is a vector of length num_likelihood_samples, one for each stock return vector in xi[i]; u is a scalar broadcast such that it is added to each element in the returned vector, as desired
 
     # TODO this is a temporary fix for portfolio : this whole function should
     # really be a class that one can inherit from and add custom constraints

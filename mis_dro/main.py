@@ -862,10 +862,20 @@ def run_replication(
     # NOTE: not changing num_posterior_samples or num_likelihood_samples in the case of validation run because that would fundamentally change the optimiser and compromise the integrity of validation itself
     if dataset == "james":
         if algorithm == "kl_pp":
-            problem = get_kl_bdro_problem(portfolio_objective_cvxpy, num_posterior_samples, num_likelihood_samples, dim=dim, is_portfolio=True) # TODO: enable transaction costs, but should these be put into portfolio_objective_cvxpy or get_kl_bdro_problem, or does it matter?
-        # TODO: make sure the below is okay for validation
+            problem = get_kl_bdro_problem(
+                portfolio_objective_cvxpy,
+                num_posterior_samples,
+                num_likelihood_samples,
+                dim=dim,
+                is_portfolio=True,
+                include_tcosts_in_cost_function=include_tcosts_in_cost_function,
+                prev_portfolio_weighting=prev_portfolio_weighting,
+                prev_stock_figi_list=prev_stock_figi_list,
+                stock_figi_list_this_window=stock_figi_list_this_window
+            )
+        # TODO: make sure the below is okay for validation and include transaction costs for cost function when needed
         elif algorithm == "kl_empirical":
-            problem = get_kl_bdro_problem(portfolio_objective_cvxpy, 1, num_observations, dim=dim, is_portfolio=True)   # TODO: enable transaction costs later
+            problem = get_kl_bdro_problem(portfolio_objective_cvxpy, 1, num_observations, dim=dim, is_portfolio=True)
         elif algorithm in ("kl_bdro", "kl_dro_bas") and likelihood == "multivariate_normal":
             problem = get_kl_portfolio_problem(
                 dim,
