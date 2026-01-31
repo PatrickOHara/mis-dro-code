@@ -788,7 +788,7 @@ def run_replication(
         raise NotImplementedError(f"Dataset not implemented: {dataset}")
     
     # TODO: James: this may need to be changed for rolling temporal validation with transaction cost optimisation
-    if do_temporal_validation and not use_tv_epsilon:
+    if do_temporal_validation:
 
         # NOTE: the boolean in the parentheses is for run with transaction cost optimisation and rolling temporal validation, but where run_replication is called for final portfolio weighting selection (and thus doesn't have a proper split_idx passed to it)
         if use_tv_epsilon or (include_tcosts_in_cost_function and not split_idx):
