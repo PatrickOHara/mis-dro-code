@@ -910,7 +910,7 @@ def run_replication(
 
     if algorithm == "kl_dro_bas" and (
         dataset == "portfolio" or dataset == "portfolio_synthetic" or dataset == "james"
-        or (dataset == "newsvendor" and do_temporal_validation)
+        or (dataset == "newsvendor" and do_temporal_validation) # TODO: James: should do_temporal_validation be in the parentheses here?
     ):
         # NOTE under the above conditions, having values of epsilon just above
         # the constant is benefitial for obtaining a small mean
