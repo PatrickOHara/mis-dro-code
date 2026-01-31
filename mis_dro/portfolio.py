@@ -101,13 +101,12 @@ def get_cvxpy_transaction_cost_addend(
     # TODO: James: consider catching errors regarding prev_stock_figi_list and prev_portfolio_weighting length mistmatches etc.
 
     prev_map = dict(zip(prev_stock_figi_list, prev_portfolio_weighting))
-    curr_set = set(stock_figi_list_this_window)
     y_aligned = np.array(
         [prev_map.get(figi, 0.0) for figi in stock_figi_list_this_window],
         dtype=float,
     )
     prev_only_cost = sum(
-        abs(prev_map[figi]) for figi in prev_map if figi not in curr_set
+        abs(prev_map[figi]) for figi in prev_map if figi not in set(stock_figi_list_this_window)    # TODO: James: abs shouldn't be required in hindsight, but including it shouldn't make a functional difference either
     )
     y = cp.Constant(y_aligned)
     return 0.005 / 13 * (cp.norm1(x - y) + prev_only_cost)
