@@ -58,6 +58,7 @@ app = typer.Typer(name="misdro")
 
 @app.command(name="setup-kl")
 def setup_kl_dro_bas(
+    # TODO: James: I reckon dataset_dir_james not having a default here (e.g. None) could cause issues, but see whatfunction signature was like before
     experiment_name: ExperimentName, experiment_dir: Path, batch_size: int, dataset_dir_james, risk_free_rates_filename, dataset_dir: Path = Path("~/datasets/misdro/mmc2"), dim: Optional[int] = None, tv_ratio: Optional[str] = None, num_folds_tv: Optional[int] = 1, has_tcosts_in_cost_function: bool = False, overwrite: bool = False
 ):
     """Setup an experiment in a new directory"""
