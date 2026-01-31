@@ -623,7 +623,7 @@ def run(
 
             # TODO: James: consider writing has_tcosts_in_cost_function logic for when temporal validation is not being done?
             # TODO: James: split the below into functions (functions may already exist for some of the logic) etc.
-            if has_tcosts_in_cost_function:
+            if has_tcosts_in_cost_function and tv_ratio:
 
                 best_epsilon, highest_validation_ratio = None, -float("inf")
                 total_validation_times = {"posterior": 0, "likelihood": 0, "solve": 0}
@@ -636,7 +636,7 @@ def run(
 
                 for val_epsilon in epsilon_list:
                     params["epsilon"] = val_epsilon
-                    # NOTE: the below get_num_training_and_test_observations_shv is suitable for rolling validation as well because the number of test observations (the 1st element of the result) is currently made to be the same
+                    # NOTE: the below get_num_training_and_test_observations_shv is suitable for rolling validation as well because the number of test observations (the 1th element of the result) is currently made to be the same
                     params["num_test_observations"] = get_num_training_and_test_observations_shv(num_observations, num_test_observations)[1]
 
                     sum_of_validation_ratio_for_each_fold = 0
@@ -651,9 +651,9 @@ def run(
                         validation_portfolio_returns = validation_results["out_of_sample_cost"]
                         validation_portfolio_returns[0] -= validation_transaction_cost
                         risk_free_rates_for_validation = choose_risk_free_rates_for_validation(risk_free_rates, 51, num_test_observations, len(validation_portfolio_returns), j, n_splits, split_idx)
-                        sum_of_validation_ratio_for_each_fold += ratio_calculator(all_out_of_sample_costs_so_far + validation_portfolio_returns, risk_free_rates_for_validation, period_for_test_ratio_in_weeks - 13 + len(validation_portfolio_returns))
-                    validation_ratio = sum_of_validation_ratio_for_each_fold / n_splits
+                        sum_of_validation_ratio_for_each_fold += ratio_calculator(all_out_of_sample_costs_so_far + validation_portfolio_returns, risk_free_rates_for_validation, period_for_test_ratio_in_weeks - 13 + len(validation_portfolio_returns))   # TODO: James: might be best to replace 13 with num_test_observations? Maybe elsewhere as well?
 
+                    validation_ratio = sum_of_validation_ratio_for_each_fold / n_splits
                     if validation_ratio > highest_validation_ratio:
                         best_epsilon, highest_validation_ratio = val_epsilon, validation_ratio
 
