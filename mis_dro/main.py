@@ -640,7 +640,7 @@ def run(
                     params["num_test_observations"] = get_num_training_and_test_observations_shv(num_observations, num_test_observations)[1]
 
                     sum_of_validation_ratio_for_each_fold = 0
-                    for split_idx in n_splits:
+                    for split_idx in range(n_splits):
                         params["split_idx"] = split_idx
 
                         validation_results = run_replication(j, problem, **params)
