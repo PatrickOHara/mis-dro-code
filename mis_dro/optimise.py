@@ -5,7 +5,7 @@ import cvxpy as cp
 import numpy as np
 
 from bayesian_dro.Bayesian_DRO_continuous import LARGEST_X, SMALLEST_X
-from portfolio import get_cvxpy_transaction_cost_addend
+from .portfolio import get_cvxpy_transaction_cost_addend
 
 
 def get_kl_bdro_problem(
