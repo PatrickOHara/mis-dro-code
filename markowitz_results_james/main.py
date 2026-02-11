@@ -225,7 +225,6 @@ def get_data_for_rolling_validation(markowitz_training_df, test_df, num_folds, d
         normal_dro_training_df = dro_windows[window_index][0]
 
         # NOTE: first, subtract the Markowitz normal training df size from the DRO normal training df size. validation_start_index_for_fold is correct relative to the start of the Markowitz normal training df. In the DRO normal training df, this start is earlier by the difference mentioned. Therefore, validation_start_index_for_fold should be increased by this difference before using it to draw from the normal DRO training_df, while ensuring that rolling_validation_validation_df_size is still the size of the resulting slice
-        print(len(normal_dro_training_df) - len(markowitz_training_df)) # TODO: make sure this comes out as 52 - 40 = 12
         validation_start_index_for_fold_in_normal_dro_training_df = validation_start_index_for_fold - (len(normal_dro_training_df) - len(markowitz_training_df))
 
         rolling_validation_validation_df = normal_dro_training_df[validation_start_index_for_fold_in_normal_dro_training_df: validation_start_index_for_fold_in_normal_dro_training_df + rolling_validation_validation_df_size]
