@@ -86,8 +86,8 @@ def get_kl_bdro_problem(
     constraints = [
         x >= SMALLEST_X,
         # x <= LARGEST_X,   # NOTE this can cause some unexpected behaviour for large epsilon in newsvendor problem
-    ] + [decision_objective(x, xi[i]) + u <= t[i] for i in range(num_posterior_samples)]
-    # NOTE: James: decision_objective's return type is a vector of length num_likelihood_samples, one for each stock return vector in xi[i]; u is a scalar broadcast such that it is added to each element in the returned vector, as desired
+    ] + [decision_objective(x, xi[i]) + u <= t[i] for i in range(num_posterior_samples)]    # NOTE: James: x will be a vector of dim numbers, xi[i] will have num_likelihood_samples rows, each of length dim, decision_objective will return a vector with num_likelihood_samples elements, one for each stock return vector in xi[i]
+    # NOTE: James: u is a scalar broadcast such that it is added to each element in the returned vector, as desired
 
     # TODO this is a temporary fix for portfolio : this whole function should
     # really be a class that one can inherit from and add custom constraints
