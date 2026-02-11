@@ -910,18 +910,27 @@ def tv_kl_portfolio_james(dataset_dir_james, risk_free_rates_filename, dim: Opti
     # TODO: maybe make dynamic or move to .constants
     epsilon_list = (1e-05, 0.001, 1)
 
-    for algorithm in ["kl_dro_bas", "kl_bdro", "kl_pp"]:
-        likelihood = "multivariate_normal"
-        posterior = "normal_inverse_wishart"
-        inference = "bayes"
+    for algorithm in ["kl_dro_bas", "kl_bdro", "kl_pp", "kl_empirical"]:
+
+        if algorithm == "kl_empirical":
+            total_model_samples_list = [0]
+            likelihood = "empirical"
+            posterior = "empirical"
+            inference = "empirical"
+
+        else:
 
         # NOTE: in what I took from Patrick's branch, total_model_samples was fixed to 900 instead of the below. This doesn't make a difference in the case of kl_dro_bas: num_likelihood_samples is now 1 rather than 900 from it, but this variable isn't actually used due to closed-form, and num_posterior_samples ends up as 1 either way. In the case of kl_pp, it's just the case that 3600 is being left out, which may be good regarding consistency with BDRO. And for BDRO, it's only 900 below anyway.
-        if algorithm == "kl_dro_bas":
-            total_model_samples_list = [1]
-        elif algorithm == "kl_pp":
-            total_model_samples_list = [900, 3600]
-        elif algorithm == "kl_bdro":
-            total_model_samples_list = [900]
+            if algorithm == "kl_dro_bas":
+                total_model_samples_list = [1]
+            elif algorithm == "kl_pp":
+                total_model_samples_list = [900, 3600]
+            elif algorithm == "kl_bdro":
+                total_model_samples_list = [900]
+
+            likelihood = "multivariate_normal"
+            posterior = "normal_inverse_wishart"
+            inference = "bayes"
 
         for total_model_samples in total_model_samples_list:
             base_params = {

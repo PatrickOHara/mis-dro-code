@@ -895,7 +895,7 @@ def run_replication(
                 prev_portfolio_weighting=prev_portfolio_weighting,
                 stock_figi_list_this_window=stock_figi_list_this_window
             )
-        # TODO: make sure the below is okay for validation and include transaction costs for cost function when needed
+        # TODO: adapt the below for rolling temporal validation with transaction cost optimisation
         elif algorithm == "kl_empirical":
             problem = get_kl_bdro_problem(portfolio_objective_cvxpy, 1, num_observations, dim=dim, is_portfolio=True)
         elif algorithm in ("kl_bdro", "kl_dro_bas") and likelihood == "multivariate_normal":
@@ -955,7 +955,13 @@ def run_replication(
         else:
             # set parameters then solve
             problem.param_dict["epsilon_minus_constant"].value = np.array([epsilon_prime])
-            xi = xi.reshape((num_posterior_samples, num_likelihood_samples, dim))
+            num_likelihood_samples_accurate = num_likelihood_samples    # TODO: James: this is a fudge, basically, as things stand, in a rolling temporal validation replication for empirical DRO, the passed num_likelihood_samples is wrong, it should be the same as num_training_observations
+            if algorithm == "kl_empirical" and do_temporal_validation:
+                if use_tv_epsilon or (include_tcosts_in_cost_function and not split_idx):
+                    pass
+                else:
+                    num_likelihood_samples_accurate = num_training_observations
+            xi = xi.reshape((num_posterior_samples, num_likelihood_samples_accurate, dim))
             for i in range(num_posterior_samples):
                 problem.param_dict[f"xi_{i}"].value = xi[i]
             # NOTE the MOSEK 'accept_unknown' argument is needed due to https://github.com/cvxpy/cvxpy/pull/2117
