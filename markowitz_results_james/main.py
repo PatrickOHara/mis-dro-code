@@ -222,8 +222,13 @@ def get_data_for_rolling_validation(markowitz_training_df, test_df, num_folds, d
 
         rolling_validation_training_df = markowitz_training_df[fold_index: validation_start_index_for_fold]
 
-        # TODO: IMPORTANT: fix how the slice has been done here, for now it is wrong because the way it is done assumes dro_windows[window_index][0] has the same size as markowitz_training_df, I believe.
-        rolling_validation_validation_df = dro_windows[window_index][0][validation_start_index_for_fold: validation_start_index_for_fold + rolling_validation_validation_df_size]
+        normal_dro_training_df = dro_windows[window_index][0]
+
+        # NOTE: first, subtract the Markowitz normal training df size from the DRO normal training df size. validation_start_index_for_fold is correct relative to the start of the Markowitz normal training df. In the DRO normal training df, this start is earlier by the difference mentioned. Therefore, validation_start_index_for_fold should be increased by this difference before using it to draw from the normal DRO training_df, while ensuring that rolling_validation_validation_df_size is still the size of the resulting slice
+        print(len(normal_dro_training_df) - len(markowitz_training_df)) # TODO: make sure this comes out as 52 - 40 = 12
+        validation_start_index_for_fold_in_normal_dro_training_df = validation_start_index_for_fold - (len(normal_dro_training_df) - len(markowitz_training_df))
+
+        rolling_validation_validation_df = normal_dro_training_df[validation_start_index_for_fold_in_normal_dro_training_df: validation_start_index_for_fold_in_normal_dro_training_df + rolling_validation_validation_df_size]
 
         # TODO: note that 51 is specific to the risk free returns file in use (because it has 51 weekly risk-free rates up to and including the first rebalance date)
         risk_free_rates_for_validation = choose_risk_free_rates_for_rolling_validation(risk_free_rates, 51, 13, len(rolling_validation_validation_df), window_index, num_folds, fold_index)
