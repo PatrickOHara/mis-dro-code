@@ -897,7 +897,17 @@ def run_replication(
             )
         # TODO: adapt the below for rolling temporal validation with transaction cost optimisation
         elif algorithm == "kl_empirical":
-            problem = get_kl_bdro_problem(portfolio_objective_cvxpy, 1, num_observations, dim=dim, is_portfolio=True)
+            problem = get_kl_bdro_problem(
+                portfolio_objective_cvxpy,
+                1,
+                num_observations,
+                dim=dim,
+                is_portfolio=True,
+                include_tcosts_in_cost_function=include_tcosts_in_cost_function,
+                prev_stock_figi_list=prev_stock_figi_list,
+                prev_portfolio_weighting=prev_portfolio_weighting,
+                stock_figi_list_this_window=stock_figi_list_this_window
+            )
         elif algorithm in ("kl_bdro", "kl_dro_bas") and likelihood == "multivariate_normal":
             problem = get_kl_portfolio_problem(
                 dim,
