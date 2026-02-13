@@ -895,7 +895,6 @@ def run_replication(
                 prev_portfolio_weighting=prev_portfolio_weighting,
                 stock_figi_list_this_window=stock_figi_list_this_window
             )
-        # TODO: adapt the below for rolling temporal validation with transaction cost optimisation
         elif algorithm == "kl_empirical":
             problem = get_kl_bdro_problem(
                 portfolio_objective_cvxpy,
