@@ -393,7 +393,7 @@ def get_num_training_and_test_observations_shv(num_observations: int, num_test_o
 def run(
     experiment_dir: Path,
     dataset_dir_james,
-    risk_free_rates_filename,
+    risk_free_rates_filename = None,
     algorithm: str = "kl_bdro",
     contamination: float = CONTAMINATION_LEVEL,
     dataset: str = "newsvendor",
