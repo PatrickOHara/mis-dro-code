@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#SBATCH --job-name=markowitz
+#SBATCH --job-name=markowitz-no-hyperparameter-optimisation
 #SBATCH --partition=parrot
 #SBATCH --account=legacy
 #SBATCH --cpus-per-task=1
