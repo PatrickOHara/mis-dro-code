@@ -2,6 +2,7 @@
 #
 #SBATCH --job-name=kl_portfolio_james-2008-to-2025-parrot
 #SBATCH --partition=parrot
+#SBATCH --account=legacy
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=20000
 #SBATCH --time=2-00:00:00
