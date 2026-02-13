@@ -1,11 +1,11 @@
 #!/bin/bash
 #
-#SBATCH --job-name=markowitz
+#SBATCH --job-name=markowitz-shv
 #SBATCH --partition=parrot
 #SBATCH --account=legacy
 #SBATCH --array=0-1
 #SBATCH --cpus-per-task=1
-#SBATCH --mem-per-cpu=10000
+#SBATCH --mem-per-cpu=20000
 #SBATCH --time=2-00:00:00
 #
 #SBATCH --mail-type=END,FAIL,TIME_LIMIT_80 # Events to send email on, remove if you don't want this
@@ -18,4 +18,4 @@ RATIO_TYPES=("sharpe" "sortino")
 RATIO=${RATIO_TYPES[$SLURM_ARRAY_TASK_ID]}
 
 # TODO: Note that there are other import parameters set directly in the script, maybe bring them up here
-srun python /dcs/pg24/u5674159/mis-dro-code/markowitz_results_james/main.py --num-folds 10 --ratio-type $RATIO
+srun python /dcs/pg24/u5674159/mis-dro-code/markowitz_results_james/main.py --num-folds 1 --ratio-type $RATIO
