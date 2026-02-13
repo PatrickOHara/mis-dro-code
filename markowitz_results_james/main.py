@@ -364,4 +364,4 @@ if num_folds_for_rolling_validation:
         else:
             do_markowitz_run_with_rolling_validation_using_ratio_as_metric(markowitz_djia_windows_filename, dro_djia_windows_filename, risk_free_returns_filename, lambdas, ratio_type, save, using_ipynb, f"results_for_best_lambdas_from_rolling_validation_{num_folds_for_rolling_validation}_folds", include_transaction_costs_in_cost_function, num_folds_for_rolling_validation)
 else:
-    do_markowitz_run_without_validation(markowitz_djia_windows_filename, lambdas, False, using_ipynb, "results_for_multiple_lambdas")
+    do_markowitz_run_without_validation(markowitz_djia_windows_filename, lambdas, save, using_ipynb, "results_for_multiple_lambdas")

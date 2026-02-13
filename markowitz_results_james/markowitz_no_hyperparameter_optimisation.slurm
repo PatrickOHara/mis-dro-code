@@ -4,7 +4,7 @@
 #SBATCH --partition=parrot
 #SBATCH --account=legacy
 #SBATCH --cpus-per-task=1
-#SBATCH --mem-per-cpu=10000
+#SBATCH --mem-per-cpu=20000
 #SBATCH --time=2-00:00:00
 #
 #SBATCH --mail-type=END,FAIL,TIME_LIMIT_80 # Events to send email on, remove if you don't want this
