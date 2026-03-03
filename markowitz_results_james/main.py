@@ -37,6 +37,11 @@ include_transaction_costs_in_cost_function = args.optimise_transaction_costs
 # === DO NOT CHANGE THIS ACCIDENTALLY ===
 ##############################################################################################
 
+# Note on reproducibility:
+# This script does not use any randomness. The SLSQP optimizer is deterministic
+# given fixed data, initial conditions, and package versions.
+# Therefore, no random seed is required for reproducibility.
+
 # TODO: cite https://github.com/BorisForce/PyPortfolioModels/blob/main/Min_Mean_Variance/Min_Mean_Variance_model.py for code if necessary
 def mean_variance_opt(Sigma: np.ndarray, mu: np.ndarray, risk_aversion: float, include_transaction_costs_in_cost_function, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list):
     """
@@ -56,6 +61,7 @@ def mean_variance_opt(Sigma: np.ndarray, mu: np.ndarray, risk_aversion: float, i
     w0 = np.ones(n) / n
     
     res = minimize(objective, w0, method='SLSQP', bounds=bounds, constraints=constraints)
+
     return res.x
 
 def do_markowitz(training_df, test_df, risk_aversion_hyperparameter, ratio_type, all_out_of_sample_costs_so_far, risk_free_rates, period_for_ratio_in_weeks, include_transaction_costs_in_portfolio_returns, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, include_transaction_costs_in_cost_function):
