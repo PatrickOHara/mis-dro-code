@@ -1013,6 +1013,7 @@ def run_replication(
         if dataset == "newsvendor":
             out_of_sample_cost = newsvendor_cost_cvxpy(solution, data_eval.reshape((num_test_observations, dim))).value
         elif dataset in ("portfolio", "portfolio_synthetic", "james"):
+            # TODO (pwd): when dataset == "james", create a new Python list with simple OOS portfolio returns featuring, after the first one, drifted portfolio weightings, making sure to renormalise the portfolio weighting (make its sum 1, probably don't need to make sure its elements are >= 0 but could throw an error if any new portfolio weighting isn't) each time it drifts. Then, assign this list to a variable called oos_portfolio_returns_with_weighting_drift
             out_of_sample_cost = data_eval @ solution
         else:
             raise NotImplementedError(f"Out-of-sample cost for dataset '{dataset}' not implemented")
@@ -1030,6 +1031,8 @@ def run_replication(
         "log_partition_constant": log_partition_constant,
         "out_of_sample_cost": list(out_of_sample_cost),
     }
+
+    # TODO (pwd): if dataset == "james", results["oos_portfolio_returns_with_weighting_drift"] = oos_portfolio_returns_with_weighting_drift
 
     return results
 

@@ -114,7 +114,7 @@ def algorithm_inference_style(algorithm: str, inference: str, label_inference: b
         "color": AlgorithmColor[algorithm],
     }
 
-
+# TODO (pwd): this function just uses out_of_sample_var/mean, not oos_var/mean_with_weighting_drift
 def mean_variance_plot(
     axis: mpl.axis.Axis,
     df: pd.DataFrame,
@@ -180,6 +180,7 @@ def mean_variance_plot(
                     color=kwargs["color"],
                 )
 
+# TODO (pwd): this function just uses out_of_sample_var/mean, not oos_var/mean_with_weighting_drift
 def is_minimise_pareto_front(out_of_sample_var, out_of_sample_mean):
     """Returns true if the point lies on the Pareto front of a minimisation problem"""
     assert out_of_sample_var.shape == out_of_sample_mean.shape
@@ -193,6 +194,7 @@ def is_minimise_pareto_front(out_of_sample_var, out_of_sample_mean):
         pareto.append(point_is_pareto)
     return pareto
 
+# TODO (pwd): this function just uses out_of_sample_var/mean, not oos_var/mean_with_weighting_drift
 def is_maximise_pareto_front(out_of_sample_var, out_of_sample_mean):
     """Returns true if the point lies on the Pareto front of a maximisation problem"""
     assert out_of_sample_var.shape == out_of_sample_mean.shape
@@ -223,6 +225,7 @@ def get_agg_df(results_df: pd.DataFrame, gb_cols: list[str], temporal_validation
         "mean_sample_time": pd.NamedAgg(column="sample_time", aggfunc=np.mean),
         "std_sample_time": pd.NamedAgg(column="sample_time", aggfunc=np.std),
     }
+    # TODO (pwd): if oos_portfolio_returns_with_weighting_drift is a column in gb, update agg_dict by creating values for the keys oos_mean_with_weighting_drift, oos_var_with_weighting_drift, sum_of_in_group_var_with_weighting_drift and var_of_in_group_mean_with_weighting_drift, using the new columns
     if temporal_validation:
         agg_dict.update({
             "mean_total_validation_solve_time": pd.NamedAgg(column="total_validation_solve_time", aggfunc=np.mean),
@@ -269,10 +272,12 @@ def preprocess_results_df(results_df: pd.DataFrame, dgp: str, dataset: str = "ne
     # convert strings into list of floats where necessary
     processed_df["out_of_sample_cost"] = processed_df["out_of_sample_cost"].map(lambda x: convert_str_to_float_list(x, num_test_observations))
     processed_df["solution"] = processed_df["solution"].map(lambda x: convert_str_to_float_list(x, dim))
+    # TODO (pwd): if oos_portfolio_returns_with_weighting_drift is a key in processed_df, do processed_df["oos_portfolio_returns_with_weighting_drift"] = processed_df["oos_portfolio_returns_with_weighting_drift"].map(lambda x: convert_str_to_float_list(x, num_test_observations))
 
     # calculate the in-group mean and in-group variance for each replication
     processed_df["in_group_mean"] = processed_df["out_of_sample_cost"].map(np.mean)
     processed_df["in_group_var"] = processed_df["out_of_sample_cost"].map(lambda x: np.var(x, ddof=1))
+    # TODO (pwd): if oos_portfolio_returns_with_weighting_drift is a key in processed_df, add the in_group_mean_with_weighting_drift and in_group_var_with_weighting_drift with values calculated as above, respectively, but using oos_portfolio_returns_with_weighting_drift instead of out_of_sample_cost
 
     # return preprocessed dataframe
     return processed_df
