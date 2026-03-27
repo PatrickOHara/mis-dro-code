@@ -671,6 +671,7 @@ def run(
 
                 list_of_replication_stats.append(results)
                 prev_stock_figi_list, prev_portfolio_weighting = stock_figi_list_this_window, results["solution"]
+                # TODO (pwd): above, replace results["solution"] with results["drifted_weighting"]
 
             else:
                 if use_tv_epsilon:
@@ -693,6 +694,7 @@ def run(
                     results_this_replication, all_out_of_sample_costs_so_far = process_actual_results_after_tv_for_window(total_validation_times, results_this_replication, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, risk_free_rates, num_test_observations, j, ratio_calculator, all_out_of_sample_costs_so_far, period_for_test_ratio_in_weeks, tv_ratio)
                     prev_stock_figi_list = stock_figi_list_this_window
                     prev_portfolio_weighting = results_this_replication["solution"]
+                    # TODO (pwd): above, replace "solution" with "drifted_weighting"
                 list_of_replication_stats.append(results_this_replication)
         all_solve_end = datetime.now()
         print(all_solve_end, "- Finished solving all replications in series. Total solve time is", (all_solve_end - all_solve_start).total_seconds())
@@ -1016,6 +1018,7 @@ def run_replication(
             out_of_sample_cost = newsvendor_cost_cvxpy(solution, data_eval.reshape((num_test_observations, dim))).value
         elif dataset in ("portfolio", "portfolio_synthetic", "james"):
             # TODO (pwd): when dataset == "james", create a new Python list with simple OOS portfolio returns featuring, after the first one, drifted portfolio weightings, making sure to renormalise the portfolio weighting (make its sum 1, probably don't need to make sure its elements are >= 0 but could throw an error if any new portfolio weighting isn't) each time it drifts. Then, assign this list to a variable called oos_portfolio_returns_with_weighting_drift
+            # TODO (pwd): when dataset == "james", calculate the drifted (but renormalised) portfolio weighting using solution and data_eval; can probably do so alongside getting oos_portfolio_returns_with_weighting_drift as mentioned above. Call it drifted_weighting
             out_of_sample_cost = data_eval @ solution
         else:
             raise NotImplementedError(f"Out-of-sample cost for dataset '{dataset}' not implemented")
@@ -1035,6 +1038,7 @@ def run_replication(
     }
 
     # TODO (pwd): if dataset == "james", results["oos_portfolio_returns_with_weighting_drift"] = oos_portfolio_returns_with_weighting_drift
+    # TODO (pwd): if dataset == "james", results["drifted_weighting"] = drifted_weighting
 
     return results
 

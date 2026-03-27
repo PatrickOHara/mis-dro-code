@@ -271,8 +271,9 @@ def preprocess_results_df(results_df: pd.DataFrame, dgp: str, dataset: str = "ne
 
     # convert strings into list of floats where necessary
     processed_df["out_of_sample_cost"] = processed_df["out_of_sample_cost"].map(lambda x: convert_str_to_float_list(x, num_test_observations))
-    processed_df["solution"] = processed_df["solution"].map(lambda x: convert_str_to_float_list(x, dim))
     # TODO (pwd): if oos_portfolio_returns_with_weighting_drift is a key in processed_df, do processed_df["oos_portfolio_returns_with_weighting_drift"] = processed_df["oos_portfolio_returns_with_weighting_drift"].map(lambda x: convert_str_to_float_list(x, num_test_observations))
+    processed_df["solution"] = processed_df["solution"].map(lambda x: convert_str_to_float_list(x, dim))
+    # TODO (pwd): if drifted_weighting is a key in processed_df, processed_df["drifted_weighting"] = processed_df["drifted_weighting"].map(lambda x: convert_str_to_float_list(x, dim))
 
     # calculate the in-group mean and in-group variance for each replication
     processed_df["in_group_mean"] = processed_df["out_of_sample_cost"].map(np.mean)
