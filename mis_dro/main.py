@@ -482,6 +482,7 @@ def run(
                 best_epsilons = (
                     result_df.reset_index()
                             .assign(mean_cost=result_df["out_of_sample_cost"].apply(np.mean))
+                            # TODO (pwd): EXCEPT for instances in run_replication, replace every instance of out_of_sample_cost (either as a variable name or in a string) with oos_portfolio_returns_with_weighting_drift
                             .groupby("replication")
                             .apply(lambda g: g.loc[g["mean_cost"].idxmax(), "epsilon"])
                 )
@@ -602,6 +603,7 @@ def run(
         with open(risk_free_rates_filename, "rb") as f:
             risk_free_rates = pickle.load(f)
         all_out_of_sample_costs_so_far = []
+        # TODO (pwd): replace all instances of all_out_of_sample_costs_so_far in this file with all_out_of_sample_costs_so_far_with_weighting_drift
         # TODO: maybe enforce for the same index in the below lists to refer to the same stock
         prev_stock_figi_list = []
         prev_portfolio_weighting = []
