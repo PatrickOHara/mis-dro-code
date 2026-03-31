@@ -3,6 +3,7 @@ import time
 import pandas as pd
 import yfinance as yf
 import json
+from collections import defaultdict
 
 # NOTE: "initial" DJIA membership
 # Source: Wikipedia "Historical components of the Dow Jones Industrial Average" (https://en.wikipedia.org/wiki/Historical_components_of_the_Dow_Jones_Industrial_Average)
@@ -59,6 +60,7 @@ name_to_canonical = {
     "General Electric Company": "General Electric",
     "United Technologies Corporation": "United Technologies",
     "Exxon Corporation": "ExxonMobil",
+    "Westinghouse Electric Corporation": "Westinghouse Electric"
 }
 
 # NOTE: DJIA change events
@@ -301,7 +303,7 @@ canonical_name_to_symbol = {
     'AT&T Corporation': None,  # Delisted
     'Cisco Systems': 'CSCO',    # https://uk.finance.yahoo.com/quote/CSCO/
     'Goldman Sachs': 'GS', # https://uk.finance.yahoo.com/quote/GS/
-    'Westinghouse Electric Corporation': None, # Delisted
+    'Westinghouse Electric': None, # Delisted
     'Visa Inc.': 'V',   # https://uk.finance.yahoo.com/quote/V/
     'J.P. Morgan & Company': 'JPM', # https://uk.finance.yahoo.com/quote/JPM/
     'Kodak': None, # No longer same entity as when in the DJIA, and correct historical data shouldn't be returned for KODK (https://uk.finance.yahoo.com/quote/KODK/)
@@ -349,55 +351,84 @@ START_DATE = "1990-01-01"
 END_DATE_INCLUSIVE = "2025-08-01"
 END_DATE_EXCLUSIVE = (datetime(2025, 8, 1) + timedelta(days=1)).strftime("%Y-%m-%d")
 
-tickers = [t for t in canonical_name_to_symbol.values() if t is not None]
+# tickers = [t for t in canonical_name_to_symbol.values() if t is not None]
 
-series_map = {}
-failed = []
+# series_map = {}
+# failed = []
 
-for ticker in tickers:
-    ok = False
-    for attempt in range(3):
-        try:
-            df = yf.download(
-                ticker,
-                start=START_DATE,
-                end=END_DATE_EXCLUSIVE,
-                interval="1d",
-                auto_adjust=False,
-                progress=False,
-                threads=False,
-            )
-            if not df.empty and "Adj Close" in df.columns:
-                series_map[ticker] = df["Adj Close"].iloc[:, 0].rename(ticker)
-            else:
-                failed.append(ticker)
-            ok = True
-            break
-        except Exception as e:
-            print(f"{ticker} failed on attempt {attempt + 1}: {e}")
-            time.sleep(5)
-    if not ok:
-        failed.append(ticker)
+# for ticker in tickers:
+#     ok = False
+#     for attempt in range(3):
+#         try:
+#             df = yf.download(
+#                 ticker,
+#                 start=START_DATE,
+#                 end=END_DATE_EXCLUSIVE,
+#                 interval="1d",
+#                 auto_adjust=False,
+#                 progress=False,
+#                 threads=False,
+#             )
+#             if not df.empty and "Adj Close" in df.columns:
+#                 series_map[ticker] = df["Adj Close"].iloc[:, 0].rename(ticker)
+#             else:
+#                 failed.append(ticker)
+#             ok = True
+#             break
+#         except Exception as e:
+#             print(f"{ticker} failed on attempt {attempt + 1}: {e}")
+#             time.sleep(5)
+#     if not ok:
+#         failed.append(ticker)
 
-ACQUIRED_AS_OF_DATETIME_UTC = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
-ACQUIRED_AS_OF_DATE = ACQUIRED_AS_OF_DATETIME_UTC[:10]
+# ACQUIRED_AS_OF_DATETIME_UTC = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
+# ACQUIRED_AS_OF_DATE = ACQUIRED_AS_OF_DATETIME_UTC[:10]
 
-adj_close = pd.concat(series_map.values(), axis=1) if series_map else pd.DataFrame()
-adj_close.to_csv(f"djia_adj_close_yfinance_{ACQUIRED_AS_OF_DATETIME_UTC}.csv")
+# adj_close = pd.concat(series_map.values(), axis=1) if series_map else pd.DataFrame()
+# adj_close.to_csv(f"djia_adj_close_yfinance_{ACQUIRED_AS_OF_DATETIME_UTC}.csv")
 
-print("Failed tickers:", sorted(set(failed)))
+# print("Failed tickers:", sorted(set(failed)))
 
-metadata = {
-    "data_source": "Yahoo Finance via yfinance",
-    "price_field": "Adj Close",
-    "start_date": START_DATE,
-    "end_date_inclusive": END_DATE_INCLUSIVE,
-    "end_date_exclusive_used_for_query": END_DATE_EXCLUSIVE,
-    "acquired_as_of_date": ACQUIRED_AS_OF_DATE,
-    "acquired_as_of_datetime_utc": ACQUIRED_AS_OF_DATETIME_UTC,
-    "yfinance_version": yf.__version__,
-    "canonical_name_to_symbol": canonical_name_to_symbol,
+# metadata = {
+#     "data_source": "Yahoo Finance via yfinance",
+#     "price_field": "Adj Close",
+#     "start_date": START_DATE,
+#     "end_date_inclusive": END_DATE_INCLUSIVE,
+#     "end_date_exclusive_used_for_query": END_DATE_EXCLUSIVE,
+#     "acquired_as_of_date": ACQUIRED_AS_OF_DATE,
+#     "acquired_as_of_datetime_utc": ACQUIRED_AS_OF_DATETIME_UTC,
+#     "yfinance_version": yf.__version__,
+#     "canonical_name_to_symbol": canonical_name_to_symbol,
+# }
+
+# with open(f"djia_adj_close_yfinance_{ACQUIRED_AS_OF_DATETIME_UTC}.json", "w") as f:
+#     json.dump(metadata, f, indent=4)
+
+# NOTE: this code maps symbols to date ranges (inclusive) during which they apply to the index
+def canonical(name):
+    return name_to_canonical.get(name, name)
+events = sorted(CHANGE_EVENTS, key=lambda x: x["event_date"])
+active = {canonical(name): INITIAL_DATE for name in INITIAL_CONSTITUENTS_1991_05_06}
+ranges_by_name = defaultdict(list)
+for event in events:
+    d = event["event_date"]
+    for name in event["removed"]:
+        c = canonical(name)
+        start = active.pop(c)
+        ranges_by_name[c].append((start, d - timedelta(days=1)))
+    for name in event["added"]:
+        c = canonical(name)
+        active[c] = d
+end_date = datetime.strptime(END_DATE_INCLUSIVE, "%Y-%m-%d").date()
+for c, start in active.items():
+    ranges_by_name[c].append((start, end_date))
+ticker_to_ranges = {
+    canonical_name_to_symbol[name]: spans
+    for name, spans in ranges_by_name.items()
+    if canonical_name_to_symbol[name] is not None
 }
 
-with open(f"djia_adj_close_yfinance_{ACQUIRED_AS_OF_DATETIME_UTC}.json", "w") as f:
-    json.dump(metadata, f, indent=4)
+assert len(ticker_to_ranges) == len([ticker for canonical_name, ticker in canonical_name_to_symbol.items() if ticker is not None])
+
+print(ticker_to_ranges)
+
