@@ -4,9 +4,7 @@ import pandas as pd
 import yfinance as yf
 import json
 
-# ----------------------------
-# 1) Initial DJIA membership
-# ----------------------------
+# NOTE: "initial" DJIA membership
 # Source: Wikipedia "Historical components of the Dow Jones Industrial Average" (https://en.wikipedia.org/wiki/Historical_components_of_the_Dow_Jones_Industrial_Average)
 # Snapshot: May 6, 1991
 # Inclusive of changes made on this date
@@ -45,25 +43,7 @@ INITIAL_CONSTITUENTS_1991_05_06 = [
     "F. W. Woolworth Company",
 ]
 
-# NOTE: things on the left are "removed", and assigning them to the right says what they were before, in case they aren't in "added" or INITIAL_CONSTITUENTS_1991_05_06. Note, not all of these are simple renames/abbreviations--in the case of Citigroup, AT&T and ExxonMobil, for example, things like divergences happened in between the right and the left. However, for simplicity, I will also treat these as renames--they are few, and the source doesn't treat them as separate entities anyway given there are no associated additions/removals to accompany the aforementioned transitions. When it comes to explicit removals/additions, e.g. DuPont -> DowDuPont, I will treat these as separate entities and query data separately for them, using their individual Yahoo Finance symbols.
-# Texaco = Texaco Incorporated
-# Bethlehem Steel = Bethlehem Steel Corporation
-# Goodyear Tire = Goodyear Tire and Rubber Company
-# Sears Roebuck = Sears Roebuck & Company
-# Union Carbide = Union Carbide Corporation
-# Kodak = Eastman Kodak Company
-# International Paper = International Paper Company
-# Altria Group = Philip Morris Companies Inc.
-# Honeywell = Allied-Signal Incorporated
-# Motors Liquidation Company = General Motors Corporation
-# Citigroup = Travelers Inc.
-# Alcoa = Aluminum Company of America
-# AT&T = SBC Communications
-# DuPont = E.I. du Pont de Nemours & Company
-# General Electric = General Electric Company
-# United Technologies = United Technologies Corporation
-# ExxonMobil = Exxon Corporation
-# NOTE: the below is a dictionary mapping the above right to the above left
+# NOTE: the below are cases where names in the index as in INITIAL_CONSTITUENTS_1991_05_06 and added as in CHANGE_EVENTS are called something different when removed as in CHANGE_EVENTS, signifying abbreviation in the latter list/explicit company rebrand while the same ticker can be used to get historical data for both pre-rebrand and post-rebrand entities
 name_to_canonical = {
     "Texaco Incorporated": "Texaco",
     "Bethlehem Steel Corporation": "Bethlehem Steel",
@@ -74,25 +54,20 @@ name_to_canonical = {
     "International Paper Company": "International Paper",
     "Philip Morris Companies Inc.": "Altria Group",
     "Allied-Signal Incorporated": "Honeywell",
-    "General Motors Corporation": "Motors Liquidation Company", # TODO: this one may be tricky
-    "Travelers Inc.": "Citigroup",  # TODO: this one may be tricky
     "Aluminum Company of America": "Alcoa",
-    "SBC Communications": "AT&T",   # TODO: this one may be tricky
     "E.I. du Pont de Nemours & Company": "DuPont",
     "General Electric Company": "General Electric",
     "United Technologies Corporation": "United Technologies",
-    "Exxon Corporation": "ExxonMobil",  # TODO: this one may be tricky
+    "Exxon Corporation": "ExxonMobil",
 }
 
-# ----------------------------
-# 2) DJIA change events
-# ----------------------------
+# NOTE: DJIA change events
 # Source: Wikipedia "Dow Jones Industrial Average" (https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average)
 # "Changes to the index since May 6th 1991 (exclusive) are as follows"
-#
 # Convention here:
 # - additions become active on event_date
-# - removals stop being active on event_date - 1 day    # TODO: significance?
+# - removals stop being active on event_date - 1 day
+# I added change events for Travelers Inc. -> Citigroup, SBC Communications -> AT&T and General Motors Corporation -> Motors Liquidation Company because these are all mergers/liquidations that mean pre- and post- event entities can't be accessed by same ticker
 CHANGE_EVENTS = [
     {
         "event_date": date(1997, 3, 17),
@@ -125,6 +100,15 @@ CHANGE_EVENTS = [
         ],
     },
     {
+        "event_date": date(1998, 10, 8),    # https://www.citigroup.com/global/about-us/heritage/1998/momentous-encounter-leads-to-merger
+        "added": [
+            "Citigroup",
+        ],
+        "removed": [
+            "Travelers Inc."
+        ],
+    },
+    {
         "event_date": date(2004, 4, 8),
         "added": [
             "American International Group",
@@ -136,6 +120,15 @@ CHANGE_EVENTS = [
             "Kodak",
             "International Paper",
         ],
+    },
+    {
+        "event_date": date(2005, 11, 18),   # https://www.seattletimes.com/business/sbc-wraps-up-16-billion-att-acquisition/
+        "added": [
+            "AT&T"
+        ],
+        "removed": [
+            "SBC Communications"
+        ]
     },
     {
         "event_date": date(2008, 2, 19),
@@ -156,6 +149,15 @@ CHANGE_EVENTS = [
         "removed": [
             "American International Group",
         ],
+    },
+    {
+        "event_date": date(2009, 6, 2), # https://www.theguardian.com/business/2009/jun/01/general-motors-bankruptcy-chapter-11
+        "added": [
+            "Motors Liquidation Company",
+        ],
+        "removed": [
+            "General Motors Corporation"
+        ]
     },
     {
         "event_date": date(2009, 6, 8),
@@ -275,6 +277,7 @@ for event in CHANGE_EVENTS:
     names.update(event["added"])
 canonical_names = {name_to_canonical.get(name, name) for name in names}
 
+# NOTE: canonical names to Yahoo Finance symbols for data acquisition
 canonical_name_to_symbol = {
     'Motors Liquidation Company': None, # Delisted
     'Bank of America': 'BAC',   # https://uk.finance.yahoo.com/quote/BAC/
@@ -306,7 +309,9 @@ canonical_name_to_symbol = {
     'Johnson & Johnson': 'JNJ', # https://uk.finance.yahoo.com/quote/JNJ/
     'Amazon': 'AMZN',   # https://uk.finance.yahoo.com/quote/AMZN/
     'The Boeing Company': 'BA', # https://uk.finance.yahoo.com/quote/BA/
-    'F. W. Woolworth Company': None, # Delisted
+    'F. W. Woolworth Company': None, # Delisted,
+    'SBC Communications': None, # Delisted
+    'General Motors Corporation': None, # Delisted
     'The Travelers Companies': 'TRV',   # https://uk.finance.yahoo.com/quote/TRV/
     'AT&T': 'T',  # https://uk.finance.yahoo.com/quote/T/
     'Nvidia': 'NVDA',   # https://uk.finance.yahoo.com/quote/NVDA/
@@ -325,6 +330,7 @@ canonical_name_to_symbol = {
     'Walmart': 'WMT',   # https://uk.finance.yahoo.com/quote/WMT/
     'American International Group': 'AIG',  # https://uk.finance.yahoo.com/quote/AIG/
     'Salesforce.com': 'CRM',    # https://uk.finance.yahoo.com/quote/CRM/
+    'Travelers Inc.': None, # Delisted
     'Hewlett-Packard': 'HPQ',   # No longer same entity as when in the DJIA, but correct historical data should be returned for HPQ (https://uk.finance.yahoo.com/quote/HPQ/)
     'Walgreens Boots Alliance': None,  # Delisted
     'Amgen': 'AMGN',    # https://uk.finance.yahoo.com/quote/AMGN/
