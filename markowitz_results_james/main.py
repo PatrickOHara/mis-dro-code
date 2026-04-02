@@ -63,8 +63,9 @@ def mean_variance_opt(Sigma: np.ndarray, mu: np.ndarray, risk_aversion: float, i
     res = minimize(objective, w0, method='SLSQP', bounds=bounds, constraints=constraints)
     return res.x
 
-def do_markowitz(training_df, test_df, risk_aversion_hyperparameter, ratio_type, all_out_of_sample_costs_so_far, risk_free_rates, period_for_ratio_in_weeks, include_transaction_costs_in_portfolio_returns, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, include_transaction_costs_in_cost_function):
-    # TODO (pwd): insert results_for_each_window_with_its_best_lambda above as the final parameter, giving it a default value of None
+# def do_markowitz(training_df, test_df, risk_aversion_hyperparameter, ratio_type, all_out_of_sample_costs_so_far_with_weighting_drift, risk_free_rates, period_for_ratio_in_weeks, include_transaction_costs_in_portfolio_returns, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, include_transaction_costs_in_cost_function):
+def do_markowitz(training_df, test_df, risk_aversion_hyperparameter, ratio_type, all_out_of_sample_costs_so_far_with_weighting_drift, risk_free_rates, period_for_ratio_in_weeks, include_transaction_costs_in_portfolio_returns, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, include_transaction_costs_in_cost_function, results_for_each_window_with_its_best_lambda=None):
+    # NOTE (pwd): insert results_for_each_window_with_its_best_lambda above as the final parameter, giving it a default value of None
 
     # Start a timer for measuring total time up to and including solve for window
     Sigma_mu_calculation_start = datetime.now()
@@ -94,32 +95,39 @@ def do_markowitz(training_df, test_df, risk_aversion_hyperparameter, ratio_type,
     # NOTE (pwd): calculate oos_portfolio_returns_with_weighting_drift the same way as in mis_dro/main.py
     # NOTE (pwd): calculate drifted_weighting the same way as in mis_dro/main.py
 
-    if include_transaction_costs_in_portfolio_returns:
+    # if include_transaction_costs_in_portfolio_returns:
 
-        transaction_cost = calculate_transaction_cost(prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, list(portfolio_weighting))
+    #     transaction_cost = calculate_transaction_cost(prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, list(portfolio_weighting))
 
-        out_of_sample_cost.iloc[0] -= transaction_cost
-        # TODO (pwd): replace out_of_sample_cost with oos_portfolio_returns_with_weighting_drift
+    #     out_of_sample_cost.iloc[0] -= transaction_cost
+    #     # TODO (pwd) OLD: replace out_of_sample_cost with oos_portfolio_returns_with_weighting_drift
 
-    # TODO (pwd): comment the above if block, and forget the comment inside it
+    # NOTE (pwd): comment the above if block, and forget the comment inside it
 
     if ratio_type:
 
-        # TODO (pwd): the goal is to, when include_transaction_costs_in_portfolio_returns is True, implement transaction costs in the version of all_out_of_sample_costs_so_far(_with_weighting_drift) that gets used to calculate ratio below, and that results_object["all_out_of_sample_costs_so_far(_with_weighting_drift)"] is set to at the end of this function, but not the original all_out_of_sample_costs_so_far(_with_weighting_drift) list passed into this function as an argument because this could mess things up for, in the same window, during hyperparameter optimisation, other epsilons or other folds with the same epsilon. all_out_of_sample_costs_so_far(_with_weighting_drift) is only extracted from the results_object in the case of the final portfolio weighting selection and out-of-sample testing, which is what you want to happen, and has no effect in the validation runs themselves. Finally, all_out_of_sample_costs_so_far(_with_weighting_drift) is not used in runs without hyperparameter optimisation, so don't worry about that. Anyway, this all motivates the below TODOs...
+        # (pwd): the goal is to, when include_transaction_costs_in_portfolio_returns is True, implement transaction costs in the version of all_out_of_sample_costs_so_far(_with_weighting_drift) that gets used to calculate ratio below, and that results_object["all_out_of_sample_costs_so_far(_with_weighting_drift)"] is set to at the end of this function, but not the original all_out_of_sample_costs_so_far(_with_weighting_drift) list passed into this function as an argument because this could mess things up for, in the same window, during hyperparameter optimisation, other epsilons or other folds with the same epsilon. all_out_of_sample_costs_so_far(_with_weighting_drift) is only extracted from the results_object in the case of the final portfolio weighting selection and out-of-sample testing, which is what you want to happen, and has no effect in the validation runs themselves. Finally, all_out_of_sample_costs_so_far(_with_weighting_drift) is not used in runs without hyperparameter optimisation, so don't worry about that. Anyway, this all motivates the below TODOs...
 
-        # TODO (pwd): set all_out_of_sample_costs_so_far_with_weighting_drift_copy to all_out_of_sample_costs_so_far(_with_weighting_drift).copy() (or whatever method gives a suitable copy)
+        # NOTE (pwd): set all_out_of_sample_costs_so_far_with_weighting_drift_copy to all_out_of_sample_costs_so_far(_with_weighting_drift).copy() (or whatever method gives a suitable copy)
+        all_out_of_sample_costs_so_far_with_weighting_drift_copy = all_out_of_sample_costs_so_far_with_weighting_drift.copy()
 
-        # TODO (pwd): if include_transaction_costs AND len(all_out_of_sample_costs_so_far_with_weighting_drift_copy) != 0 (should be equivalent to ensuring we are not in the first window, although I guess you can include a parameter in the function we are in that indicates whether this is the case):
+        # NOTE (pwd): if include_transaction_costs_in_portfolio_returns AND len(all_out_of_sample_costs_so_far_with_weighting_drift_copy) != 0 (should be equivalent to ensuring we are not in the first window, although I guess you can include a parameter in the function we are in that indicates whether this is the case):
         # 1. Calculate the transaction cost with the same line of code as in the previous if block, which is now commented
         # 2. Apply the transaction cost to the last element of all_out_of_sample_costs_so_far_with_weighting_drift_copy, remembering the interaction term
-        # 3. If results_for_each_window_with_its_best_lambda != None, modify the last element of results_for_each_window_with_its_best_lambda[-1][oos_portfolio_returns_with_weighting_drift] with the transaction cost the same way as in the last step
+        # 3. If results_for_each_window_with_its_best_lambda != None, modify the last element of results_for_each_window_with_its_best_lambda[-1]["oos_portfolio_returns_with_weighting_drift"] with the transaction cost the same way as in the last step.
+        if include_transaction_costs_in_portfolio_returns and len(all_out_of_sample_costs_so_far_with_weighting_drift_copy) != 0:
+            transaction_cost = calculate_transaction_cost(prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, list(portfolio_weighting))
+            all_out_of_sample_costs_so_far_with_weighting_drift_copy[-1] = apply_transaction_cost_to_last_portfolio_return(all_out_of_sample_costs_so_far_with_weighting_drift_copy[-1], transaction_cost)
+            if results_for_each_window_with_its_best_lambda != None:
+                oos_portfolio_returns_with_weighting_drift_last_window = results_for_each_window_with_its_best_lambda[-1]["oos_portfolio_returns_with_weighting_drift"]
+                oos_portfolio_returns_with_weighting_drift_last_window[-1] = apply_transaction_cost_to_last_portfolio_return(oos_portfolio_returns_with_weighting_drift_last_window[-1], transaction_cost)
 
-        all_out_of_sample_costs_so_far = all_out_of_sample_costs_so_far + list(out_of_sample_cost)
-        # TODO (pwd): replace out_of_sample_cost with oos_portfolio_returns_with_weighting_drift
-        # TODO (pwd): replace all instances of all_out_of_sample_costs_so_far, either a variable name or in a string, with all_out_of_sample_costs_so_far_with_weighting_drift, but BE CAREFUL in case all_out_of_sample_costs_so_far is in a comment or is a "substring"
-        # TODO (pwd): replace the SECOND INSTANCE OF all_out_of_sample_costs_so_far(_with_weighting_drift) in the above line of code with all_out_of_sample_costs_so_far_with_weighting_drift_copy
+        all_out_of_sample_costs_so_far_with_weighting_drift = all_out_of_sample_costs_so_far_with_weighting_drift_copy + list(oos_portfolio_returns_with_weighting_drift)
+        # NOTE (pwd): replace out_of_sample_cost with oos_portfolio_returns_with_weighting_drift
+        # NOTE (pwd): replace all instances of all_out_of_sample_costs_so_far, either a variable name or in a string, with all_out_of_sample_costs_so_far_with_weighting_drift, but BE CAREFUL in case all_out_of_sample_costs_so_far is in a comment or is a "substring"
+        # NOTE (pwd): replace the SECOND INSTANCE OF all_out_of_sample_costs_so_far(_with_weighting_drift) in the above line of code with all_out_of_sample_costs_so_far_with_weighting_drift_copy. Remember, we are creating a new list here, not modifying the initial all_out_of_sample_costs_so_far_with_weighting_drift, so don't misread the above code
 
-        ratio = {"sharpe": calculate_sharpe_ratio, "sortino": calculate_sortino_ratio}[ratio_type](all_out_of_sample_costs_so_far, risk_free_rates, period_for_ratio_in_weeks)
+        ratio = {"sharpe": calculate_sharpe_ratio, "sortino": calculate_sortino_ratio}[ratio_type](all_out_of_sample_costs_so_far_with_weighting_drift, risk_free_rates, period_for_ratio_in_weeks)
 
     results_object = {
         "portfolio_weighting": portfolio_weighting, # TODO: start saving in list format rather than as a numpy array, then modify james-portfolio.ipynb accordingly
@@ -137,7 +145,7 @@ def do_markowitz(training_df, test_df, risk_aversion_hyperparameter, ratio_type,
     if ratio_type:
 
         results_object[ratio_type] = ratio
-        results_object["all_out_of_sample_costs_so_far"] = all_out_of_sample_costs_so_far
+        results_object["all_out_of_sample_costs_so_far_with_weighting_drift"] = all_out_of_sample_costs_so_far_with_weighting_drift
 
     return results_object
 
@@ -270,7 +278,7 @@ def get_data_for_rolling_validation(markowitz_training_df, test_df, num_folds, d
 
     return rolling_validation_folds
 
-def perform_validation(lambdas, num_folds, ratio_type, all_out_of_sample_costs_so_far, period_for_test_ratio_in_weeks, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, include_transaction_costs_in_cost_function, data_for_validation):
+def perform_validation(lambdas, num_folds, ratio_type, all_out_of_sample_costs_so_far_with_weighting_drift, period_for_test_ratio_in_weeks, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, include_transaction_costs_in_cost_function, data_for_validation):
 
     total_solve_time = 0
 
@@ -280,7 +288,7 @@ def perform_validation(lambdas, num_folds, ratio_type, all_out_of_sample_costs_s
 
         if num_folds == 1:
 
-            markowitz_results_object = do_markowitz(data_for_validation["training_df"], data_for_validation["validation_df"], risk_aversion_hyperparameter, ratio_type, all_out_of_sample_costs_so_far, data_for_validation["validation_risk_free_rates"], period_for_test_ratio_in_weeks - 13 + len(data_for_validation["validation_df"]), True, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, include_transaction_costs_in_cost_function)
+            markowitz_results_object = do_markowitz(data_for_validation["training_df"], data_for_validation["validation_df"], risk_aversion_hyperparameter, ratio_type, all_out_of_sample_costs_so_far_with_weighting_drift, data_for_validation["validation_risk_free_rates"], period_for_test_ratio_in_weeks - 13 + len(data_for_validation["validation_df"]), True, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, include_transaction_costs_in_cost_function)
 
             validation_ratio = markowitz_results_object[ratio_type]
             total_solve_time += markowitz_results_object["solve_time"]
@@ -292,7 +300,7 @@ def perform_validation(lambdas, num_folds, ratio_type, all_out_of_sample_costs_s
             for fold in data_for_validation:
 
                 # TODO: check risk free rates are passed around rightly in this file
-                markowitz_results_object = do_markowitz(fold["training_df"], fold["validation_df"], risk_aversion_hyperparameter, ratio_type, all_out_of_sample_costs_so_far, fold["validation_risk_free_rates"], period_for_test_ratio_in_weeks - 13 + len(fold["validation_df"]), True, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, include_transaction_costs_in_cost_function)
+                markowitz_results_object = do_markowitz(fold["training_df"], fold["validation_df"], risk_aversion_hyperparameter, ratio_type, all_out_of_sample_costs_so_far_with_weighting_drift, fold["validation_risk_free_rates"], period_for_test_ratio_in_weeks - 13 + len(fold["validation_df"]), True, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, include_transaction_costs_in_cost_function)
 
                 sum_of_validation_ratio_for_each_fold += markowitz_results_object[ratio_type]
                 total_solve_time += markowitz_results_object["solve_time"]
@@ -321,7 +329,7 @@ def do_markowitz_run_with_rolling_validation_using_ratio_as_metric(markowitz_dji
 
     risk_free_rates = unpickle_data(risk_free_rates_file)
 
-    all_out_of_sample_costs_so_far = []
+    all_out_of_sample_costs_so_far_with_weighting_drift = []
 
     iterable = enumerate(markowitz_windows)
 
@@ -350,9 +358,10 @@ def do_markowitz_run_with_rolling_validation_using_ratio_as_metric(markowitz_dji
         # TODO: maybe rethink where you put this, although at the time of coding, the functions before this in the window should be pretty fast compared to Markowitz optimisation problem solving etc.
         time_just_before_hyperparameter_optimisation = datetime.now()
 
-        validation_results = perform_validation(lambdas, num_folds, ratio_type, all_out_of_sample_costs_so_far, period_for_test_ratio_in_weeks, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, include_transaction_costs_in_cost_function, data_for_validation)
+        validation_results = perform_validation(lambdas, num_folds, ratio_type, all_out_of_sample_costs_so_far_with_weighting_drift, period_for_test_ratio_in_weeks, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, include_transaction_costs_in_cost_function, data_for_validation)
 
-        results_for_best_lambda = do_markowitz(markowitz_training_df, test_df, validation_results["best_lambda"], ratio_type, all_out_of_sample_costs_so_far, risk_free_rates_for_testing, period_for_test_ratio_in_weeks, True, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, include_transaction_costs_in_cost_function)
+        results_for_best_lambda = do_markowitz(markowitz_training_df, test_df, validation_results["best_lambda"], ratio_type, all_out_of_sample_costs_so_far_with_weighting_drift, risk_free_rates_for_testing, period_for_test_ratio_in_weeks, True, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list, include_transaction_costs_in_cost_function, results_for_each_window_with_its_best_lambda)
+        # NOTE (pwd): append results_for_each_window_with_its_best_lambda as the last argument above, to permanently update the last window's last OOS weekly portfolio return with transaction cost calculated in final run for current window
 
         time_for_hyperparameter_optimisation_and_running_with_best_one = (datetime.now() - time_just_before_hyperparameter_optimisation).total_seconds()
         results_for_best_lambda["time_for_hyperparameter_optimisation_and_running_with_best_one"] = time_for_hyperparameter_optimisation_and_running_with_best_one
@@ -362,10 +371,12 @@ def do_markowitz_run_with_rolling_validation_using_ratio_as_metric(markowitz_dji
         results_for_each_window_with_its_best_lambda.append(results_for_best_lambda)
 
         prev_stock_figi_list = stock_figi_list
-        prev_portfolio_weighting = list(results_for_best_lambda["portfolio_weighting"])
-        # TODO (pwd): above, replace "portfolio_weighting" with "drifted_weighting"
 
-        all_out_of_sample_costs_so_far = results_for_best_lambda["all_out_of_sample_costs_so_far"]
+        # prev_portfolio_weighting = list(results_for_best_lambda["portfolio_weighting"])
+        # NOTE (pwd): above, replace "portfolio_weighting" with "drifted_weighting"
+        prev_portfolio_weighting = list(results_for_best_lambda["drifted_weighting"])
+
+        all_out_of_sample_costs_so_far_with_weighting_drift = results_for_best_lambda["all_out_of_sample_costs_so_far_with_weighting_drift"]
 
     if save:
 
