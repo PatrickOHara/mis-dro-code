@@ -47,7 +47,7 @@ from .likelihood import sample_likelihood, reconstruct_covariance_from_triu
 from .newsvendor import newsvendor_cost_cvxpy
 from .npl import sample_npl
 from .optimise import get_kl_bdro_problem, DRO_BAS_MMD
-from .portfolio import get_kl_portfolio_problem, bdro_portfolio_posterior_samples, portfolio_objective_cvxpy, calculate_transaction_cost
+from .portfolio import get_kl_portfolio_problem, bdro_portfolio_posterior_samples, portfolio_objective_cvxpy, calculate_transaction_cost, compute_drifted_returns_and_final_weights
 from .preprocessing import normalise_by_dimension
 from .gaussian_kernel import *
 from .results import get_result_df_list, convert_str_to_float_list
@@ -298,6 +298,7 @@ def get_useful_tv_results_rolling_validation_all_windows(result_df: pd.DataFrame
             split_idx = int(row["split_idx"])
             fold_results = {col: row[col] for col in (
                 "likelihood_time", "posterior_time", "solve_time", "solution", "out_of_sample_cost"
+                # TODO (pwd) TBC: relace "solution" with the drifted portfolio weighting, here and elsewhere?
             )}
             folds = tv_results_for_replication[epsilon]
             if split_idx >= len(folds):
@@ -950,7 +951,7 @@ def run_replication(
     solve_start = datetime.now()
     solution = np.nan
     if (
-            dataset in ("portfolio" "portfolio_synthetic", "james")
+            dataset in ("portfolio", "portfolio_synthetic", "james")
             and algorithm in ("kl_bdro", "kl_dro_bas")
             and likelihood == "multivariate_normal"
     ):
@@ -1030,12 +1031,19 @@ def run_replication(
         if dataset == "newsvendor":
             out_of_sample_cost = newsvendor_cost_cvxpy(solution, data_eval.reshape((num_test_observations, dim))).value
         elif dataset in ("portfolio", "portfolio_synthetic", "james"):
-            # TODO (pwd): when dataset == "james", create a new Python list with simple OOS portfolio returns featuring, after the first one, drifted portfolio weightings, making sure to renormalise the portfolio weighting (make its sum 1, probably don't need to make sure its elements are >= 0 but could throw an error if any new portfolio weighting isn't) each time it drifts. Then, assign this list to a variable called oos_portfolio_returns_with_weighting_drift
-            # TODO (pwd): when dataset == "james", calculate the drifted (but renormalised) portfolio weighting using solution and data_eval; can probably do so alongside getting oos_portfolio_returns_with_weighting_drift as mentioned above. Call it drifted_weighting
+
+            # NOTE (pwd): when dataset == "james", create a new Python list with simple OOS portfolio returns featuring, after the first one, drifted portfolio weightings, making sure to renormalise the portfolio weighting (make its sum 1, probably don't need to make sure its elements are >= 0 but could throw an error if any new portfolio weighting isn't) each time it drifts. Then, assign this list to a variable called oos_portfolio_returns_with_weighting_drift
+            # NOTE (pwd): when dataset == "james", calculate the drifted (but renormalised) portfolio weighting using solution and data_eval; can probably do so alongside getting oos_portfolio_returns_with_weighting_drift as mentioned above. Call it drifted_weighting
+            if dataset == "james":
+                oos_portfolio_returns_with_weighting_drift, drifted_weighting = compute_drifted_returns_and_final_weights(data_eval, solution)
+                
             out_of_sample_cost = data_eval @ solution
         else:
             raise NotImplementedError(f"Out-of-sample cost for dataset '{dataset}' not implemented")
+        
         solution = list(solution)
+        drifted_weighting = list(drifted_weighting)
+        # NOTE (pwd): turn drifted_weighting into a list above as well, just like solution
 
     results = {
         "uuid": uuid,
@@ -1050,8 +1058,13 @@ def run_replication(
         "out_of_sample_cost": list(out_of_sample_cost),
     }
 
-    # TODO (pwd): if dataset == "james", results["oos_portfolio_returns_with_weighting_drift"] = oos_portfolio_returns_with_weighting_drift
-    # TODO (pwd): if dataset == "james", results["drifted_weighting"] = drifted_weighting
+    # NOTE (pwd): if dataset == "james", results["oos_portfolio_returns_with_weighting_drift"] = list(oos_portfolio_returns_with_weighting_drift)
+    # NOTE (pwd): if dataset == "james", results["drifted_weighting"] = drifted_weighting
+    if dataset == "james":
+        results.update({
+            "oos_portfolio_returns_with_weighting_drift": list(oos_portfolio_returns_with_weighting_drift),
+            "drifted_weighting": drifted_weighting
+        })
 
     return results
 

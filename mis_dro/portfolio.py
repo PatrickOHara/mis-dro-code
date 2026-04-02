@@ -90,6 +90,74 @@ def calculate_transaction_cost(
     all_figis = set(prev_map) | set(new_map)
     return 0.005 * sum(abs(new_map.get(figi, 0.0) - prev_map.get(figi, 0.0)) for figi in all_figis)
 
+def compute_drifted_returns_and_final_weights(
+    data_eval: np.ndarray,
+    solution: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Compute weekly portfolio returns under buy-and-hold with weight drift.
+
+    Parameters
+    ----------
+    data_eval : np.ndarray
+        Array of shape (m, n), where m is the number of test weeks and
+        n is the number of stocks. Each row contains weekly simple stock returns:
+            (DACP_t - DACP_{t-1}) / DACP_{t-1}
+    solution : np.ndarray
+        Initial portfolio weights at the rebalance date, shape (n,) or (n, 1).
+        Must be non-negative and sum to 1.
+
+    Returns
+    -------
+    weekly_portfolio_returns : np.ndarray
+        Array of shape (m,), containing the weekly portfolio returns under drift.
+    final_weights : np.ndarray
+        Array of shape (n,), containing the final drifted portfolio weights
+        after the last test week.
+    """
+    data_eval = np.asarray(data_eval, dtype=float)
+    weights = np.asarray(solution, dtype=float).reshape(-1)
+
+    # Checks
+    if data_eval.ndim != 2: raise ValueError("data_eval must be a 2D array of shape (m, n).")
+
+    m, n = data_eval.shape
+
+    # Checks
+    if weights.shape[0] != n: raise ValueError(f"solution has length {weights.shape[0]}, but data_eval has {n} stocks.")
+    # TODO (pwd): check sum and non-negativity?
+
+    weekly_portfolio_returns = np.empty(m, dtype=float)
+
+    for t in range(m):
+        stock_returns_t = data_eval[t]  # shape (n,)
+
+        # Weekly portfolio return using start-of-week weights
+        portfolio_return_t = weights @ stock_returns_t
+        weekly_portfolio_returns[t] = portfolio_return_t
+
+        # Update weights by drift:
+        # w_t = [w_{t-1} * (1 + r_t)] / (1 + portfolio_return_t)
+        gross_stock_returns_t = 1.0 + stock_returns_t
+        gross_portfolio_return_t = 1.0 + portfolio_return_t
+
+        # Check
+        if gross_portfolio_return_t <= 0: raise ValueError(f"Portfolio gross return became non-positive at week {t}: {gross_portfolio_return_t}.")
+
+        # Calculate drifted portfolio weighting by the end of this week
+        weights = (weights * gross_stock_returns_t) / gross_portfolio_return_t
+
+        # Numerical cleanup
+        weights = np.clip(weights, 0.0, None)
+        weights /= weights.sum()
+
+    return weekly_portfolio_returns, weights
+
+# NOTE (pwd): complete the below
+def apply_transaction_cost_to_last_portfolio_return(last_portfolio_return: float, transaction_cost: float) -> float:
+
+    return (1 + last_portfolio_return) * (1 - transaction_cost) - 1
+
 def get_cvxpy_transaction_cost_addend(
         prev_stock_figi_list: list[str],
         prev_portfolio_weighting: list[float],

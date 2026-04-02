@@ -225,7 +225,16 @@ def get_agg_df(results_df: pd.DataFrame, gb_cols: list[str], temporal_validation
         "mean_sample_time": pd.NamedAgg(column="sample_time", aggfunc=np.mean),
         "std_sample_time": pd.NamedAgg(column="sample_time", aggfunc=np.std),
     }
-    # TODO (pwd): if oos_portfolio_returns_with_weighting_drift is a column in gb, update agg_dict by creating values for the keys oos_mean_with_weighting_drift, oos_var_with_weighting_drift, sum_of_in_group_var_with_weighting_drift and var_of_in_group_mean_with_weighting_drift, using the new columns
+
+    # NOTE (pwd): if oos_portfolio_returns_with_weighting_drift is a column in results_df, update agg_dict by creating values for the keys oos_mean_with_weighting_drift, oos_var_with_weighting_drift, sum_of_in_group_var_with_weighting_drift and var_of_in_group_mean_with_weighting_drift, using the new columns
+    if "oos_portfolio_returns_with_weighting_drift" in results_df.columns:
+        agg_dict.update({
+            "oos_mean_with_weighting_drift": pd.NamedAgg(column="oos_portfolio_returns_with_weighting_drift", aggfunc=lambda x: np.mean(np.concatenate(x.values))),
+            "oos_var_with_weighting_drift": pd.NamedAgg(column="oos_portfolio_returns_with_weighting_drift", aggfunc=lambda x: np.var(np.concatenate(x.values), ddof=1)),
+            "sum_of_in_group_var_with_weighting_drift": pd.NamedAgg(column="in_group_mean_with_weighting_drift", aggfunc=lambda x: float(num_test_observations - 1) / float(num_replications * num_test_observations - 1) * np.sum(x.values)),
+            "var_of_in_group_mean_with_weighting_drift": pd.NamedAgg(column="in_group_var_with_weighting_drift", aggfunc=lambda x: float(num_test_observations * (num_replications - 1)) / float(num_replications * num_test_observations - 1) * np.var(x, ddof=1))
+        })
+
     if temporal_validation:
         agg_dict.update({
             "mean_total_validation_solve_time": pd.NamedAgg(column="total_validation_solve_time", aggfunc=np.mean),
@@ -271,14 +280,25 @@ def preprocess_results_df(results_df: pd.DataFrame, dgp: str, dataset: str = "ne
 
     # convert strings into list of floats where necessary
     processed_df["out_of_sample_cost"] = processed_df["out_of_sample_cost"].map(lambda x: convert_str_to_float_list(x, num_test_observations))
-    # TODO (pwd): if oos_portfolio_returns_with_weighting_drift is a key in processed_df, do processed_df["oos_portfolio_returns_with_weighting_drift"] = processed_df["oos_portfolio_returns_with_weighting_drift"].map(lambda x: convert_str_to_float_list(x, num_test_observations))
+
+    if "oos_portfolio_returns_with_weighting_drift" in processed_df:
+        processed_df["oos_portfolio_returns_with_weighting_drift"] = processed_df["oos_portfolio_returns_with_weighting_drift"].map(lambda x: convert_str_to_float_list(x, num_test_observations))
+    # NOTE (pwd): if oos_portfolio_returns_with_weighting_drift is a key in processed_df, do processed_df["oos_portfolio_returns_with_weighting_drift"] = processed_df["oos_portfolio_returns_with_weighting_drift"].map(lambda x: convert_str_to_float_list(x, num_test_observations))
+
     processed_df["solution"] = processed_df["solution"].map(lambda x: convert_str_to_float_list(x, dim))
-    # TODO (pwd): if drifted_weighting is a key in processed_df, processed_df["drifted_weighting"] = processed_df["drifted_weighting"].map(lambda x: convert_str_to_float_list(x, dim))
+
+    if "drifted_weighting" in processed_df:
+        processed_df["drifted_weighting"] = processed_df["drifted_weighting"].map(lambda x: convert_str_to_float_list(x, dim))
+    # NOTE (pwd): if drifted_weighting is a key in processed_df, processed_df["drifted_weighting"] = processed_df["drifted_weighting"].map(lambda x: convert_str_to_float_list(x, dim))
 
     # calculate the in-group mean and in-group variance for each replication
     processed_df["in_group_mean"] = processed_df["out_of_sample_cost"].map(np.mean)
     processed_df["in_group_var"] = processed_df["out_of_sample_cost"].map(lambda x: np.var(x, ddof=1))
-    # TODO (pwd): if oos_portfolio_returns_with_weighting_drift is a key in processed_df, add the in_group_mean_with_weighting_drift and in_group_var_with_weighting_drift with values calculated as above, respectively, but using oos_portfolio_returns_with_weighting_drift instead of out_of_sample_cost
+
+    if "oos_portfolio_returns_with_weighting_drift" in processed_df:
+        processed_df["in_group_mean_with_weighting_drift"] = processed_df["oos_portfolio_returns_with_weighting_drift"].map(np.mean)
+        processed_df["in_group_var_with_weighting_drift"] = processed_df["oos_portfolio_returns_with_weighting_drift"].map(lambda x: np.var(x, ddof=1))
+    # NOTE (pwd): if oos_portfolio_returns_with_weighting_drift is a key in processed_df, add the in_group_mean_with_weighting_drift and in_group_var_with_weighting_drift with values calculated as above, respectively, but using oos_portfolio_returns_with_weighting_drift instead of out_of_sample_cost
 
     # return preprocessed dataframe
     return processed_df
