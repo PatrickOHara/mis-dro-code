@@ -125,7 +125,6 @@ def compute_drifted_returns_and_final_weights(
 
     # Checks
     if weights.shape[0] != n: raise ValueError(f"solution has length {weights.shape[0]}, but data_eval has {n} stocks.")
-    # TODO (pwd): check sum and non-negativity?
 
     weekly_portfolio_returns = np.empty(m, dtype=float)
 
