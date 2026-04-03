@@ -47,7 +47,7 @@ from .likelihood import sample_likelihood, reconstruct_covariance_from_triu
 from .newsvendor import newsvendor_cost_cvxpy
 from .npl import sample_npl
 from .optimise import get_kl_bdro_problem, DRO_BAS_MMD
-from .portfolio import get_kl_portfolio_problem, bdro_portfolio_posterior_samples, portfolio_objective_cvxpy, calculate_transaction_cost, compute_drifted_returns_and_final_weights
+from .portfolio import get_kl_portfolio_problem, bdro_portfolio_posterior_samples, portfolio_objective_cvxpy, calculate_transaction_cost, compute_drifted_returns_and_final_weights, apply_transaction_cost_to_last_portfolio_return
 from .preprocessing import normalise_by_dimension
 from .gaussian_kernel import *
 from .results import get_result_df_list, convert_str_to_float_list
@@ -283,7 +283,7 @@ def get_useful_tv_results_shv_all_windows(result_df: pd.DataFrame) -> list[dict]
         tv_results_for_replication = {}
         for _, row in g.iterrows():
             tv_results_for_replication[row["epsilon"]] = {col: row[col] for col in (
-                "likelihood_time", "posterior_time", "solve_time", "solution", "out_of_sample_cost"
+                "likelihood_time", "posterior_time", "solve_time", "solution", "oos_portfolio_returns_with_weighting_drift"
             )}
         all_tv_results.append(tv_results_for_replication)
     return all_tv_results
@@ -297,8 +297,7 @@ def get_useful_tv_results_rolling_validation_all_windows(result_df: pd.DataFrame
             epsilon = row["epsilon"]
             split_idx = int(row["split_idx"])
             fold_results = {col: row[col] for col in (
-                "likelihood_time", "posterior_time", "solve_time", "solution", "out_of_sample_cost"
-                # TODO (pwd) TBC: relace "solution" with the drifted portfolio weighting, here and elsewhere?
+                "likelihood_time", "posterior_time", "solve_time", "solution", "oos_portfolio_returns_with_weighting_drift"
             )}
             folds = tv_results_for_replication[epsilon]
             if split_idx >= len(folds):
@@ -328,20 +327,28 @@ def choose_risk_free_rates_for_testing(risk_free_rates: list[float], number_of_e
     return risk_free_rates[t: t + num_test_weeks * (window_index + 1)]
 
 # TODO: something below seems strange--useful_tv_results_shv_all_windows' type signature. Especially given how useful_tv_results_shv_all_windows[window_index].items() is unpacked--epsilon is assumed to be an integer, not a string. I have now changed it from list[dict[str, Any]], but make sure the new type signature is correct.
-def process_tv_results_shv_for_window(stock_figi_list_this_window: list[str], window_index: int, risk_free_rates: list[float], num_test_observations: int, num_validation_observations_per_window: int, useful_tv_results_shv_all_windows: list[dict[float, dict[str, Any]]], prev_stock_figi_list: list[str], prev_portfolio_weighting: list[float], all_out_of_sample_costs_so_far: list[float], ratio_calculator: Callable[[list[float], list[float], int], float], period_for_test_ratio_in_weeks: int) -> dict[str, Any]:
+def process_tv_results_shv_for_window(stock_figi_list_this_window: list[str], window_index: int, risk_free_rates: list[float], num_test_observations: int, num_validation_observations_per_window: int, useful_tv_results_shv_all_windows: list[dict[float, dict[str, Any]]], prev_stock_figi_list: list[str], prev_portfolio_weighting: list[float], all_out_of_sample_costs_so_far_with_weighting_drift: list[float], ratio_calculator: Callable[[list[float], list[float], int], float], period_for_test_ratio_in_weeks: int) -> dict[str, Any]:
     # TODO: note that 51 is specific to the risk free returns file in use (because it has 51 weekly risk-free rates up to and including the first rebalance date)
     risk_free_rates_for_validation = choose_risk_free_rates_for_validation(risk_free_rates, 51, num_test_observations, num_validation_observations_per_window, window_index, 1, 0)   
     best_epsilon_this_window, highest_validation_ratio = None, -float("inf")
     total_validation_times = {"posterior": 0, "likelihood": 0, "solve": 0}  # TODO: Maybe save validation times for each epsilon rather than an overall one?
     for epsilon, validation_results in useful_tv_results_shv_all_windows[window_index].items():
         validation_transaction_cost = calculate_transaction_cost(prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, validation_results["solution"])
-        validation_portfolio_returns = validation_results["out_of_sample_cost"]
-        # TODO (pwd): make a copy of all_out_of_sample_costs_so_far(_with_weighting_drift), calling it all_out_of_sample_costs_so_far_with_weighting_drift_copy
-        validation_portfolio_returns[0] -= validation_transaction_cost
-        # TODO (pwd): replace the above line. Make an if statement that passes when window_index != 0 (should be equivalent to len(all_out_of_sample_costs_so_far_with_weighting_drift_copy) == 0), and when it passes, modify the last element of all_out_of_sample_costs_so_far_with_weighting_drift_copy with the transaction cost, remembering to include the interaction term
-        all_out_of_sample_costs_so_far_including_validation = all_out_of_sample_costs_so_far + validation_portfolio_returns
-        # TODO (pwd): above, replace all_out_of_sample_costs_so_far(_with_weighting_drift) with all_out_of_sample_costs_so_far_with_weighting_drift_copy
-        validation_ratio = ratio_calculator(all_out_of_sample_costs_so_far_including_validation, risk_free_rates_for_validation, period_for_test_ratio_in_weeks - 13 + num_validation_observations_per_window)
+        validation_portfolio_returns = validation_results["oos_portfolio_returns_with_weighting_drift"]
+
+        # NOTE (pwd): make a copy of all_out_of_sample_costs_so_far(_with_weighting_drift), calling it all_out_of_sample_costs_so_far_with_weighting_drift_copy
+        all_out_of_sample_costs_so_far_with_weighting_drift_copy = all_out_of_sample_costs_so_far_with_weighting_drift.copy()
+
+        # validation_portfolio_returns[0] -= validation_transaction_cost
+        # NOTE (pwd): replace the above line. Make an if statement that passes when window_index != 0 (should be equivalent to len(all_out_of_sample_costs_so_far_with_weighting_drift_copy) == 0), and when it passes, modify the last element of all_out_of_sample_costs_so_far_with_weighting_drift_copy with the transaction cost, remembering to include the interaction term
+        if window_index != 0:
+            all_out_of_sample_costs_so_far_with_weighting_drift_copy[-1] = apply_transaction_cost_to_last_portfolio_return(all_out_of_sample_costs_so_far_with_weighting_drift_copy[-1], validation_transaction_cost)
+
+        # all_out_of_sample_costs_so_far_with_weighting_drift_including_validation = all_out_of_sample_costs_so_far_with_weighting_drift + validation_portfolio_returns
+        # NOTE (pwd): above, replace all_out_of_sample_costs_so_far(_with_weighting_drift) with all_out_of_sample_costs_so_far_with_weighting_drift_copy
+        all_out_of_sample_costs_so_far_with_weighting_drift_including_validation = all_out_of_sample_costs_so_far_with_weighting_drift_copy + validation_portfolio_returns
+
+        validation_ratio = ratio_calculator(all_out_of_sample_costs_so_far_with_weighting_drift_including_validation, risk_free_rates_for_validation, period_for_test_ratio_in_weeks - 13 + num_validation_observations_per_window)
         if validation_ratio > highest_validation_ratio:
             best_epsilon_this_window, highest_validation_ratio = epsilon, validation_ratio
         for time_type in total_validation_times:
@@ -352,7 +359,7 @@ def process_tv_results_shv_for_window(stock_figi_list_this_window: list[str], wi
     }
 
 # TODO: make sure useful_tv_results_rolling_validation_all_windows's type signature is correct
-def process_tv_results_rolling_validation_for_window(risk_free_rates: list[float], num_test_observations: int, window_index: int, useful_tv_results_rolling_validation_all_windows: list[dict[float, list[dict[str, Any]]]], prev_stock_figi_list: list[str], prev_portfolio_weighting: list[float], stock_figi_list_this_window: list[str], all_out_of_sample_costs_so_far: list[float], ratio_calculator: Callable[[list[float], list[float], int], float], period_for_test_ratio_in_weeks: int, num_validation_observations_per_window: int) -> dict[str, Any]:
+def process_tv_results_rolling_validation_for_window(risk_free_rates: list[float], num_test_observations: int, window_index: int, useful_tv_results_rolling_validation_all_windows: list[dict[float, list[dict[str, Any]]]], prev_stock_figi_list: list[str], prev_portfolio_weighting: list[float], stock_figi_list_this_window: list[str], all_out_of_sample_costs_so_far_with_weighting_drift: list[float], ratio_calculator: Callable[[list[float], list[float], int], float], period_for_test_ratio_in_weeks: int, num_validation_observations_per_window: int) -> dict[str, Any]:
     num_folds = len(list(useful_tv_results_rolling_validation_all_windows[0].values())[0])
     # TODO: note that 51 is specific to the risk free returns file in use (because it has 51 weekly risk-free rates up to and including the first rebalance date)
     risk_free_rates_for_validation = [choose_risk_free_rates_for_validation(risk_free_rates, 51, num_test_observations, num_validation_observations_per_window, window_index, num_folds, fold_index) for fold_index in range(num_folds)]
@@ -362,13 +369,21 @@ def process_tv_results_rolling_validation_for_window(risk_free_rates: list[float
         sum_of_validation_ratio_for_each_fold = 0
         for i, validation_results in enumerate(validation_results_for_each_fold):
             validation_transaction_cost = calculate_transaction_cost(prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, validation_results["solution"])
-            validation_portfolio_returns = validation_results["out_of_sample_cost"]
-            # TODO (pwd): make a copy of all_out_of_sample_costs_so_far(_with_weighting_drift), calling it all_out_of_sample_costs_so_far_with_weighting_drift_copy
-            validation_portfolio_returns[0] -= validation_transaction_cost
-            # TODO (pwd): replace the above with a block of code saying, when window_index != 0 (should be equivalent to when len(all_out_of_sample_costs_so_far_with_weighting_drift_copy) == 0), modify the last element of all_out_of_sample_costs_so_far_with_weighting_drift_copy with the transaction cost, remembering the interaction term
-            all_out_of_sample_costs_so_far_including_validation = all_out_of_sample_costs_so_far + validation_portfolio_returns
-            # TODO (pwd): above, replace all_out_of_sample_costs_so_far(_with_weighting_drift) with all_out_of_sample_costs_so_far_with_weighting_drift_copy
-            sum_of_validation_ratio_for_each_fold += ratio_calculator(all_out_of_sample_costs_so_far_including_validation, risk_free_rates_for_validation[i], period_for_test_ratio_in_weeks - 13 + num_validation_observations_per_window)
+            validation_portfolio_returns = validation_results["oos_portfolio_returns_with_weighting_drift"]
+
+            # NOTE (pwd): make a copy of all_out_of_sample_costs_so_far(_with_weighting_drift), calling it all_out_of_sample_costs_so_far_with_weighting_drift_copy
+            all_out_of_sample_costs_so_far_with_weighting_drift_copy = all_out_of_sample_costs_so_far_with_weighting_drift.copy()
+
+            # validation_portfolio_returns[0] -= validation_transaction_cost
+            # NOTE (pwd): replace the above with a block of code saying, when window_index != 0 (should be equivalent to when len(all_out_of_sample_costs_so_far_with_weighting_drift_copy) == 0), modify the last element of all_out_of_sample_costs_so_far_with_weighting_drift_copy with the transaction cost, remembering the interaction term
+            if window_index != 0:
+                all_out_of_sample_costs_so_far_with_weighting_drift_copy[-1] = apply_transaction_cost_to_last_portfolio_return(all_out_of_sample_costs_so_far_with_weighting_drift_copy[-1], validation_transaction_cost)
+
+            # all_out_of_sample_costs_so_far_with_weighting_drift_including_validation = all_out_of_sample_costs_so_far_with_weighting_drift + validation_portfolio_returns
+            # NOTE (pwd): above, replace all_out_of_sample_costs_so_far(_with_weighting_drift) with all_out_of_sample_costs_so_far_with_weighting_drift_copy
+            all_out_of_sample_costs_so_far_with_weighting_drift_including_validation = all_out_of_sample_costs_so_far_with_weighting_drift_copy + validation_portfolio_returns
+
+            sum_of_validation_ratio_for_each_fold += ratio_calculator(all_out_of_sample_costs_so_far_with_weighting_drift_including_validation, risk_free_rates_for_validation[i], period_for_test_ratio_in_weeks - 13 + num_validation_observations_per_window)
             for time_type in total_validation_times:
                 total_validation_times[time_type] += validation_results[f"{time_type}_time"]
         validation_ratio = sum_of_validation_ratio_for_each_fold / len(validation_results_for_each_fold)
@@ -379,19 +394,26 @@ def process_tv_results_rolling_validation_for_window(risk_free_rates: list[float
         "total_validation_times": total_validation_times,
     }
 
-def process_actual_results_after_tv_for_window(total_validation_times: dict[str, float], results_this_replication: dict[str, Any], prev_stock_figi_list: list[str], prev_portfolio_weighting: list[float], stock_figi_list_this_window: list[str], risk_free_rates: list[float], num_test_observations: int, window_index: int, ratio_calculator: Callable[[list[float], list[float], int], float], all_out_of_sample_costs_so_far: list[float], period_for_test_ratio_in_weeks: int, tv_ratio: str) -> tuple[dict[str, Any], list[float]]:
-    # TODO (pwd): insert list_of_replication_stats as the final parameter above, its type is a Python list
+def process_actual_results_after_tv_for_window(total_validation_times: dict[str, float], results_this_replication: dict[str, Any], prev_stock_figi_list: list[str], prev_portfolio_weighting: list[float], stock_figi_list_this_window: list[str], risk_free_rates: list[float], num_test_observations: int, window_index: int, ratio_calculator: Callable[[list[float], list[float], int], float], all_out_of_sample_costs_so_far_with_weighting_drift: list[float], period_for_test_ratio_in_weeks: int, tv_ratio: str, list_of_replication_stats: list) -> tuple[dict[str, Any], list[float]]:
+    # NOTE (pwd): insert list_of_replication_stats as the final parameter above, its type is a Python list
+
     for time_type, time in total_validation_times.items():
         results_this_replication[f"total_validation_{time_type}_time"] = time
     actual_transaction_cost = calculate_transaction_cost(prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, results_this_replication["solution"])
-    results_this_replication["out_of_sample_cost"][0] -= actual_transaction_cost    # TODO: note somewhere that these will already have transaction costs in case you load them in .ipynb and forget and reapply them
-    # TODO (pwd): replace the above line of code with an if block that passes when window_index != 0 (should be equivalent to len(list_of_replication_stats) == len(all_out_of_sample_costs_so_far(_with_weighting_drift)) == 0) and runs 2 lines if so, the first modifying the last element of list_of_replication_stats[-1]["oos_portfolio_returns_with_weighting_drift"] with transaction costs and the second modifying the last element of all_out_of_sample_costs_so_far(_with_weighting_drift) with transaction costs, in each case doing it the same way, accounting for the interaction term
-    all_out_of_sample_costs_so_far += results_this_replication["out_of_sample_cost"]
+
+    # results_this_replication["oos_portfolio_returns_with_weighting_drift"][0] -= actual_transaction_cost    # TODO: note somewhere that these will already have transaction costs in case you load them in .ipynb and forget and reapply them
+    # NOTE (pwd): replace the above line of code with an if block that passes when window_index != 0 (should be equivalent to len(list_of_replication_stats) == len(all_out_of_sample_costs_so_far(_with_weighting_drift)) == 0) and runs "2" lines if so, the first modifying the last element of list_of_replication_stats[-1]["oos_portfolio_returns_with_weighting_drift"] with transaction costs and the second modifying the last element of all_out_of_sample_costs_so_far(_with_weighting_drift) with transaction costs, in each case doing it the same way, accounting for the interaction term
+    if window_index != 0:
+        last_window_oos_weekly_portfolio_returns = list_of_replication_stats[-1]["oos_portfolio_returns_with_weighting_drift"]
+        last_window_oos_weekly_portfolio_returns[-1] = apply_transaction_cost_to_last_portfolio_return(last_window_oos_weekly_portfolio_returns[-1], actual_transaction_cost)
+        all_out_of_sample_costs_so_far_with_weighting_drift[-1] = apply_transaction_cost_to_last_portfolio_return(all_out_of_sample_costs_so_far_with_weighting_drift[-1], actual_transaction_cost)
+
+    all_out_of_sample_costs_so_far_with_weighting_drift += results_this_replication["oos_portfolio_returns_with_weighting_drift"]
     # TODO: note that 51 is specific to the risk free returns file in use (because it has 51 weekly risk-free rates up to and including the first rebalance date)
     risk_free_rates_for_testing = choose_risk_free_rates_for_testing(risk_free_rates, 51, num_test_observations, window_index)
-    actual_ratio = ratio_calculator(all_out_of_sample_costs_so_far, risk_free_rates_for_testing, period_for_test_ratio_in_weeks)
+    actual_ratio = ratio_calculator(all_out_of_sample_costs_so_far_with_weighting_drift, risk_free_rates_for_testing, period_for_test_ratio_in_weeks)
     results_this_replication[tv_ratio] = actual_ratio
-    return results_this_replication, all_out_of_sample_costs_so_far
+    return results_this_replication, all_out_of_sample_costs_so_far_with_weighting_drift
 
 def get_num_training_and_test_observations_shv(num_observations: int, num_test_observations: int) -> tuple[int, int]:
     num_training_observations = round(num_observations / (num_observations + num_test_observations) * num_observations)
@@ -469,7 +491,7 @@ def run(
         result_df = pd.concat(result_list)  # NOTE by James: combining all the above Pandas DataFrames into a single one, but UUID and replication columns allow easy distinction
 
         # TODO: None is the wrong argument to pass below; this shouldn't make a difference in my experiments (look at convert_str_to_float_list source code), but in the first case, it should be the number of test observations in validation, not necessarily num_test_observations as it is now; in the second case, it should be the number of stocks, but this differs from window to window so be careful
-        result_df["out_of_sample_cost"] = result_df["out_of_sample_cost"].map(lambda x: convert_str_to_float_list(x, None))    # NOTE by James: just formatting
+        result_df["oos_portfolio_returns_with_weighting_drift"] = result_df["oos_portfolio_returns_with_weighting_drift"].map(lambda x: convert_str_to_float_list(x, None))    # NOTE by James: just formatting
         result_df["solution"] = result_df["solution"].map(lambda x: convert_str_to_float_list(x, None))
 
         # NOTE by James: for each row in result_df (each of which has a distinct UUID/replication combination), this goes to the object in experiment.json with the mathcing UUID and adds all of the "other" parameters in this object to the row
@@ -490,8 +512,7 @@ def run(
                 # TODO: is this correct? It 
                 best_epsilons = (
                     result_df.reset_index()
-                            .assign(mean_cost=result_df["out_of_sample_cost"].apply(np.mean))
-                            # TODO (pwd): EXCEPT for instances in run_replication, replace every instance of out_of_sample_cost (either as a variable name or in a string) with oos_portfolio_returns_with_weighting_drift, but BE CAREFUL in case out_of_sample_cost is in a comment or is just a "substring"
+                            .assign(mean_cost=result_df["oos_portfolio_returns_with_weighting_drift"].apply(np.mean))
                             .groupby("replication")
                             .apply(lambda g: g.loc[g["mean_cost"].idxmax(), "epsilon"])
                 )
@@ -611,8 +632,8 @@ def run(
             stock_figi_lists = [get_stock_figi_list(training_df) for training_df, _ in pickle.load(f)]
         with open(risk_free_rates_filename, "rb") as f:
             risk_free_rates = pickle.load(f)
-        all_out_of_sample_costs_so_far = []
-        # TODO (pwd): replace all instances of all_out_of_sample_costs_so_far in this file with all_out_of_sample_costs_so_far_with_weighting_drift, but BE CAREFUL in case all_out_of_sample_costs_so_far is in a comment/is just a "substring"
+        all_out_of_sample_costs_so_far_with_weighting_drift = []
+        # NOTE (pwd): replace all instances of all_out_of_sample_costs_so_far in this file with all_out_of_sample_costs_so_far_with_weighting_drift, but BE CAREFUL in case all_out_of_sample_costs_so_far is in a comment/is just a "substring"
         # TODO: maybe enforce for the same index in the below lists to refer to the same stock
         prev_stock_figi_list = []
         prev_portfolio_weighting = []
@@ -621,9 +642,9 @@ def run(
         # TODO: James: is something similar to the below needed in the case of has_tcosts_in_cost_function? Depends on how num_validation_observations_per_window is used, I guess
         if use_tv_epsilon:
             if n_splits == 1:
-                num_validation_observations_per_window = len(list(useful_tv_results_shv_all_windows[0].values())[0]["out_of_sample_cost"])
+                num_validation_observations_per_window = len(list(useful_tv_results_shv_all_windows[0].values())[0]["oos_portfolio_returns_with_weighting_drift"])
             else:
-                num_validation_observations_per_window = len(list(list(useful_tv_results_rolling_validation_all_windows[0].values())[0])[0]["out_of_sample_cost"])
+                num_validation_observations_per_window = len(list(list(useful_tv_results_rolling_validation_all_windows[0].values())[0])[0]["oos_portfolio_returns_with_weighting_drift"])
 
     if njobs == 1:
         all_solve_start = datetime.now()
@@ -659,13 +680,19 @@ def run(
                         for time_type in total_validation_times.keys():
                             total_validation_times[time_type] += validation_results[f"{time_type}_time"]
                         validation_transaction_cost = calculate_transaction_cost(prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, validation_results["solution"])
-                        validation_portfolio_returns = validation_results["out_of_sample_cost"]
-                        # TODO (pwd): make a copy of all_out_of_sample_costs_so_far(_with_weighting_drift), calling it all_out_of_sample_costs_so_far_with_weighting_drift_copy
-                        validation_portfolio_returns[0] -= validation_transaction_cost
-                        # TODO (pwd): instead of the above line of code, have an if block such that, if j != 0 (should be equivalent to len(all_out_of_sample_costs_so_far_with_weighting_drift_copy) == 0), the last element of all_out_of_sample_costs_so_far_with_weighting_drift_copy is modified with validation_transaction_cost, remembering the interaction term
+                        validation_portfolio_returns = validation_results["oos_portfolio_returns_with_weighting_drift"]
+
+                        # NOTE (pwd): make a copy of all_out_of_sample_costs_so_far(_with_weighting_drift), calling it all_out_of_sample_costs_so_far_with_weighting_drift_copy
+                        all_out_of_sample_costs_so_far_with_weighting_drift_copy = all_out_of_sample_costs_so_far_with_weighting_drift.copy()
+
+                        # validation_portfolio_returns[0] -= validation_transaction_cost
+                        # NOTE (pwd): instead of the above line of code, have an if block such that, if j != 0 (should be equivalent to len(all_out_of_sample_costs_so_far_with_weighting_drift_copy) == 0), the last element of all_out_of_sample_costs_so_far_with_weighting_drift_copy is modified with validation_transaction_cost, remembering the interaction term
+                        if j != 0:
+                            all_out_of_sample_costs_so_far_with_weighting_drift_copy[-1] = apply_transaction_cost_to_last_portfolio_return(all_out_of_sample_costs_so_far_with_weighting_drift_copy[-1], validation_transaction_cost)
+
                         risk_free_rates_for_validation = choose_risk_free_rates_for_validation(risk_free_rates, 51, num_test_observations, len(validation_portfolio_returns), j, n_splits, split_idx)
-                        sum_of_validation_ratio_for_each_fold += ratio_calculator(all_out_of_sample_costs_so_far + validation_portfolio_returns, risk_free_rates_for_validation, period_for_test_ratio_in_weeks - 13 + len(validation_portfolio_returns))   # TODO: James: might be best to replace 13 with num_test_observations? Maybe elsewhere as well?
-                        # TODO (pwd): above, replace all_out_of_sample_costs_so_far(_with_weighting_drift) with all_out_of_sample_costs_so_far_with_weighting_drift_copy
+                        sum_of_validation_ratio_for_each_fold += ratio_calculator(all_out_of_sample_costs_so_far_with_weighting_drift_copy + validation_portfolio_returns, risk_free_rates_for_validation, period_for_test_ratio_in_weeks - 13 + len(validation_portfolio_returns))   # TODO: James: might be best to replace 13 with num_test_observations? Maybe elsewhere as well?
+                        # NOTE (pwd): above, replace all_out_of_sample_costs_so_far(_with_weighting_drift) with all_out_of_sample_costs_so_far_with_weighting_drift_copy
 
                     validation_ratio = sum_of_validation_ratio_for_each_fold / n_splits
                     if validation_ratio > highest_validation_ratio:
@@ -677,23 +704,25 @@ def run(
 
                 results = run_replication(j, problem, **params)
 
-                results, all_out_of_sample_costs_so_far = process_actual_results_after_tv_for_window(
-                    total_validation_times, results, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, risk_free_rates, num_test_observations, j, ratio_calculator, all_out_of_sample_costs_so_far, period_for_test_ratio_in_weeks, tv_ratio
+                results, all_out_of_sample_costs_so_far_with_weighting_drift = process_actual_results_after_tv_for_window(
+                    total_validation_times, results, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, risk_free_rates, num_test_observations, j, ratio_calculator, all_out_of_sample_costs_so_far_with_weighting_drift, period_for_test_ratio_in_weeks, tv_ratio, list_of_replication_stats
                 )
-                # TODO (pwd): insert list_of_replication_stats as the final argument above
+                # NOTE (pwd): insert list_of_replication_stats as the final argument above
 
                 list_of_replication_stats.append(results)
-                prev_stock_figi_list, prev_portfolio_weighting = stock_figi_list_this_window, results["solution"]
-                # TODO (pwd): above, replace results["solution"] with results["drifted_weighting"]
+
+                # prev_stock_figi_list, prev_portfolio_weighting = stock_figi_list_this_window, results["solution"]
+                # NOTE (pwd): above, replace results["solution"] with results["drifted_weighting"]
+                prev_stock_figi_list, prev_portfolio_weighting = stock_figi_list_this_window, results["drifted_weighting"]
 
             else:
                 if use_tv_epsilon:
                     if tv_ratio:
                         stock_figi_list_this_window = stock_figi_lists[j]
                         if n_splits == 1:
-                            processed_validation_results = process_tv_results_shv_for_window(stock_figi_list_this_window, j, risk_free_rates, num_test_observations, num_validation_observations_per_window, useful_tv_results_shv_all_windows, prev_stock_figi_list, prev_portfolio_weighting, all_out_of_sample_costs_so_far, ratio_calculator, period_for_test_ratio_in_weeks)
+                            processed_validation_results = process_tv_results_shv_for_window(stock_figi_list_this_window, j, risk_free_rates, num_test_observations, num_validation_observations_per_window, useful_tv_results_shv_all_windows, prev_stock_figi_list, prev_portfolio_weighting, all_out_of_sample_costs_so_far_with_weighting_drift, ratio_calculator, period_for_test_ratio_in_weeks)
                         else:
-                            processed_validation_results = process_tv_results_rolling_validation_for_window(risk_free_rates, num_test_observations, j, useful_tv_results_rolling_validation_all_windows, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, all_out_of_sample_costs_so_far, ratio_calculator, period_for_test_ratio_in_weeks, num_validation_observations_per_window)
+                            processed_validation_results = process_tv_results_rolling_validation_for_window(risk_free_rates, num_test_observations, j, useful_tv_results_rolling_validation_all_windows, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, all_out_of_sample_costs_so_far_with_weighting_drift, ratio_calculator, period_for_test_ratio_in_weeks, num_validation_observations_per_window)
                         best_epsilon_this_window = processed_validation_results["best_epsilon_this_window"]
                         total_validation_times = processed_validation_results["total_validation_times"]
                     else:
@@ -704,11 +733,16 @@ def run(
                     params["epsilon"] = best_epsilon_this_window
                 results_this_replication = run_replication(j, problem, **params)
                 if use_tv_epsilon and tv_ratio:
-                    results_this_replication, all_out_of_sample_costs_so_far = process_actual_results_after_tv_for_window(total_validation_times, results_this_replication, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, risk_free_rates, num_test_observations, j, ratio_calculator, all_out_of_sample_costs_so_far, period_for_test_ratio_in_weeks, tv_ratio)
-                    # TODO (pwd): insert list_of_replication_stats as the final argument above
+
+                    results_this_replication, all_out_of_sample_costs_so_far_with_weighting_drift = process_actual_results_after_tv_for_window(total_validation_times, results_this_replication, prev_stock_figi_list, prev_portfolio_weighting, stock_figi_list_this_window, risk_free_rates, num_test_observations, j, ratio_calculator, all_out_of_sample_costs_so_far_with_weighting_drift, period_for_test_ratio_in_weeks, tv_ratio, list_of_replication_stats)
+                    # NOTE (pwd): insert list_of_replication_stats as the final argument above
+
                     prev_stock_figi_list = stock_figi_list_this_window
-                    prev_portfolio_weighting = results_this_replication["solution"]
-                    # TODO (pwd): above, replace "solution" with "drifted_weighting"
+
+                    # prev_portfolio_weighting = results_this_replication["solution"]
+                    # NOTE (pwd): above, replace "solution" with "drifted_weighting"
+                    prev_portfolio_weighting = results_this_replication["drifted_weighting"]
+
                 list_of_replication_stats.append(results_this_replication)
         all_solve_end = datetime.now()
         print(all_solve_end, "- Finished solving all replications in series. Total solve time is", (all_solve_end - all_solve_start).total_seconds())
