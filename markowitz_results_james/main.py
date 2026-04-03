@@ -3,7 +3,7 @@ from scipy.optimize import minimize
 import pickle
 from datetime import datetime
 from tqdm import tqdm
-from mis_dro.portfolio import calculate_transaction_cost, compute_drifted_returns_and_final_weights
+from mis_dro.portfolio import calculate_transaction_cost, compute_drifted_returns_and_final_weights, apply_transaction_cost_to_last_portfolio_return
 from mis_dro.metrics import calculate_sharpe_ratio, calculate_sortino_ratio
 from argparse import ArgumentParser
 
