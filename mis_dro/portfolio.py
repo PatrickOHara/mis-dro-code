@@ -84,6 +84,7 @@ def calculate_transaction_cost(
     if len(prev_stock_figi_list) != len(prev_portfolio_weighting):
         raise ValueError("prev_stock_figi_list and prev_portfolio_weighting must be same length.")
     if len(new_stock_figi_list) != len(new_portfolio_weighting):
+        print(len(new_stock_figi_list), len(new_portfolio_weighting))
         raise ValueError("new_stock_figi_list and new_portfolio_weighting must be same length.")
     prev_map = {figi: float(w) for figi, w in zip(prev_stock_figi_list, prev_portfolio_weighting)}
     new_map  = {figi: float(w) for figi, w in zip(new_stock_figi_list,  new_portfolio_weighting)}
